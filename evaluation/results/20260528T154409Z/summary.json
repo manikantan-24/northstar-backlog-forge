@@ -1,0 +1,129 @@
+{
+  "timestamp_utc": "20260528T154409Z",
+  "use_llm_judge": true,
+  "case_count": 10,
+  "deterministic_average_across_cases": 0.7972,
+  "llm_judge_average_across_cases": 0.535,
+  "cases": [
+    {
+      "case_id": "case_01",
+      "deterministic_average": 0.6667,
+      "llm_judge_average": 0.7,
+      "synthesis_summary": {
+        "epic_count": 5,
+        "story_count": 7,
+        "duplicates": 0,
+        "conflicts": 1,
+        "gaps": 6
+      }
+    },
+    {
+      "case_id": "case_02",
+      "deterministic_average": 0.6667,
+      "llm_judge_average": 0.6,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 4,
+        "duplicates": 0,
+        "conflicts": 1,
+        "gaps": 4
+      }
+    },
+    {
+      "case_id": "case_03",
+      "deterministic_average": 0.75,
+      "llm_judge_average": 0.65,
+      "synthesis_summary": {
+        "epic_count": 2,
+        "story_count": 3,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 3
+      }
+    },
+    {
+      "case_id": "case_04",
+      "deterministic_average": 1.0,
+      "llm_judge_average": 0.7,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 2,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 3
+      }
+    },
+    {
+      "case_id": "case_05",
+      "deterministic_average": 0.8333,
+      "llm_judge_average": 0.2,
+      "synthesis_summary": {
+        "epic_count": 0,
+        "story_count": 0,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 0
+      }
+    },
+    {
+      "case_id": "case_06",
+      "deterministic_average": 0.8889,
+      "llm_judge_average": 0.6,
+      "synthesis_summary": {
+        "epic_count": 3,
+        "story_count": 3,
+        "duplicates": 1,
+        "conflicts": 0,
+        "gaps": 2
+      }
+    },
+    {
+      "case_id": "case_07",
+      "deterministic_average": 0.3333,
+      "llm_judge_average": 0.0,
+      "synthesis_summary": {
+        "epic_count": 0,
+        "story_count": 0,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 0
+      }
+    },
+    {
+      "case_id": "case_08",
+      "deterministic_average": 1.0,
+      "llm_judge_average": 0.7,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 1,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 2
+      }
+    },
+    {
+      "case_id": "case_09",
+      "deterministic_average": 0.8333,
+      "llm_judge_average": 0.5,
+      "synthesis_summary": {
+        "epic_count": 3,
+        "story_count": 4,
+        "duplicates": 0,
+        "conflicts": 4,
+        "gaps": 4
+      }
+    },
+    {
+      "case_id": "case_10",
+      "deterministic_average": 1.0,
+      "llm_judge_average": 0.7,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 3,
+        "duplicates": 0,
+        "conflicts": 1,
+        "gaps": 3
+      }
+    }
+  ]
+}

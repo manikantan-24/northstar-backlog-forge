@@ -1,0 +1,93 @@
+NorthStar Retail — Pharmacy Refill Experience Escalation
+Attendees: Anika (Pharmacy PM), Elena (Compliance), Devon (Director Eng),
+           Marcus (Mobile Lead), Priya (VP CX)
+Date: May 9
+
+Anika opened — said pharmacy refill complaints are spiking in the
+in-app feedback. Customers tell us they didn't know their prescription
+was ready, or worse, they got a notification and then walked to the
+counter only to find out the system had pushed the wrong patient's
+prescription to the household account. Two store managers in the
+Phoenix cluster filed formal complaints last week.
+
+------
+
+Problem 1: Refill-ready notifications are unreliable
+
+Today the in-app notification fires only when the customer opens the
+app and the home screen polls the Rx service. If they never open the
+app, they never know the prescription is ready. We are leaving real
+revenue on the floor — and worse, customers are picking up at
+competitors because they got a CVS text but no NorthStar reminder.
+
+Anika's ask: a proactive push notification when a prescription is
+ready for pickup. Marcus said the mobile push infrastructure is in
+place — this is a backend trigger problem, not a client problem.
+
+Anika: "And we want the notification text to include the medication
+name so the customer recognizes it. Like 'Your atorvastatin refill
+is ready at the Camelback store.'"
+
+Elena cut in immediately — that is not OK under HIPAA. Surfacing a
+medication name in a push notification requires explicit patient
+opt-in stored on the prescription record, AND it can only go to the
+patient's verified contact method, never the household account
+default. We've been bitten by this before.
+
+Anika: "Right, sorry. We can do a generic 'You have a prescription
+ready' and let them open the app to see details. Detail-on-tap, not
+detail-in-banner."
+
+Elena: "That's fine. Anything that does show the med name needs
+opt-in plus verified delivery plus an audit log entry."
+
+Devon: "Let's design it both ways and flag the opt-in version as a
+follow-up. Phase 1 ships generic, phase 2 adds opt-in for the med
+name surface."
+
+------
+
+Problem 2: The household-account problem
+
+Today multiple family members can be on a single NorthStar account.
+The Rx service knows which prescription belongs to which person,
+but the notification system fires to the account, not the patient.
+That is why Phoenix store saw a notification go to a wife about her
+husband's medication.
+
+Marcus: "We need patient-scoped notification delivery. The push
+goes only to the device that's logged in as that specific patient
+identity through NSID."
+
+Elena: "Yes, this is the verified contact method requirement
+applied to push. It's not optional."
+
+Devon assigned this to Marcus and Anika together with Elena as the
+compliance reviewer.
+
+------
+
+Problem 3: SMS fallback
+
+Anika brought up SMS — some pharmacy customers are over 65 and don't
+use the app. Could we send the refill-ready notice by SMS too?
+
+Marcus paused. "Isn't NS-176 already for that?" Devon checked the
+backlog — yes, NS-176 is the pharmacy refill SMS reminder. It's in
+backlog status. Anika: "Let's just push NS-176 up the priority list
+then. No new story needed."
+
+------
+
+Things we explicitly said NO to this round:
+- Voice-call reminders (Anika asked, Devon said no — too expensive
+  and not requested by customers).
+- Adding pharmacy notifications to the smartwatch app — out of scope
+  for this round.
+
+------
+
+Next steps:
+Anika owns the proactive notification spec. Marcus owns the
+patient-scoped delivery work. Elena will draft the HIPAA review
+checklist. NS-176 stays as the SMS workstream.

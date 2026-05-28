@@ -1,0 +1,14 @@
+NorthStar Retail — annual compliance review, 2026-03-30
+Attendees: Diego (Compliance), Aisha (Engineering), Sara (Legal)
+
+Diego: Three findings from the audit.
+
+1. Pharmacy refill notifications — we're sending PHI (prescription names) in plain-text email. This is a HIPAA violation. We need to move to a "Your prescription is ready" generic message with a deep link to the secure app.
+
+2. Loyalty member exports — Marketing has been pulling member-level lists with email + tier + purchase history into Salesforce. Per GDPR Article 6, we need explicit consent for that purpose. Right now we have consent for "transactional" only.
+
+3. POS card receipts — we're printing the last 4 of the PAN, which is fine, but the e-receipt email is including the full card brand + last 4 + expiry month. PCI DSS 3.4 says we have to drop the expiry.
+
+Sara: Three fixes. The HIPAA one is the most urgent — auditors flagged it for the 90-day window.
+
+Aisha: Pharmacy refill notification rewrite, loyalty consent collection flow, and POS receipt expiry removal. Got it.

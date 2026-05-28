@@ -1,0 +1,53 @@
+{
+  "case_id": "case_02",
+  "description": "Hand-curated expectations for the pharmacy refill escalation. Values are constraints the synthesis must satisfy, not exact outputs.",
+
+  "required_topics": [
+    {
+      "theme_keywords": ["pharmacy", "refill", "notification"],
+      "must_appear": true,
+      "rationale": "Problem 1 of the meeting was a proactive refill-ready notification. Must be picked up."
+    },
+    {
+      "theme_keywords": ["patient", "household", "account"],
+      "must_appear": true,
+      "rationale": "Problem 2 was patient-scoped delivery so notifications don't go to the wrong household member."
+    }
+  ],
+
+  "forbidden_topics": [
+    {
+      "theme_keywords": ["voice call", "voice-call"],
+      "must_not_appear": true,
+      "rationale": "Voice-call reminders were explicitly declined in the meeting."
+    },
+    {
+      "theme_keywords": ["smartwatch", "wearable"],
+      "must_not_appear": true,
+      "rationale": "Smartwatch app was explicitly declined."
+    }
+  ],
+
+  "expected_duplicates": [
+    {
+      "story_theme": ["sms", "refill", "reminder"],
+      "existing_id": "NS-176",
+      "min_confidence": "medium",
+      "rationale": "NS-176 is the in-backlog SMS reminder ticket and was explicitly called out in the meeting as the existing work — any new SMS-refill story should be flagged as a duplicate."
+    }
+  ],
+
+  "expected_constraint_conflicts": [
+    {
+      "story_keywords": ["medication", "name", "notification", "push"],
+      "max_severity": "high",
+      "rationale": "Surfacing a medication name in a push notification requires explicit patient opt-in, verified delivery, and audit log per HIPAA Section 3 of architecture_constraints.md. Any story that proposes shipping medication-named notifications without those guardrails should be flagged."
+    }
+  ],
+
+  "expected_story_acceptance_criteria_min": 2,
+  "expected_story_acceptance_criteria_max": 7,
+  "expected_epic_count_range": [1, 3],
+  "expected_minimum_story_count": 2,
+  "expected_maximum_story_count": 6
+}

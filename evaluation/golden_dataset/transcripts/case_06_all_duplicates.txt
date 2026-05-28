@@ -1,0 +1,14 @@
+NorthStar Retail — Customer success debrief, 2026-04-15
+Attendees: Priya (CS lead), Marcus (PM)
+
+Priya: Three escalations this week, all repeats of stuff we already have in the backlog.
+
+1. "In stock at your store" badge still shows for items that aren't actually in stock. Customers driving over and walking out empty-handed. We already opened NS-412 on this back in March.
+
+2. Loyalty tier downgrade emails are still confusing customers — they don't say what tier they're moving TO. NS-389 in the backlog covers this exactly.
+
+3. POS lanes go offline when the WAN drops. We have NS-101 already open for cash fallback.
+
+Marcus: So nothing new this week, just repeated pain on existing tickets. Right?
+
+Priya: Right. The reason I called the meeting is to escalate priority on the existing tickets, not to file new ones.

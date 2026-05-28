@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./venv/bin/python -c \"import ast; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(ls -la /Users/mani.kantan.arun/.claude/projects/ 2>/dev/null)",
+      "Read(//Users/mani.kantan.arun/.claude/projects/**)",
+      "Bash(python3 -c ' *)",
+      "Bash(rsync -a --exclude='venv' --exclude='outputs' --exclude='logs' --exclude='__pycache__' --exclude='.env' --exclude='versions' --exclude='*.pyc' --exclude='evaluation' --exclude='.DS_Store' ./ versions/v1_baseline/)",
+      "Bash(/Users/mani.kantan.arun/Downloads/backlog-synthesizer/venv/bin/python -c \"import streamlit; print\\(streamlit.__version__\\)\")",
+      "Bash(venv/bin/python -c ' *)",
+      "Bash(nohup ./venv/bin/streamlit run app.py --server.headless true --server.port 8599)",
+      "Bash(kill 3593)",
+      "Bash(ps -p 3593 -o stat=)",
+      "Bash(venv/bin/python -c \"import ast; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('app.py: syntax OK'\\)\")",
+      "Bash(venv/bin/python -c \"import ast; ast.parse\\(open\\('src/orchestrator.py'\\).read\\(\\)\\); print\\('orchestrator.py: syntax OK'\\)\")",
+      "Bash(venv/bin/python -c \"import sys; sys.path.insert\\(0, 'src'\\); from ui.styling import get_css; print\\(f'styling.py: import OK, get_css\\(\\) returns {len\\(get_css\\(\\)\\)} chars'\\)\")",
+      "Bash(venv/bin/python /tmp/jira_restructure.py)",
+      "Bash(venv/bin/python -c \"import sys; sys.path.insert\\(0,'src'\\); from ui.styling import get_css; print\\(f'styling.py: import OK, {len\\(get_css\\(\\)\\)} chars'\\)\")",
+      "Bash(awk '{print $2}')",
+      "Bash(kill 73491)",
+      "Bash(kill -9 73491)",
+      "Bash(venv/bin/python -c \"import sys; sys.path.insert\\(0,'src'\\); from ui.styling import get_css; assert '.guardrail-pass' in get_css\\(\\); print\\('styling.py: guardrail CSS present'\\)\")",
+      "Bash(venv/bin/python -m pytest tests/ -x -q)",
+      "Bash(venv/bin/pip install *)",
+      "Bash(venv/bin/python -m pytest tests/ -q)",
+      "Bash(awk '{print $NF, $5}')",
+      "Bash(venv/bin/python -c \"import sys; sys.path.insert\\(0,'src'\\); from ui.styling import get_css; assert 'white-space: nowrap' in get_css\\(\\); print\\('styling.py: nowrap rule present'\\)\")",
+      "Bash(python -m py_compile src/tools/confluence_tool.py src/memory/store.py src/redactor.py src/orchestrator.py src/agents/story_writer_agent.py evaluation/llm_as_judge.py evaluation/run_evaluation.py evaluation/dashboard.py evaluation/ab_compare.py)",
+      "Bash(python -m py_compile app.py)",
+      "Bash(find /Users/mani.kantan.arun -maxdepth 4 -type d -iname \"*smart*backlog*\" 2>/dev/null; find /Users/mani.kantan.arun/Downloads -maxdepth 3 -type d -iname \"*UI*\" 2>/dev/null)",
+      "Read(//Users/mani.kantan.arun/**)"
+    ]
+  }
+}

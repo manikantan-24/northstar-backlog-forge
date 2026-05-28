@@ -1,0 +1,81 @@
+{
+  "case_id": "case_05",
+  "description": "Empty / cancelled meeting transcript. The pipeline must complete cleanly with zero stories rather than hallucinating from the single line.",
+  "deterministic_average": 0.8333333333333334,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 0 stories in [0, 1]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 0.0,
+      "observations": [
+        "No stories to check"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "No required topics specified"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "0 forbidden topic violations of 1 checked"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 1.0,
+      "observations": [
+        "No expected duplicates"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 1,
+      "priority_justification": 1,
+      "story_granularity": 1,
+      "tag_accuracy": 1,
+      "conflict_reasoning": 5
+    },
+    "reasons": {
+      "ac_quality": "There are no stories in the synthesis, therefore no acceptance criteria exist to evaluate.",
+      "priority_justification": "There are no stories in the synthesis, therefore no priority rationales exist to evaluate.",
+      "story_granularity": "There are no stories in the synthesis, therefore story sizing cannot be assessed.",
+      "tag_accuracy": "There are no stories in the synthesis, therefore no tags exist to evaluate for accuracy.",
+      "conflict_reasoning": "No conflicts are flagged and none should be flagged in a cancelled meeting scenario, which is correct."
+    },
+    "overall_comment": "This synthesis correctly reflects that the meeting was cancelled and produces no actionable backlog items. However, as a backlog synthesis artifact it provides no value to the delivery team since constraints without stories or epics cannot be prioritized or delivered.",
+    "normalized": {
+      "ac_quality": 0.0,
+      "priority_justification": 0.0,
+      "story_granularity": 0.0,
+      "tag_accuracy": 0.0,
+      "conflict_reasoning": 1.0
+    },
+    "average_normalized": 0.2
+  },
+  "synthesis_summary": {
+    "epic_count": 0,
+    "story_count": 0,
+    "duplicates": 0,
+    "conflicts": 0,
+    "gaps": 0
+  }
+}

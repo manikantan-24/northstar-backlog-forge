@@ -1,0 +1,34 @@
+{
+  "case_id": "case_08",
+  "description": "Ambiguity / conservatism test. Only the mobile-checkout perf signal is concrete enough to become a story. Other hedges ('the vibes are off', 'more rewarding loyalty') must NOT become stories.",
+
+  "required_topics": [
+    {
+      "theme_keywords": ["mobile", "checkout"],
+      "must_appear": true,
+      "rationale": "The single hedged-but-concrete signal in the transcript."
+    }
+  ],
+
+  "forbidden_topics": [
+    {
+      "theme_keywords": ["vibes"],
+      "must_not_appear": true,
+      "rationale": "Pure vibes feedback is not a backlog item."
+    },
+    {
+      "theme_keywords": ["more discounts"],
+      "must_not_appear": true,
+      "rationale": "Marketing wish, not an engineering ask."
+    }
+  ],
+
+  "expected_duplicates": [],
+  "expected_constraint_conflicts": [],
+
+  "expected_story_acceptance_criteria_min": 2,
+  "expected_story_acceptance_criteria_max": 7,
+  "expected_epic_count_range": [1, 2],
+  "expected_minimum_story_count": 1,
+  "expected_maximum_story_count": 3
+}

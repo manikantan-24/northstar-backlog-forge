@@ -1,0 +1,7 @@
+{
+  "case_id": "case_03",
+  "description": "Mobile team Slack standup rollup. Tests robustness: the transcript mixes real product asks with off-topic chatter (lunch, music, vacation). Should produce stories about search ranking + Apple Pay POS, ignore the chatter. Expect a duplicate against NS-251 (search purchase-history ranking) and NS-243 (Apple Pay / Google Pay at POS).",
+  "transcript_path": "evaluation/golden_dataset/transcripts/case_03_mobile_standup.txt",
+  "constraints_path": "samples/architecture_constraints.md",
+  "backlog_path": "samples/jira_backlog.json"
+}

@@ -1,0 +1,44 @@
+{
+  "run_id": "20260527_235829_b33f89",
+  "timestamp": "20260527_235829",
+  "source_label": "meeting_notes.txt",
+  "elapsed_seconds": 150.0128502079997,
+  "epic_count": 5,
+  "story_count": 5,
+  "dup_count": 4,
+  "gap_count": 4,
+  "conflict_count": 1,
+  "model": "claude-sonnet-4-5",
+  "token_usage": {
+    "parser": {
+      "input": 1984,
+      "output": 767
+    },
+    "constraint_extractor": {
+      "input": 2149,
+      "output": 1179
+    },
+    "story_writer": {
+      "input": 3020,
+      "output": 2346
+    },
+    "epic_decomposer": {
+      "input": 3232,
+      "output": 3724
+    },
+    "gap_detector": {
+      "input": 6102,
+      "output": 962
+    },
+    "total": {
+      "input": 16487,
+      "output": 8978
+    }
+  },
+  "cost_usd": 0.184131,
+  "outputs": {
+    "synthesis_json": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260527_235829/synthesis.json",
+    "synthesis_md": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260527_235829/synthesis.md",
+    "audit_md": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260527_235829/audit_trail.md"
+  }
+}

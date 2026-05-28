@@ -1,0 +1,22 @@
+NorthStar Retail — Store Ops emergency call, 2026-05-02
+Attendees: Hiroshi (Store Ops), Aisha (Engineering), Diego (Compliance, on speakerphone)
+
+Hiroshi: Stores are screaming. When the WAN goes down — and it goes down weekly in the rural lanes — we lose ALL sales. Not just card sales, all sales. I want offline mode for card sales too. Just queue the transactions and post when WAN returns.
+
+Aisha: Hiroshi, you know we can't queue card-not-present transactions offline. Compliance side.
+
+Diego: Confirmed. PCI rules forbid storing PAN data locally beyond the transaction window. The wiki section 4 spells this out.
+
+Hiroshi: Fine. Then I want offline returns. A customer hands back the receipt, we scan the QR, refund to their card later when WAN comes back.
+
+Diego: That's the same problem — you're holding card-tied financial intent across a network boundary.
+
+Hiroshi: Then I want gift-card sales offline. We just print a gift card and reconcile when online.
+
+Aisha: That one's borderline. We'd need to look at it but probably blocked by the same compliance section.
+
+Diego: Same family of rules. Anything tied to a stored card or a delayed financial commitment is in scope.
+
+Hiroshi: So my three requests — offline card sales, offline returns, offline gift-card sales — are all blocked?
+
+Diego: I'd flag all three as compliance conflicts. The wiki is explicit.

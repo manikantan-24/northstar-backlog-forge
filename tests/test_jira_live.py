@@ -1,0 +1,360 @@
+"""Tests for `JiraTool` live mode.
+
+We never hit the real Atlassian API here — the HTTP calls go through a
+patched `requests.get` that returns canned JSON. The goal is to verify:
+
+  1. The tool selects the correct REST endpoint and JQL
+  2. Pagination via `nextPageToken` works
+  3. The 401/403 path raises `ToolError` with a clear message
+  4. `_normalise_issue` flattens Atlassian's response into the
+     internal ticket shape every downstream agent expects
+  5. ADF descriptions get walked to plain text
+  6. Mock mode still reads from the bundled fixture without any HTTP
+
+Tests use `monkeypatch` to swap `requests.get` so they run offline and
+without burning Anthropic credit. The full suite finishes in <100ms.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from tools.base import ToolError  # noqa: E402
+from tools.jira_tool import JiraTool, _adf_to_text, _normalise_issue  # noqa: E402
+
+
+# --------------------------------------------------------------- fakes
+
+
+class _FakeResponse:
+    """Minimal stand-in for `requests.Response` with the fields jira_tool
+    actually touches."""
+    def __init__(self, status: int, payload: dict | None = None, text: str = ""):
+        self.status_code = status
+        self._payload = payload or {}
+        self.text = text or ""
+
+    def json(self):
+        return self._payload
+
+
+def _patch_get(monkeypatch, responder):
+    """Helper: patch `requests.get` and capture every call.
+
+    `responder(url, params, **kwargs)` is invoked per call and must return
+    a `_FakeResponse`. The list of captured `(url, params)` tuples is
+    returned so tests can assert on what was requested.
+    """
+    captured: list[tuple[str, dict]] = []
+
+    import requests
+
+    def _fake_get(url, *, params=None, auth=None, headers=None, timeout=None, **kwargs):
+        captured.append((url, dict(params or {})))
+        return responder(url, params or {}, **kwargs)
+
+    monkeypatch.setattr(requests, "get", _fake_get)
+    return captured
+
+
+# --------------------------------------------------------------- adapter unit
+
+
+def test_normalise_issue_flattens_to_internal_shape():
+    issue = {
+        "key": "NS-101",
+        "fields": {
+            "summary": "Enable offline cash sales at POS",
+            "description": {
+                "type": "doc",
+                "content": [
+                    {"type": "paragraph",
+                     "content": [{"type": "text", "text": "Lane needs"}]},
+                    {"type": "paragraph",
+                     "content": [{"type": "text", "text": "local SQLite fallback."}]},
+                ],
+            },
+            "status":   {"name": "To Do"},
+            "priority": {"name": "High"},
+            "labels":   ["pos", "offline"],
+        },
+    }
+    out = _normalise_issue(issue)
+    assert out["id"] == "NS-101"
+    assert out["title"] == "Enable offline cash sales at POS"
+    assert out["summary"] == out["title"]   # both populated for back-compat
+    assert "Lane needs" in out["description"]
+    assert "local SQLite" in out["description"]
+    assert out["status"] == "To Do"
+    assert out["priority"] == "High"
+    assert out["labels"] == ["pos", "offline"]
+    assert out["raw"] is issue   # raw preserved for any caller that needs it
+
+
+def test_normalise_issue_tolerates_missing_fields():
+    """A barely-populated issue must not crash the adapter."""
+    out = _normalise_issue({"key": "NS-1", "fields": {"summary": "x"}})
+    assert out["id"] == "NS-1"
+    assert out["title"] == "x"
+    assert out["description"] == ""
+    assert out["status"] == ""
+    assert out["priority"] == ""
+    assert out["labels"] == []
+
+
+def test_normalise_issue_with_string_description():
+    """Some old-API responses use a plain string for description."""
+    out = _normalise_issue({"key": "NS-1", "fields": {
+        "summary": "x", "description": "Simple text body."
+    }})
+    assert out["description"] == "Simple text body."
+
+
+def test_adf_to_text_walks_nested_structure():
+    adf = {
+        "type": "doc",
+        "content": [
+            {"type": "heading",
+             "content": [{"type": "text", "text": "Acceptance criteria"}]},
+            {"type": "bulletList", "content": [
+                {"type": "listItem", "content": [
+                    {"type": "paragraph", "content": [
+                        {"type": "text", "text": "When offline, sale completes."}]}
+                ]},
+                {"type": "listItem", "content": [
+                    {"type": "paragraph", "content": [
+                        {"type": "text", "text": "When online, sync reconciles."}]}
+                ]},
+            ]},
+        ],
+    }
+    text = _adf_to_text(adf)
+    assert "Acceptance criteria" in text
+    assert "When offline" in text
+    assert "When online" in text
+
+
+def test_adf_to_text_handles_empty_input():
+    assert _adf_to_text(None) == ""
+    assert _adf_to_text("") == ""
+    assert _adf_to_text({}) == ""
+
+
+# --------------------------------------------------------------- mock mode
+
+
+def test_mock_mode_reads_fixture(tmp_path):
+    """Mock mode = default. Reads from the bundled JSON. No HTTP."""
+    fixture = tmp_path / "tickets.json"
+    fixture.write_text(
+        '[{"key": "NS-1", "summary": "Test", "description": "x", '
+        '"status": "open", "labels": ["test"]}]'
+    )
+    jt = JiraTool(fixture_path=fixture)
+    assert jt.mode == "mock"
+    tickets = jt.list_all()
+    assert len(tickets) == 1
+    assert tickets[0]["key"] == "NS-1"
+
+
+def test_mock_mode_search_substring(tmp_path):
+    fixture = tmp_path / "tickets.json"
+    fixture.write_text(
+        '[{"summary": "Pharmacy refill SMS", "description": ""},'
+        ' {"summary": "Loyalty tier email", "description": ""}]'
+    )
+    jt = JiraTool(fixture_path=fixture)
+    out = jt.search("pharmacy")
+    assert len(out) == 1
+    assert "Pharmacy" in out[0]["summary"]
+
+
+# --------------------------------------------------------------- live mode
+
+
+def _live_jira(env_token: str = "tok"):
+    """Build a JiraTool in live mode with bogus-but-non-empty credentials.
+
+    The HTTP call is mocked, so the credentials never travel anywhere.
+    """
+    return JiraTool(
+        mode="live",
+        base_url="https://demo.atlassian.net",
+        email="me@example.com",
+        api_token=env_token,
+        project_key="NS",
+    )
+
+
+def test_live_mode_requires_credentials(monkeypatch):
+    """Missing creds should raise ToolError up front, not on first call.
+
+    Clears the JIRA_* env vars so a developer with real credentials in
+    `.env` doesn't accidentally satisfy the "missing" check.
+    """
+    for var in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
+    jt = JiraTool(mode="live", base_url="", email="", api_token="", project_key="NS")
+    with pytest.raises(ToolError, match="JIRA_BASE_URL"):
+        jt.list_all()
+
+
+def test_live_list_all_uses_jql_search_endpoint(monkeypatch):
+    """list_all() must POST/GET to /rest/api/3/search/jql with the
+    project-scoped JQL the adapter builds."""
+    def responder(url, params, **kw):
+        return _FakeResponse(200, {
+            "issues": [
+                {"key": "NS-100", "fields": {"summary": "Test 1", "status": {"name": "To Do"}}},
+                {"key": "NS-101", "fields": {"summary": "Test 2", "status": {"name": "Done"}}},
+            ],
+            # No nextPageToken — single page.
+        })
+    captured = _patch_get(monkeypatch, responder)
+
+    jt = _live_jira()
+    tickets = jt.list_all()
+
+    assert len(captured) == 1
+    url, params = captured[0]
+    assert url.endswith("/rest/api/3/search/jql")
+    assert 'project = "NS"' in params["jql"]
+    assert "ORDER BY created DESC" in params["jql"]
+    assert "summary" in params["fields"]   # field allowlist applied
+    assert len(tickets) == 2
+    assert tickets[0]["id"] == "NS-100"
+    assert tickets[1]["title"] == "Test 2"
+
+
+def test_live_list_all_paginates_via_next_page_token(monkeypatch):
+    """When the response carries `nextPageToken`, the tool must fetch
+    the next page and append. Stops when the token disappears."""
+    pages = [
+        {"issues": [{"key": f"NS-{i}", "fields": {"summary": f"S{i}"}} for i in range(50)],
+         "nextPageToken": "page2"},
+        {"issues": [{"key": f"NS-{i}", "fields": {"summary": f"S{i}"}} for i in range(50, 75)]},
+    ]
+    state = {"call": 0}
+    def responder(url, params, **kw):
+        out = _FakeResponse(200, pages[state["call"]])
+        state["call"] += 1
+        return out
+
+    captured = _patch_get(monkeypatch, responder)
+    jt = _live_jira()
+    tickets = jt.list_all()
+
+    assert len(captured) == 2
+    assert "nextPageToken" not in captured[0][1]
+    assert captured[1][1].get("nextPageToken") == "page2"
+    assert len(tickets) == 75
+
+
+def test_live_list_all_caps_at_max_results(monkeypatch):
+    """The `max_results` constructor cap stops a runaway corpus from
+    consuming the orchestrator. Default is 200; we set it lower here so
+    the test is fast."""
+    # Each page returns 50 issues + always has a nextPageToken, so without
+    # the cap the loop would never terminate.
+    def responder(url, params, **kw):
+        return _FakeResponse(200, {
+            "issues": [{"key": f"NS-{i}", "fields": {"summary": "x"}} for i in range(50)],
+            "nextPageToken": "more",
+        })
+    _patch_get(monkeypatch, responder)
+
+    jt = JiraTool(
+        mode="live", base_url="https://demo.atlassian.net",
+        email="me@example.com", api_token="tok",
+        project_key="NS", max_results=120,
+    )
+    tickets = jt.list_all()
+    assert len(tickets) == 120
+
+
+def test_live_search_wraps_plain_string_in_text_query(monkeypatch):
+    """Plain strings should be wrapped as `text ~ "..."` JQL, scoped to
+    the configured project. Full JQL strings pass through unchanged."""
+    captured_jqls: list[str] = []
+    def responder(url, params, **kw):
+        captured_jqls.append(params["jql"])
+        return _FakeResponse(200, {"issues": []})
+    _patch_get(monkeypatch, responder)
+
+    jt = _live_jira()
+    jt.search("pharmacy refill")
+    assert 'project = "NS"' in captured_jqls[-1]
+    assert 'text ~ "pharmacy refill"' in captured_jqls[-1]
+
+    # Pass full JQL through unchanged.
+    jt.search('project = "NS" AND status = "Done"')
+    assert captured_jqls[-1] == 'project = "NS" AND status = "Done"'
+
+
+def test_live_search_escapes_double_quotes(monkeypatch):
+    """A query containing `"` shouldn't break the JQL clause."""
+    captured_jqls: list[str] = []
+    def responder(url, params, **kw):
+        captured_jqls.append(params["jql"])
+        return _FakeResponse(200, {"issues": []})
+    _patch_get(monkeypatch, responder)
+
+    jt = _live_jira()
+    jt.search('say "hello"')
+    # Escaped backslash-quote form is what Jira expects.
+    assert '\\"hello\\"' in captured_jqls[-1]
+
+
+def test_live_401_raises_clear_error(monkeypatch):
+    def responder(url, params, **kw):
+        return _FakeResponse(401, text="not authorised")
+    _patch_get(monkeypatch, responder)
+
+    jt = _live_jira()
+    with pytest.raises(ToolError, match="auth failed"):
+        jt.list_all()
+
+
+def test_live_400_surfaces_jql_error(monkeypatch):
+    """Invalid JQL → 400 with a body explaining why. We surface the body
+    head (clipped) so the user sees what Jira complained about."""
+    def responder(url, params, **kw):
+        return _FakeResponse(400, text="Field 'foo' does not exist")
+    _patch_get(monkeypatch, responder)
+
+    jt = _live_jira()
+    with pytest.raises(ToolError, match="rejected JQL"):
+        jt.search("nope ~ 'bad'")
+
+
+def test_live_500_raises_generic_error(monkeypatch):
+    def responder(url, params, **kw):
+        return _FakeResponse(500, text="server is on fire")
+    _patch_get(monkeypatch, responder)
+
+    jt = _live_jira()
+    with pytest.raises(ToolError, match="500"):
+        jt.list_all()
+
+
+def test_live_caches_first_list_all(monkeypatch):
+    """list_all() caches the first call so the orchestrator doesn't
+    paginate twice on the same run."""
+    call_count = {"n": 0}
+    def responder(url, params, **kw):
+        call_count["n"] += 1
+        return _FakeResponse(200, {
+            "issues": [{"key": "NS-1", "fields": {"summary": "x"}}],
+        })
+    _patch_get(monkeypatch, responder)
+
+    jt = _live_jira()
+    jt.list_all()
+    jt.list_all()
+    assert call_count["n"] == 1, "Second list_all() should hit the cache, not the API"

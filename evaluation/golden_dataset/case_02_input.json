@@ -1,0 +1,7 @@
+{
+  "case_id": "case_02",
+  "description": "Pharmacy refill escalation meeting. Should produce stories around medication-refill push notifications and household-account verification. Expect a HIPAA conflict (surfacing medication names in notifications) and a duplicate against NS-176 (Pharmacy refill SMS reminder).",
+  "transcript_path": "evaluation/golden_dataset/transcripts/case_02_pharmacy_escalation.txt",
+  "constraints_path": "samples/architecture_constraints.md",
+  "backlog_path": "samples/jira_backlog.json"
+}

@@ -1,0 +1,84 @@
+{
+  "case_id": "case_01",
+  "description": "The bundled NorthStar Retail Q3 planning meeting. Should produce three high-priority topics (POS offline, pharmacy unification, search-inventory), flag duplicates against NS-412 and NS-389, and conflict-flag any offline card-sale story.",
+  "deterministic_average": 0.6666666666666666,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 7 stories in [4, 10]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "7/7 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "4/4 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "0 forbidden topic violations of 3 checked"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.0,
+      "observations": [
+        "0/2 expected duplicates found",
+        "Expected duplicate (['search', 'inventory'] \u2194 NS-412) not found at confidence \u2265 medium",
+        "Expected duplicate (['loyalty', 'tier'] \u2194 NS-389) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 0.0,
+      "observations": [
+        "0/1 expected conflicts flagged",
+        "Expected conflict for story keywords ['card', 'offline'] not flagged"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 5,
+      "priority_justification": 2,
+      "story_granularity": 4,
+      "tag_accuracy": 4,
+      "conflict_reasoning": 4
+    },
+    "reasons": {
+      "ac_quality": "All acceptance criteria follow Given/When/Then format with concrete, measurable outcomes (e.g., specific latency thresholds, badge accuracy percentages, observable UI states) that are directly testable.",
+      "priority_justification": "The guardrail findings correctly flag missing priority_rationale fields for all High-priority stories (ST-01, ST-02, ST-04), and Medium stories also lack explicit justification beyond implicit impact references.",
+      "story_granularity": "Stories are well-scoped to single deliverable behaviours (offline cash sales, search ranking with badges, refill unification) though ST-07 is correctly noted as documentation rather than shippable functionality.",
+      "tag_accuracy": "Tags are consistently applied and domain-appropriate (pos, mobile-app, pharmacy, compliance) though the guardrails correctly note several non-canonical tags (search, checkout, integration, notifications, platform) that should be standardised.",
+      "conflict_reasoning": "The single flagged conflict (ST-02 vs C-20) correctly identifies the constraint, accurately assesses severity as low, and provides valid reasoning that the story acknowledges and complies with the rule."
+    },
+    "overall_comment": "This is a high-quality synthesis with excellent AC clarity and solid story decomposition, but it is seriously undermined by completely missing priority_rationale fields\u2014the guardrails caught three High-priority stories with zero justification, which is unacceptable for backlog prioritisation. The non-canonical tags and missing source_topic_id fields also indicate process gaps that should be addressed before final acceptance.",
+    "normalized": {
+      "ac_quality": 1.0,
+      "priority_justification": 0.25,
+      "story_granularity": 0.75,
+      "tag_accuracy": 0.75,
+      "conflict_reasoning": 0.75
+    },
+    "average_normalized": 0.7
+  },
+  "synthesis_summary": {
+    "epic_count": 5,
+    "story_count": 7,
+    "duplicates": 0,
+    "conflicts": 1,
+    "gaps": 6
+  }
+}

@@ -1,0 +1,30 @@
+Customer escalation note — forwarded from #cx-escalations
+From: Jordan Reyes (Senior CX Specialist)
+To: Priya, Marcus
+Subject: One real issue + my usual Friday rant
+
+Hey both — hope you had a good week. I survived. The puppy is finally
+sleeping through the night, which is a personal milestone.
+
+One real thing to flag: we had three separate customers in the last
+two days call in because the order-confirmation email from the
+mobile-app checkout is going to spam in Gmail. All three were Gmail
+users, all three had completed the purchase successfully — they just
+panicked because they thought their order hadn't gone through and
+called us. One actually placed a second order before we could call
+them back.
+
+I checked with the email ops folks and they think it's a DKIM
+alignment issue on the outbound mailer that handles order
+confirmations specifically. Other transactional emails (loyalty
+points, password reset) are landing fine. So it's probably a
+configuration drift on the order-confirmation template path, not a
+domain-wide reputation issue.
+
+Worth a story to lock down the deliverability of order confirmations
+specifically, with a synthetic monitor that ships a test confirmation
+to a Gmail inbox once an hour.
+
+Anyway — happy weekend. Tell Marcus I still owe him a coffee.
+
+— Jordan

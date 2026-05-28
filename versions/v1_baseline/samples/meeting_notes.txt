@@ -1,0 +1,119 @@
+Customer Experience Voice-of-Customer Synthesis Meeting — Q3 Planning
+Attendees: Priya (VP CX), Devon (Director Eng), Marcus (Mobile Lead),
+           Hiroshi (Store Tech), Elena (Compliance), Anika (Pharmacy PM)
+Date: April 11
+
+Priya kicked off — said the last 90 days of feedback from store managers
+and the in-app survey are telling us pretty consistent things. She wants
+us to leave this meeting with a synthesized list of customer-facing
+problems we should tackle in Q3.
+
+------
+
+Theme 1: POS outages during peak hours
+
+Hiroshi led on this. Last weekend was the worst — three stores in the
+Houston cluster lost internet for 40 minutes during Saturday afternoon
+rush. Cashiers literally couldn't ring up customers and managers ended up
+sending people away. Hiroshi's data: when the WAN drops, our POS goes
+fully offline — can't even process a cash sale because it can't validate
+the SKU pricing locally.
+
+He wants us to build offline mode for the POS. At minimum: cash sales,
+returns up to $50, gift card redemption. He thinks card sales would be
+nice but compliance is going to push back. (Elena confirmed — PCI is
+specific about online auth.)
+
+Marcus asked: "Can we sync prices and inventory levels to the lane
+hardware on a schedule so when WAN drops it has something to fall back
+on?" Hiroshi: "Yes that's the design. Local SQLite on every lane,
+refreshes hourly when online."
+
+Priya: "This is high priority. We're losing real revenue and store
+managers are escalating."
+
+------
+
+Theme 2: Mobile app search keeps surfacing out-of-stock items
+
+Marcus has been deep in the feedback. People search for "diapers size 4"
+and the top three results are out of stock at their local store. They
+add to cart, check out, then get a sad "we couldn't fulfill this" email.
+NPS for customers who hit this is -30. Customers who don't hit it are
++18.
+
+Three things tangled here:
+- Search ranking doesn't factor local inventory at all
+- The "in stock at your store" badge is wrong about 20% of the time
+- Substitute suggestions don't kick in until checkout, way too late
+
+Marcus: "I think we want to push inventory into the search ranker as a
+boost factor. And surface alternatives inline when the top result is
+out of stock at the user's home store."
+
+Elena raised: "We need to make sure we're not violating advertising rules
+if we boost something based on inventory — we can't show a different
+price to different users based on stock without disclosure."
+
+Priya: "Note that for legal review. Don't let it block us — find the
+non-controversial path."
+
+------
+
+Theme 3: Pharmacy refill confusion
+
+Anika brought receipts. The single biggest complaint to the pharmacy
+help line is "I refilled my prescription in the app but the pharmacy
+says it isn't ready and they have no record." It's because we have
+TWO refill flows: the in-app one, and the IVR phone line. They write
+to different systems and the systems don't reconcile in real time.
+
+Anika wants:
+- One unified refill record per prescription, regardless of intake channel
+- A clear status the customer sees ("queued / ready / picked up")
+- A push notification when the rx is actually ready
+
+Elena: "HIPAA. Any notification that mentions a medication name has to
+be opt-in and we can only send to the patient's verified contact method.
+Not the household account."
+
+------
+
+Theme 4: Loyalty tier confusion
+
+Priya mentioned this almost as an aside but it kept coming up. Customers
+don't understand how they earn or lose tier status. They get a "you're
+Gold!" email and then 2 months later "you've been downgraded to Silver"
+and they're upset. The downgrade timing isn't clear from any
+customer-facing surface.
+
+Marcus thinks the fix is mostly informational — show a "tier progress
+bar" in the app that makes the rules visible. Devon: "Should be a small
+UI change. Not a whole platform rewrite. We can fit it in."
+
+------
+
+Theme 5: Store-associate handheld scanners are 7 years old
+
+Hiroshi: side-bar but worth flagging. The store-side handheld inventory
+scanners are running Android 7. They can't get security patches anymore.
+Replacement is approved for FY26 but we should make sure no new tooling
+we build assumes hardware capabilities Android 7 doesn't have. Camera
+APIs, BLE behavior, etc.
+
+Devon: "Good call-out. Flag this on every new mobile-app-touching story —
+the store associate tools have a different floor than the consumer app."
+
+------
+
+Things we explicitly said NO to this round:
+- Self-checkout improvements (capital project owned by ops, not us)
+- Vendor portal redesign (next FY)
+- B2B membership tier (still in research)
+
+------
+
+Next steps:
+Priya will write up the Q3 OKRs. Devon will start grooming. Hiroshi takes
+the POS offline scope. Marcus takes mobile search + tier-progress. Anika
+takes pharmacy unification with Elena's HIPAA sign-off.

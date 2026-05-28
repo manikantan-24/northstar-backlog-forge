@@ -1,0 +1,41 @@
+{
+  "case_id": "case_09",
+  "description": "Multi-team transcript — should produce 4 concrete stories (self-checkout perf, Android deep links, double pharmacy reminders, RN upgrade discussion) and flag the loyalty tier as a duplicate of NS-389.",
+
+  "required_topics": [
+    {
+      "theme_keywords": ["self-checkout", "latency"],
+      "must_appear": true,
+      "rationale": "Store Ops's primary concern."
+    },
+    {
+      "theme_keywords": ["android", "deep link"],
+      "must_appear": true,
+      "rationale": "Mobile deep-link bug breaks marketing attribution."
+    },
+    {
+      "theme_keywords": ["pharmacy", "refill", "reminder"],
+      "must_appear": true,
+      "rationale": "Double-firing reminder bug."
+    }
+  ],
+
+  "forbidden_topics": [],
+
+  "expected_duplicates": [
+    {
+      "story_theme": ["loyalty", "tier"],
+      "existing_id": "NS-389",
+      "min_confidence": "medium",
+      "rationale": "Priya explicitly says this is the same ticket already in flight."
+    }
+  ],
+
+  "expected_constraint_conflicts": [],
+
+  "expected_story_acceptance_criteria_min": 2,
+  "expected_story_acceptance_criteria_max": 7,
+  "expected_epic_count_range": [2, 5],
+  "expected_minimum_story_count": 3,
+  "expected_maximum_story_count": 8
+}

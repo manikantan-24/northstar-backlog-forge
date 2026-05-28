@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./venv/bin/python -c \"import ast; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(ls -la /Users/mani.kantan.arun/.claude/projects/ 2>/dev/null)",
+      "Read(//Users/mani.kantan.arun/.claude/projects/**)",
+      "Bash(python3 -c ' *)",
+      "Bash(rsync -a --exclude='venv' --exclude='outputs' --exclude='logs' --exclude='__pycache__' --exclude='.env' --exclude='versions' --exclude='*.pyc' --exclude='evaluation' --exclude='.DS_Store' ./ versions/v1_baseline/)"
+    ]
+  }
+}

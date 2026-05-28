@@ -1,0 +1,47 @@
+{
+  "run_id": "20260528_205305_f0e312",
+  "timestamp": "20260528_205305",
+  "source_label": "case_02_pharmacy_escalation.txt",
+  "elapsed_seconds": 157.26011408299973,
+  "epic_count": 1,
+  "story_count": 3,
+  "dup_count": 0,
+  "gap_count": 0,
+  "conflict_count": 0,
+  "model": "mixed (gemini-2.5-flash + claude-sonnet-4-5)",
+  "models": {
+    "parser": "gemini-2.5-flash",
+    "constraint": "gemini-2.5-flash",
+    "story_writer": "claude-sonnet-4-5",
+    "epic_decomposer": "gemini-2.5-flash",
+    "gap_detector": "gemini-2.5-flash"
+  },
+  "token_usage": {
+    "parser": {
+      "input": 1578,
+      "output": 511
+    },
+    "constraint_extractor": {
+      "input": 1951,
+      "output": 1156
+    },
+    "story_writer": {
+      "input": 2705,
+      "output": 1442
+    },
+    "epic_decomposer": {
+      "input": 2543,
+      "output": 2741
+    },
+    "total": {
+      "input": 8777,
+      "output": 5850
+    }
+  },
+  "cost_usd": 0.0,
+  "outputs": {
+    "synthesis_json": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260528_205305/synthesis.json",
+    "synthesis_md": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260528_205305/synthesis.md",
+    "audit_md": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260528_205305/audit_trail.md"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "case_id": "case_03",
+  "description": "Mobile team Slack standup rollup. Tests robustness: the transcript mixes real product asks with off-topic chatter (lunch, music, vacation). Should produce stories about search ranking + Apple Pay POS, ignore the chatter. Expect a duplicate against NS-251 (search purchase-history ranking) and NS-243 (Apple Pay / Google Pay at POS).",
+  "deterministic_average": 0.75,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 3 stories in [2, 6]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "3/3 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 0.5,
+      "observations": [
+        "1/2 required topics found",
+        "Missing topic for keywords: ['apple pay', 'google pay', 'wallet', 'pos']"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "0 forbidden topic violations of 3 checked"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.0,
+      "observations": [
+        "0/2 expected duplicates found",
+        "Expected duplicate (['search', 'ranking', 'purchase history'] \u2194 NS-251) not found at confidence \u2265 high",
+        "Expected duplicate (['apple pay', 'google pay', 'pos'] \u2194 NS-243) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 2,
+      "story_granularity": 3,
+      "tag_accuracy": 4,
+      "conflict_reasoning": 5
+    },
+    "reasons": {
+      "ac_quality": "Most acceptance criteria are concrete and testable with clear Given/When/Then structure and measurable outcomes, though ST-02's prioritization criteria are somewhat meta and less behavioral.",
+      "priority_justification": "Priorities are assigned (High/Medium/Low) but the priority_rationale field is completely missing from all stories, making it impossible to assess whether the choices are justified despite the guardrail warning about this exact issue.",
+      "story_granularity": "ST-01 is appropriately sized for wallet integration, ST-03 is a clean UI addition, but ST-02 is oddly meta (prioritizing an existing ticket rather than being the actual work) which undermines its value as a deliverable story.",
+      "tag_accuracy": "Tags are sensible and mostly consistent (mobile-app, payments, loyalty, ecommerce, performance) with only minor vocabulary extensions like 'checkout', 'cart', and 'search' that are logical additions.",
+      "conflict_reasoning": "No conflicts are flagged and none should be\u2014all stories correctly reference relevant constraints (C-01, C-05, C-07, C-09, C-20) and stay within architectural boundaries."
+    },
+    "overall_comment": "This is a solid synthesis with well-structured acceptance criteria and good constraint awareness, but it is significantly weakened by the complete absence of priority rationale fields despite having priority assignments. The meta-story ST-02 (prioritize an existing ticket) also feels like a process artifact rather than a proper user story, suggesting the AI should have either pulled NS-251 content forward or omitted it entirely.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.25,
+      "story_granularity": 0.5,
+      "tag_accuracy": 0.75,
+      "conflict_reasoning": 1.0
+    },
+    "average_normalized": 0.65
+  },
+  "synthesis_summary": {
+    "epic_count": 2,
+    "story_count": 3,
+    "duplicates": 0,
+    "conflicts": 0,
+    "gaps": 3
+  }
+}

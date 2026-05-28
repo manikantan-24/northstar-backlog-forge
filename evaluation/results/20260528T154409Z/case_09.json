@@ -1,0 +1,82 @@
+{
+  "case_id": "case_09",
+  "description": "Cross-team planning meeting touching POS, mobile, and pharmacy. The system must produce one story per concrete ask AND catch the NS-389 loyalty duplicate.",
+  "deterministic_average": 0.8333333333333334,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 4 stories in [3, 8]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "4/4 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "3/3 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "No forbidden topics specified"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.0,
+      "observations": [
+        "0/1 expected duplicates found",
+        "Expected duplicate (['loyalty', 'tier'] \u2194 NS-389) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 1,
+      "story_granularity": 4,
+      "tag_accuracy": 3,
+      "conflict_reasoning": 3
+    },
+    "reasons": {
+      "ac_quality": "Most acceptance criteria are concrete and testable with specific metrics (p95 latency, 95% success rate), though ST-04's criteria are somewhat vague around \"written sign-off\" observability.",
+      "priority_justification": "All three high-priority stories (ST-01, ST-02, ST-03) have completely missing priority_rationale fields, confirmed by guardrail findings showing len=0 for each.",
+      "story_granularity": "Stories are well-scoped to single deliverable behaviours (fix receipt latency, fix deep links, eliminate duplicates, create upgrade plan) with appropriate task breakdowns, though ST-04 borders on being a spike rather than a story.",
+      "tag_accuracy": "Tags are mostly appropriate and domain-relevant (pos, mobile-app, pharmacy, compliance), but the vocabulary appears inconsistent (e.g., 'android' vs 'mobile-app', 'hardware' appears once) as flagged by guardrails.",
+      "conflict_reasoning": "The conflicts correctly identify potential compliance violations in ST-03 with specific constraint citations (C-06, C-08, C-09, C-10), though the reasoning could be sharper about whether these are actual conflicts or missing verification steps."
+    },
+    "overall_comment": "This is a strong synthesis with well-written stories, concrete acceptance criteria, and thoughtful task decomposition. The critical weakness is completely missing priority justifications for all high-priority items, which the guardrails correctly flagged\u2014this must be remedied before the backlog can be used for planning.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.0,
+      "story_granularity": 0.75,
+      "tag_accuracy": 0.5,
+      "conflict_reasoning": 0.5
+    },
+    "average_normalized": 0.5
+  },
+  "synthesis_summary": {
+    "epic_count": 3,
+    "story_count": 4,
+    "duplicates": 0,
+    "conflicts": 4,
+    "gaps": 4
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "case_id": "case_06",
+  "description": "All three escalations correspond to existing tickets. Each must be flagged as a duplicate with at least medium confidence.",
+
+  "required_topics": [
+    {
+      "theme_keywords": ["in stock", "badge"],
+      "must_appear": true,
+      "rationale": "Search/inventory accuracy is the first escalation."
+    },
+    {
+      "theme_keywords": ["loyalty", "tier"],
+      "must_appear": true,
+      "rationale": "Loyalty downgrade emails — second escalation."
+    },
+    {
+      "theme_keywords": ["pos", "offline"],
+      "must_appear": true,
+      "rationale": "POS offline cash fallback — third escalation."
+    }
+  ],
+
+  "forbidden_topics": [],
+
+  "expected_duplicates": [
+    {
+      "story_theme": ["stock", "badge"],
+      "existing_id": "NS-412",
+      "min_confidence": "medium",
+      "rationale": "NS-412 is the in-stock badge accuracy ticket."
+    },
+    {
+      "story_theme": ["loyalty", "tier"],
+      "existing_id": "NS-389",
+      "min_confidence": "medium",
+      "rationale": "NS-389 is the loyalty downgrade email ticket."
+    },
+    {
+      "story_theme": ["pos", "offline"],
+      "existing_id": "NS-101",
+      "min_confidence": "medium",
+      "rationale": "NS-101 is the POS offline cash sales ticket."
+    }
+  ],
+
+  "expected_constraint_conflicts": [],
+
+  "expected_story_acceptance_criteria_min": 2,
+  "expected_story_acceptance_criteria_max": 7,
+  "expected_epic_count_range": [1, 4],
+  "expected_minimum_story_count": 2,
+  "expected_maximum_story_count": 6
+}

@@ -1,0 +1,448 @@
+/Users/mani.kantan.arun/Downloads/backlog-synthesizer/venv/lib/python3.9/site-packages/google/auth/__init__.py:54: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+/Users/mani.kantan.arun/Downloads/backlog-synthesizer/venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+/Users/mani.kantan.arun/Downloads/backlog-synthesizer/venv/lib/python3.9/site-packages/google/oauth2/__init__.py:40: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+20:55:05 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+20:55:42 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+20:56:51 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+20:57:55 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+20:58:01 [INFO] tools.embedding_tool: Loading embedding model sentence-transformers/all-MiniLM-L6-v2 (first run downloads ~80MB)
+20:58:01 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+20:58:01 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+20:58:07 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+20:58:07 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+20:58:10 [INFO] memory.store: Indexed 30 tickets for semantic search
+20:58:39 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+20:58:54 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+20:59:06 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+20:59:33 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:00:12 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:00:44 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:00:44 [INFO] tools.embedding_tool: Loading embedding model sentence-transformers/all-MiniLM-L6-v2 (first run downloads ~80MB)
+21:00:44 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:00:44 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+21:00:47 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:00:47 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+21:00:51 [INFO] memory.store: Indexed 30 tickets for semantic search
+21:01:11 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:01:24 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:01:34 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:01:59 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:02:22 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:02:44 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:02:44 [INFO] tools.embedding_tool: Loading embedding model sentence-transformers/all-MiniLM-L6-v2 (first run downloads ~80MB)
+21:02:44 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:02:44 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+21:02:48 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:02:48 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+21:02:52 [INFO] memory.store: Indexed 30 tickets for semantic search
+21:03:06 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+
+======================================================================
+ Case: case_01
+ Description: The bundled NorthStar Retail Q3 planning meeting. Should produce three high-priority topics (POS offline, pharmacy unification, search-inventory), flag duplicates against NS-412 and NS-389, and conflict-flag any offline card-sale story.
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 7 stories in [4, 10]
+   acceptance_criteria_well_formed            ████████████████████ 1.00
+     · 7/7 stories have AC count in range
+   required_topics_present                    ████████████████████ 1.00
+     · 4/4 required topics found
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · 0 forbidden topic violations of 3 checked
+   expected_duplicates_found                  ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · 0/2 expected duplicates found
+     · Expected duplicate (['search', 'inventory'] ↔ NS-412) not found at confidence ≥ medium
+     · Expected duplicate (['loyalty', 'tier'] ↔ NS-389) not found at confidence ≥ medium
+   expected_constraint_conflicts_found        ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · 0/1 expected conflicts flagged
+     · Expected conflict for story keywords ['card', 'offline'] not flagged
+
+ Deterministic average: 0.67
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     5/5  (1.00)  — All acceptance criteria follow Given/When/Then format with concrete, measurable outcomes (e.g., specific latency thresholds, badge accuracy percentages, observable UI states) that are directly testable.
+   priority_justification         2/5  (0.25)  — The guardrail findings correctly flag missing priority_rationale fields for all High-priority stories (ST-01, ST-02, ST-04), and Medium stories also lack explicit justification beyond implicit impact references.
+   story_granularity              4/5  (0.75)  — Stories are well-scoped to single deliverable behaviours (offline cash sales, search ranking with badges, refill unification) though ST-07 is correctly noted as documentation rather than shippable functionality.
+   tag_accuracy                   4/5  (0.75)  — Tags are consistently applied and domain-appropriate (pos, mobile-app, pharmacy, compliance) though the guardrails correctly note several non-canonical tags (search, checkout, integration, notifications, platform) that should be standardised.
+   conflict_reasoning             4/5  (0.75)  — The single flagged conflict (ST-02 vs C-20) correctly identifies the constraint, accurately assesses severity as low, and provides valid reasoning that the story acknowledges and complies with the rule.
+
+ Judge average (normalised): 0.70
+ Overall: This is a high-quality synthesis with excellent AC clarity and solid story decomposition, but it is seriously undermined by completely missing priority_rationale fields—the guardrails caught three High-priority stories with zero justification, which is unacceptable for backlog prioritisation. The non-canonical tags and missing source_topic_id fields also indicate process gaps that should be addressed before final acceptance.
+
+======================================================================
+ Case: case_02
+ Description: Pharmacy refill escalation meeting. Should produce stories around medication-refill push notifications and household-account verification. Expect a HIPAA conflict (surfacing medication names in notifications) and a duplicate against NS-176 (Pharmacy refill SMS reminder).
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 4 stories in [2, 6]
+   acceptance_criteria_well_formed            ████████████████████ 1.00
+     · 4/4 stories have AC count in range
+   required_topics_present                    ████████████████████ 1.00
+     · 2/2 required topics found
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · 0 forbidden topic violations of 2 checked
+   expected_duplicates_found                  ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · 0/1 expected duplicates found
+     · Expected duplicate (['sms', 'refill', 'reminder'] ↔ NS-176) not found at confidence ≥ medium
+   expected_constraint_conflicts_found        ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · 0/1 expected conflicts flagged
+     · Expected conflict for story keywords ['medication', 'name', 'notification', 'push'] not flagged
+
+ Deterministic average: 0.67
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     4/5  (0.75)  — Most acceptance criteria are concrete and testable with clear Given/When/Then structure, measurable outcomes (5-minute SLA, 10-minute propagation), and observable states, though a few could be more specific about negative-case verification.
+   priority_justification         2/5  (0.25)  — Two high-priority stories (ST-01, ST-02) have zero-length priority_rationale fields despite guardrail warnings, and the Medium priorities lack explicit justification beyond implicit sequencing or Legal review dependencies.
+   story_granularity              4/5  (0.75)  — Stories are well-sized with single, coherent deliverables—each addresses one notification capability or compliance dimension—though ST-04 is somewhat meta (elevating an existing story) rather than a pure delivery item.
+   tag_accuracy                   4/5  (0.75)  — Tags are appropriate and consistently applied across the epic (pharmacy, mobile-app, compliance, notifications, sms), though guardrail findings correctly note 'notifications' and 'sms' are non-canonical and should be added to the vocabulary.
+   conflict_reasoning             3/5  (0.50)  — The single flagged conflict (ST-02 vs C-09) is identified as 'low severity' and labeled as addressing a gap rather than a true conflict, which is reasonable but slightly equivocates—if C-09 mandates verified delivery and ST-02 implements it, there is no conflict at all.
+
+ Judge average (normalised): 0.60
+ Overall: This is a strong backlog synthesis with well-structured, testable stories and thoughtful compliance integration. The primary weakness is missing priority rationale for high-priority items, which undermines sequencing confidence and stakeholder communication; adding explicit business or risk justification would significantly strengthen delivery planning.
+
+======================================================================
+ Case: case_03
+ Description: Mobile team Slack standup rollup. Tests robustness: the transcript mixes real product asks with off-topic chatter (lunch, music, vacation). Should produce stories about search ranking + Apple Pay POS, ignore the chatter. Expect a duplicate against NS-251 (search purchase-history ranking) and NS-243 (Apple Pay / Google Pay at POS).
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 3 stories in [2, 6]
+   acceptance_criteria_well_formed            ████████████████████ 1.00
+     · 3/3 stories have AC count in range
+   required_topics_present                    ██████████░░░░░░░░░░ 0.50
+     · 1/2 required topics found
+     · Missing topic for keywords: ['apple pay', 'google pay', 'wallet', 'pos']
+   forbidden_topics_absent                    ████████████████████ 1.00
+21:03:19 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:03:26 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:03:50 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:04:08 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:04:25 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:04:25 [INFO] tools.embedding_tool: Loading embedding model sentence-transformers/all-MiniLM-L6-v2 (first run downloads ~80MB)
+21:04:25 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:04:25 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+21:04:29 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:04:29 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+21:04:32 [INFO] memory.store: Indexed 30 tickets for semantic search
+21:04:45 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:04:58 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:05:01 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:05:27 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:05:34 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:05:40 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:06:06 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:06:35 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:07:04 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:07:04 [INFO] tools.embedding_tool: Loading embedding model sentence-transformers/all-MiniLM-L6-v2 (first run downloads ~80MB)
+21:07:04 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:07:04 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+21:07:08 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:07:08 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+21:07:12 [INFO] memory.store: Indexed 30 tickets for semantic search
+21:07:24 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+     · 0 forbidden topic violations of 3 checked
+   expected_duplicates_found                  ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · 0/2 expected duplicates found
+     · Expected duplicate (['search', 'ranking', 'purchase history'] ↔ NS-251) not found at confidence ≥ high
+     · Expected duplicate (['apple pay', 'google pay', 'pos'] ↔ NS-243) not found at confidence ≥ medium
+   expected_constraint_conflicts_found        ████████████████████ 1.00
+     · No expected conflicts
+
+ Deterministic average: 0.75
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     4/5  (0.75)  — Most acceptance criteria are concrete and testable with clear Given/When/Then structure and measurable outcomes, though ST-02's prioritization criteria are somewhat meta and less behavioral.
+   priority_justification         2/5  (0.25)  — Priorities are assigned (High/Medium/Low) but the priority_rationale field is completely missing from all stories, making it impossible to assess whether the choices are justified despite the guardrail warning about this exact issue.
+   story_granularity              3/5  (0.50)  — ST-01 is appropriately sized for wallet integration, ST-03 is a clean UI addition, but ST-02 is oddly meta (prioritizing an existing ticket rather than being the actual work) which undermines its value as a deliverable story.
+   tag_accuracy                   4/5  (0.75)  — Tags are sensible and mostly consistent (mobile-app, payments, loyalty, ecommerce, performance) with only minor vocabulary extensions like 'checkout', 'cart', and 'search' that are logical additions.
+   conflict_reasoning             5/5  (1.00)  — No conflicts are flagged and none should be—all stories correctly reference relevant constraints (C-01, C-05, C-07, C-09, C-20) and stay within architectural boundaries.
+
+ Judge average (normalised): 0.65
+ Overall: This is a solid synthesis with well-structured acceptance criteria and good constraint awareness, but it is significantly weakened by the complete absence of priority rationale fields despite having priority assignments. The meta-story ST-02 (prioritize an existing ticket) also feels like a process artifact rather than a proper user story, suggesting the AI should have either pulled NS-251 content forward or omitted it entirely.
+
+======================================================================
+ Case: case_04
+ Description: Negative / minimal case. A short customer-support note that mentions ONE real product issue surrounded by polite small-talk. Tests hallucination resistance — the system must NOT invent stories from social pleasantries, and must produce at most a few well-grounded stories.
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 2 stories in [1, 3]
+   acceptance_criteria_well_formed            ████████████████████ 1.00
+     · 2/2 stories have AC count in range
+   required_topics_present                    ████████████████████ 1.00
+     · 1/1 required topics found
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · 0 forbidden topic violations of 2 checked
+   expected_duplicates_found                  ████████████████████ 1.00
+     · No expected duplicates
+   expected_constraint_conflicts_found        ████████████████████ 1.00
+     · No expected conflicts
+
+ Deterministic average: 1.00
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     4/5  (0.75)  — Most acceptance criteria are concrete and testable with clear Given/When/Then structure, though the '95% of synthetic tests over 24-hour period' threshold in ST-01 could specify the denominator more precisely.
+   priority_justification         2/5  (0.25)  — ST-01 is marked High priority but has zero-length rationale (flagged by guardrails), and ST-02's Medium priority also lacks explicit business-impact justification beyond the technical need.
+   story_granularity              4/5  (0.75)  — Both stories represent single, coherent deliverables with clear scope boundaries—ST-01 fixes the DKIM issue, ST-02 adds monitoring—neither is too broad nor atomized into micro-tasks.
+   tag_accuracy                   4/5  (0.75)  — Tags are semantically appropriate and mostly consistent ('mobile-app', 'ecommerce' appear in both; 'email' is logical though flagged as non-canonical), showing deliberate vocabulary choices despite minor canonical-set deviations.
+   conflict_reasoning             5/5  (1.00)  — No conflicts are flagged and correctly so—the stories involve email infrastructure work that doesn't intersect with any of the stated constraints around performance thresholds, PCI scope, pharmacy compliance, or integration mandates.
+
+ Judge average (normalised): 0.70
+ Overall: This is a solid, professional backlog synthesis with well-structured stories and testable acceptance criteria that clearly address the reported deliverability problem. The main weakness is missing priority rationales (especially for the High-priority fix), which leaves stakeholders without explicit business justification for sequencing decisions.
+
+======================================================================
+ Case: case_05
+ Description: Empty / cancelled meeting transcript. The pipeline must complete cleanly with zero stories rather than hallucinating from the single line.
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 0 stories in [0, 1]
+   acceptance_criteria_well_formed            ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · No stories to check
+   required_topics_present                    ████████████████████ 1.00
+     · No required topics specified
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · 0 forbidden topic violations of 1 checked
+   expected_duplicates_found                  ████████████████████ 1.00
+     · No expected duplicates
+   expected_constraint_conflicts_found        ████████████████████ 1.00
+     · No expected conflicts
+
+ Deterministic average: 0.83
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     1/5  (0.00)  — There are no stories in the synthesis, therefore no acceptance criteria exist to evaluate.
+   priority_justification         1/5  (0.00)  — There are no stories in the synthesis, therefore no priority rationales exist to evaluate.
+   story_granularity              1/5  (0.00)  — There are no stories in the synthesis, therefore story sizing cannot be assessed.
+   tag_accuracy                   1/5  (0.00)  — There are no stories in the synthesis, therefore no tags exist to evaluate for accuracy.
+   conflict_reasoning             5/5  (1.00)  — No conflicts are flagged and none should be flagged in a cancelled meeting scenario, which is correct.
+
+ Judge average (normalised): 0.20
+ Overall: This synthesis correctly reflects that the meeting was cancelled and produces no actionable backlog items. However, as a backlog synthesis artifact it provides no value to the delivery team since constraints without stories or epics cannot be prioritized or delivered.
+
+======================================================================
+ Case: case_06
+ Description: Every theme raised in the meeting maps to an existing JIRA ticket. The Gap Detector must catch all three as duplicates rather than presenting them as new stories.
+======================================================================
+21:07:41 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:07:44 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:08:08 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:08:16 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:08:22 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:08:49 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:09:04 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:09:19 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:09:19 [INFO] tools.embedding_tool: Loading embedding model sentence-transformers/all-MiniLM-L6-v2 (first run downloads ~80MB)
+21:09:19 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:09:19 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+21:09:22 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:09:22 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+21:09:26 [INFO] memory.store: Indexed 30 tickets for semantic search
+21:09:35 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:09:49 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 3 stories in [2, 6]
+   acceptance_criteria_well_formed            ████████████████████ 1.00
+     · 3/3 stories have AC count in range
+   required_topics_present                    ████████████████████ 1.00
+     · 3/3 required topics found
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · No forbidden topics specified
+   expected_duplicates_found                  ██████░░░░░░░░░░░░░░ 0.33
+     · 1/3 expected duplicates found
+     · Expected duplicate (['stock', 'badge'] ↔ NS-412) not found at confidence ≥ medium
+     · Expected duplicate (['pos', 'offline'] ↔ NS-101) not found at confidence ≥ medium
+   expected_constraint_conflicts_found        ████████████████████ 1.00
+     · No expected conflicts
+
+ Deterministic average: 0.89
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     5/5  (1.00)  — All acceptance criteria are concrete, testable, and follow Given/When/Then structure with observable outcomes (badge visibility, email content, offline transaction completion).
+   priority_justification         1/5  (0.00)  — No priority_rationale fields exist in any story despite the guardrail flagging this weakness; priorities appear assigned without documented business justification.
+   story_granularity              4/5  (0.75)  — Stories represent single, well-scoped behaviors (fix badge accuracy, add tier info to email, enable offline cash) though ST-03 is slightly broad with both offline detection and sync concerns.
+   tag_accuracy                   5/5  (1.00)  — Tags are appropriate and drawn from a consistent technical vocabulary (mobile-app, ecommerce, pos, loyalty, inventory, offline-mode, payments) that accurately reflects each story's scope.
+   conflict_reasoning             2/5  (0.25)  — No conflicts are flagged, yet ST-03 should cite C-13 (mandate for offline cash sales) and C-15 (forbid offline card sales) as directly constraining its acceptance criteria, making the absence of conflict annotations a miss.
+
+ Judge average (normalised): 0.60
+ Overall: The synthesis demonstrates strong technical writing with excellent testable acceptance criteria and appropriate story sizing, but completely omits priority rationale fields that would justify the High/Medium assignments. The constraint analysis is incomplete: ST-03 directly implements C-13 and must comply with C-15, yet these are not surfaced as conflicts or dependencies, suggesting the conflict-detection logic may only flag violations rather than relevant constraint applications.
+
+======================================================================
+ Case: case_07
+ Description: Multiple requested capabilities all conflict with the PCI / offline-mode constraints in the architecture wiki. The Gap Detector must flag at least one constraint conflict, ideally multiple.
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · FAIL: 0 stories outside [2, 5]
+   acceptance_criteria_well_formed            ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · No stories to check
+   required_topics_present                    ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · 0/2 required topics found
+     · Missing topic for keywords: ['offline', 'card']
+     · Missing topic for keywords: ['offline', 'return']
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · No forbidden topics specified
+   expected_duplicates_found                  ████████████████████ 1.00
+     · No expected duplicates
+   expected_constraint_conflicts_found        ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · 0/1 expected conflicts flagged
+     · Expected conflict for story keywords ['card', 'offline'] not flagged
+
+ Deterministic average: 0.33
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     1/5  (0.00)  — No stories are present in the synthesis, so there are no acceptance criteria to evaluate.
+   priority_justification         1/5  (0.00)  — No stories are present in the synthesis, so there are no priority rationales to evaluate.
+   story_granularity              1/5  (0.00)  — No stories are present in the synthesis, so story sizing cannot be assessed.
+   tag_accuracy                   1/5  (0.00)  — No stories are present in the synthesis, so tag appropriateness cannot be evaluated.
+   conflict_reasoning             1/5  (0.00)  — The synthesis summary explicitly states that compliance flagged three feature requests as blocked by PCI rules (C-15 forbids offline card sales), yet the conflicts array is empty when it should contain these flagged conflicts with specific constraint references.
+
+ Judge average (normalised): 0.00
+ Overall: This synthesis is incomplete and not ready for delivery review—it contains only constraints but no stories, epics, or documented conflicts despite the summary describing three blocked feature requests. The AI appears to have stopped after constraint extraction without completing the story decomposition, conflict detection, or backlog structuring phases of the synthesis workflow.
+
+======================================================================
+ Case: case_08
+ Description: Highly ambiguous customer panel transcript. The system must produce very few, well-grounded stories (ideally just mobile-checkout-perf) rather than over-extracting from vague hedges.
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 1 stories in [1, 3]
+   acceptance_criteria_well_formed            ████████████████████ 1.00
+     · 1/1 stories have AC count in range
+   required_topics_present                    ████████████████████ 1.00
+     · 1/1 required topics found
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · 0 forbidden topic violations of 2 checked
+   expected_duplicates_found                  ████████████████████ 1.00
+     · No expected duplicates
+   expected_constraint_conflicts_found        ████████████████████ 1.00
+     · No expected conflicts
+
+ Deterministic average: 1.00
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     4/5  (0.75)  — The acceptance criteria are well-structured in Given/When/Then format with concrete metrics (p95 < 1.5s, 7-day monitoring period, 2.5s end-to-end threshold) and observable outcomes, though the fourth criterion about 'unsubstantiated but monitored' is slightly less measurable.
+   priority_justification         4/5  (0.75)  — The rationale logically explains why Medium priority is appropriate given the vague report, directly references the relevant constraint (C-01), and articulates the trade-off between customer impact and lack of concrete evidence.
+   story_granularity              4/5  (0.75)  — The story appropriately combines investigation and remediation into a single deliverable unit of work with clear scope (checkout performance analysis and fix if needed), though it borders on slightly large given the seven distinct tasks.
+21:09:58 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:10:22 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:10:57 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:11:35 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:11:35 [INFO] tools.embedding_tool: Loading embedding model sentence-transformers/all-MiniLM-L6-v2 (first run downloads ~80MB)
+21:11:35 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:11:35 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+21:11:39 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:11:39 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+21:11:42 [INFO] memory.store: Indexed 30 tickets for semantic search
+21:12:02 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:12:14 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:12:23 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:12:47 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:13:13 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:13:35 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:13:35 [INFO] tools.embedding_tool: Loading embedding model sentence-transformers/all-MiniLM-L6-v2 (first run downloads ~80MB)
+21:13:35 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:13:35 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+21:13:38 [INFO] sentence_transformers.SentenceTransformer: Use pytorch device_name: mps
+21:13:38 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+21:13:42 [INFO] memory.store: Indexed 30 tickets for semantic search
+21:13:55 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+21:14:09 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+   tag_accuracy                   4/5  (0.75)  — Tags are appropriate and consistently applied (mobile-app, performance, checkout, payments all relevant to the story content), with the system correctly flagging 'checkout' as non-canonical via guardrail, demonstrating good tag hygiene.
+   conflict_reasoning             3/5  (0.50)  — No conflicts are flagged, which is mostly correct since ST-01 investigates compliance with C-01 rather than violating it, but the story could theoretically conflict with C-01 if investigation reveals current checkout exceeds 1.5s—this potential conflict deserves at least a note in potential_constraint_conflicts which is present but not elaborated in a conflicts array entry.
+
+ Judge average (normalised): 0.70
+ Overall: This is a solid, professional backlog synthesis that demonstrates strong agile practices with testable acceptance criteria, thoughtful prioritization, and appropriate story sizing. The main weakness is that while potential_constraint_conflicts correctly identifies C-01, the empty conflicts array suggests the AI may have under-analyzed the scenario where investigation reveals an existing violation—though this is a minor gap in an otherwise well-reasoned output.
+
+======================================================================
+ Case: case_09
+ Description: Cross-team planning meeting touching POS, mobile, and pharmacy. The system must produce one story per concrete ask AND catch the NS-389 loyalty duplicate.
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 4 stories in [3, 8]
+   acceptance_criteria_well_formed            ████████████████████ 1.00
+     · 4/4 stories have AC count in range
+   required_topics_present                    ████████████████████ 1.00
+     · 3/3 required topics found
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · No forbidden topics specified
+   expected_duplicates_found                  ░░░░░░░░░░░░░░░░░░░░ 0.00
+     · 0/1 expected duplicates found
+     · Expected duplicate (['loyalty', 'tier'] ↔ NS-389) not found at confidence ≥ medium
+   expected_constraint_conflicts_found        ████████████████████ 1.00
+     · No expected conflicts
+
+ Deterministic average: 0.83
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     4/5  (0.75)  — Most acceptance criteria are concrete and testable with specific metrics (p95 latency, 95% success rate), though ST-04's criteria are somewhat vague around "written sign-off" observability.
+   priority_justification         1/5  (0.00)  — All three high-priority stories (ST-01, ST-02, ST-03) have completely missing priority_rationale fields, confirmed by guardrail findings showing len=0 for each.
+   story_granularity              4/5  (0.75)  — Stories are well-scoped to single deliverable behaviours (fix receipt latency, fix deep links, eliminate duplicates, create upgrade plan) with appropriate task breakdowns, though ST-04 borders on being a spike rather than a story.
+   tag_accuracy                   3/5  (0.50)  — Tags are mostly appropriate and domain-relevant (pos, mobile-app, pharmacy, compliance), but the vocabulary appears inconsistent (e.g., 'android' vs 'mobile-app', 'hardware' appears once) as flagged by guardrails.
+   conflict_reasoning             3/5  (0.50)  — The conflicts correctly identify potential compliance violations in ST-03 with specific constraint citations (C-06, C-08, C-09, C-10), though the reasoning could be sharper about whether these are actual conflicts or missing verification steps.
+
+ Judge average (normalised): 0.50
+ Overall: This is a strong synthesis with well-written stories, concrete acceptance criteria, and thoughtful task decomposition. The critical weakness is completely missing priority justifications for all high-priority items, which the guardrails correctly flagged—this must be remedied before the backlog can be used for planning.
+
+======================================================================
+ Case: case_10
+ Description: Compliance-driven transcript. Three findings — HIPAA, GDPR, PCI — each becomes a story. None should be flagged as a duplicate (these are new) and all should carry compliance tags.
+======================================================================
+
+ Deterministic metrics:
+   story_count_in_range                       ████████████████████ 1.00
+     · OK: 3 stories in [3, 6]
+   acceptance_criteria_well_formed            ████████████████████ 1.00
+     · 3/3 stories have AC count in range
+   required_topics_present                    ████████████████████ 1.00
+     · 3/3 required topics found
+   forbidden_topics_absent                    ████████████████████ 1.00
+     · No forbidden topics specified
+   expected_duplicates_found                  ████████████████████ 1.00
+     · No expected duplicates
+   expected_constraint_conflicts_found        ████████████████████ 1.00
+     · No expected conflicts
+
+ Deterministic average: 1.00
+
+ LLM-as-judge scores (1-5, normalised 0-1):
+   ac_quality                     4/5  (0.75)  — Most acceptance criteria are concrete and testable with clear Given/When/Then structure, though a few (like 'when reviewed against HIPAA requirements') are slightly subjective rather than mechanically verifiable.
+   priority_justification         1/5  (0.00)  — All three stories are marked High priority but have zero-length priority_rationale fields, earning the 'weak_priority_rationale' guardrail warning; regulatory urgency is implied but never explicitly stated.
+   story_granularity              5/5  (1.00)  — Each story addresses a single, coherent compliance violation with a well-scoped deliverable (email PHI removal, consent mechanism, receipt field masking) that is neither too broad nor atomically small.
+   tag_accuracy                   5/5  (1.00)  — Tags are consistently drawn from system domains (pharmacy, pos, loyalty, mobile-app, compliance, security, payments, ecommerce) and accurately reflect each story's scope and cross-cutting concerns.
+   conflict_reasoning             4/5  (0.75)  — The flagged conflict correctly identifies that C-08 permits medication name disclosure with opt-in while ST-01 removes names entirely, though the conflict could be a design decision rather than a true violation if generic messages are the chosen compliance path.
+
+ Judge average (normalised): 0.70
+ Overall: This is a well-structured backlog with excellent story granularity, clear acceptance criteria, and appropriate tagging, but it is severely undermined by completely missing priority justifications despite regulatory deadlines mentioned in the summary. The guardrail findings correctly flag the missing source_topic_id traceability and thin rationales, which would need to be remediated before this backlog could be considered release-ready.
+
+======================================================================
+ Aggregate
+======================================================================
+   case_01              0.67  judge 0.70
+   case_02              0.67  judge 0.60
+   case_03              0.75  judge 0.65
+   case_04              1.00  judge 0.70
+   case_05              0.83  judge 0.20
+   case_06              0.89  judge 0.60
+   case_07              0.33  judge 0.00
+   case_08              1.00  judge 0.70
+   case_09              0.83  judge 0.50
+   case_10              1.00  judge 0.70
+
+ Results saved to: /Users/mani.kantan.arun/Downloads/backlog-synthesizer/evaluation/results/20260528T154409Z

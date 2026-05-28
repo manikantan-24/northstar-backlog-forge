@@ -1,0 +1,84 @@
+{
+  "case_id": "case_07",
+  "description": "Multiple requested capabilities all conflict with the PCI / offline-mode constraints in the architecture wiki. The Gap Detector must flag at least one constraint conflict, ideally multiple.",
+  "deterministic_average": 0.3333333333333333,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 0.0,
+      "observations": [
+        "FAIL: 0 stories outside [2, 5]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 0.0,
+      "observations": [
+        "No stories to check"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 0.0,
+      "observations": [
+        "0/2 required topics found",
+        "Missing topic for keywords: ['offline', 'card']",
+        "Missing topic for keywords: ['offline', 'return']"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "No forbidden topics specified"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 1.0,
+      "observations": [
+        "No expected duplicates"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 0.0,
+      "observations": [
+        "0/1 expected conflicts flagged",
+        "Expected conflict for story keywords ['card', 'offline'] not flagged"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 1,
+      "priority_justification": 1,
+      "story_granularity": 1,
+      "tag_accuracy": 1,
+      "conflict_reasoning": 1
+    },
+    "reasons": {
+      "ac_quality": "No stories are present in the synthesis, so there are no acceptance criteria to evaluate.",
+      "priority_justification": "No stories are present in the synthesis, so there are no priority rationales to evaluate.",
+      "story_granularity": "No stories are present in the synthesis, so story sizing cannot be assessed.",
+      "tag_accuracy": "No stories are present in the synthesis, so tag appropriateness cannot be evaluated.",
+      "conflict_reasoning": "The synthesis summary explicitly states that compliance flagged three feature requests as blocked by PCI rules (C-15 forbids offline card sales), yet the conflicts array is empty when it should contain these flagged conflicts with specific constraint references."
+    },
+    "overall_comment": "This synthesis is incomplete and not ready for delivery review\u2014it contains only constraints but no stories, epics, or documented conflicts despite the summary describing three blocked feature requests. The AI appears to have stopped after constraint extraction without completing the story decomposition, conflict detection, or backlog structuring phases of the synthesis workflow.",
+    "normalized": {
+      "ac_quality": 0.0,
+      "priority_justification": 0.0,
+      "story_granularity": 0.0,
+      "tag_accuracy": 0.0,
+      "conflict_reasoning": 0.0
+    },
+    "average_normalized": 0.0
+  },
+  "synthesis_summary": {
+    "epic_count": 0,
+    "story_count": 0,
+    "duplicates": 0,
+    "conflicts": 0,
+    "gaps": 0
+  }
+}

@@ -1,0 +1,25 @@
+anthropic>=0.39.0
+google-genai>=1.0.0    # new Gemini SDK (NOT google-generativeai)
+python-dotenv>=1.0.0
+pypdf>=4.0.0           # PDF transcript input
+pytest>=7.4.0
+
+# Live tool integrations (Confluence REST + future Jira live read).
+# Optional at install time — confluence_tool falls back to mock mode when
+# `requests` isn't available, but the live path needs it.
+requests>=2.31.0
+
+# Retrieval / shared memory / local embeddings (used by the duplicate
+# detector when the "Free" or "Balanced" preset is active — no LLM call
+# is made for duplicates in those modes).
+sentence-transformers>=2.7.0
+numpy>=1.24.0
+chromadb>=0.4.22       # persistent vector store option (file-backed fallback already in MemoryStore)
+
+# Multi-agent infrastructure
+tenacity>=8.2.3        # retry logic for agent tool calls
+
+# Web UI (optional). 1.32+ is required for st.dialog (modal helpers).
+# pandas is used for the cost-panel bar/line charts in the Streamlit UI.
+streamlit>=1.32.0
+pandas>=2.0.0

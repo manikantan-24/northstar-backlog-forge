@@ -1,0 +1,83 @@
+{
+  "case_id": "case_06",
+  "description": "Every theme raised in the meeting maps to an existing JIRA ticket. The Gap Detector must catch all three as duplicates rather than presenting them as new stories.",
+  "deterministic_average": 0.8888888888888888,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 3 stories in [2, 6]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "3/3 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "3/3 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "No forbidden topics specified"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.3333333333333333,
+      "observations": [
+        "1/3 expected duplicates found",
+        "Expected duplicate (['stock', 'badge'] \u2194 NS-412) not found at confidence \u2265 medium",
+        "Expected duplicate (['pos', 'offline'] \u2194 NS-101) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 5,
+      "priority_justification": 1,
+      "story_granularity": 4,
+      "tag_accuracy": 5,
+      "conflict_reasoning": 2
+    },
+    "reasons": {
+      "ac_quality": "All acceptance criteria are concrete, testable, and follow Given/When/Then structure with observable outcomes (badge visibility, email content, offline transaction completion).",
+      "priority_justification": "No priority_rationale fields exist in any story despite the guardrail flagging this weakness; priorities appear assigned without documented business justification.",
+      "story_granularity": "Stories represent single, well-scoped behaviors (fix badge accuracy, add tier info to email, enable offline cash) though ST-03 is slightly broad with both offline detection and sync concerns.",
+      "tag_accuracy": "Tags are appropriate and drawn from a consistent technical vocabulary (mobile-app, ecommerce, pos, loyalty, inventory, offline-mode, payments) that accurately reflects each story's scope.",
+      "conflict_reasoning": "No conflicts are flagged, yet ST-03 should cite C-13 (mandate for offline cash sales) and C-15 (forbid offline card sales) as directly constraining its acceptance criteria, making the absence of conflict annotations a miss."
+    },
+    "overall_comment": "The synthesis demonstrates strong technical writing with excellent testable acceptance criteria and appropriate story sizing, but completely omits priority rationale fields that would justify the High/Medium assignments. The constraint analysis is incomplete: ST-03 directly implements C-13 and must comply with C-15, yet these are not surfaced as conflicts or dependencies, suggesting the conflict-detection logic may only flag violations rather than relevant constraint applications.",
+    "normalized": {
+      "ac_quality": 1.0,
+      "priority_justification": 0.0,
+      "story_granularity": 0.75,
+      "tag_accuracy": 1.0,
+      "conflict_reasoning": 0.25
+    },
+    "average_normalized": 0.6
+  },
+  "synthesis_summary": {
+    "epic_count": 3,
+    "story_count": 3,
+    "duplicates": 1,
+    "conflicts": 0,
+    "gaps": 2
+  }
+}

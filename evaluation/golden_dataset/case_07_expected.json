@@ -1,0 +1,35 @@
+{
+  "case_id": "case_07",
+  "description": "Every requested capability touches the PCI constraints. The Gap Detector should flag at least the card-offline conflict; ideally the returns and gift-card conflicts as well.",
+
+  "required_topics": [
+    {
+      "theme_keywords": ["offline", "card"],
+      "must_appear": true,
+      "rationale": "Offline card sales — the primary ask."
+    },
+    {
+      "theme_keywords": ["offline", "return"],
+      "must_appear": true,
+      "rationale": "Offline returns — the second ask."
+    }
+  ],
+
+  "forbidden_topics": [],
+
+  "expected_duplicates": [],
+
+  "expected_constraint_conflicts": [
+    {
+      "story_keywords": ["card", "offline"],
+      "max_severity": "high",
+      "rationale": "Card-offline is explicitly FORBIDDEN by Section 4 of the wiki."
+    }
+  ],
+
+  "expected_story_acceptance_criteria_min": 2,
+  "expected_story_acceptance_criteria_max": 7,
+  "expected_epic_count_range": [1, 3],
+  "expected_minimum_story_count": 2,
+  "expected_maximum_story_count": 5
+}

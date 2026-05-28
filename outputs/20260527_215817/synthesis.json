@@ -1,0 +1,640 @@
+{
+  "summary": "The team reviewed Q3 customer-facing priorities based on recent feedback. Five main themes emerged: POS offline capabilities during internet outages, mobile app search surfacing out-of-stock items, pharmacy refill system fragmentation, loyalty tier visibility issues, and legacy hardware constraints for store associates. Self-checkout improvements, vendor portal redesign, and B2B membership were explicitly deferred.",
+  "topics": [
+    {
+      "theme": "pos-offline-mode",
+      "summary": "Point-of-sale systems go completely offline during internet outages, preventing even cash sales because they cannot validate SKU pricing locally. Stores are losing revenue and turning customers away during peak hours.",
+      "raw_quote": "Last weekend was the worst \u2014 three stores in the Houston cluster lost internet for 40 minutes during Saturday afternoon rush. Cashiers literally couldn't ring up customers and managers ended up sending people away.",
+      "speaker": "Hiroshi",
+      "sentiment": "concern",
+      "id": "T-01"
+    },
+    {
+      "theme": "mobile-app-search-inventory",
+      "summary": "Mobile app search returns out-of-stock items as top results and displays inaccurate inventory badges. Customers complete checkout only to receive fulfillment failure emails, causing significant NPS damage (-30 vs +18 for unaffected customers).",
+      "raw_quote": "People search for 'diapers size 4' and the top three results are out of stock at their local store. They add to cart, check out, then get a sad 'we couldn't fulfill this' email.",
+      "speaker": "Marcus",
+      "sentiment": "concern",
+      "id": "T-02"
+    },
+    {
+      "theme": "pharmacy-refill-system-fragmentation",
+      "summary": "Two separate refill systems (mobile app and IVR phone line) write to different backends without real-time reconciliation, causing customers to submit refills that pharmacies have no record of. This is the top complaint to the pharmacy help line.",
+      "raw_quote": "The single biggest complaint to the pharmacy help line is 'I refilled my prescription in the app but the pharmacy says it isn't ready and they have no record.' It's because we have TWO refill flows...They write to different systems and the systems don't reconcile in real time.",
+      "speaker": "Anika",
+      "sentiment": "concern",
+      "id": "T-03"
+    },
+    {
+      "theme": "loyalty-tier-visibility",
+      "summary": "Customers do not understand how they earn or lose loyalty tier status, leading to confusion and frustration when they are unexpectedly downgraded. The rules and timing are not visible on any customer-facing surface.",
+      "raw_quote": "Customers don't understand how they earn or lose tier status. They get a 'you're Gold!' email and then 2 months later 'you've been downgraded to Silver' and they're upset. The downgrade timing isn't clear from any customer-facing surface.",
+      "speaker": "Priya",
+      "sentiment": "concern",
+      "id": "T-04"
+    },
+    {
+      "theme": "store-associate-hardware-constraints",
+      "summary": "Store-side handheld inventory scanners run Android 7 and cannot receive security patches. New tooling must account for this legacy hardware baseline until replacement in FY26.",
+      "raw_quote": "The store-side handheld inventory scanners are running Android 7. They can't get security patches anymore. Replacement is approved for FY26 but we should make sure no new tooling we build assumes hardware capabilities Android 7 doesn't have.",
+      "speaker": "Hiroshi",
+      "sentiment": "observation",
+      "id": "T-05"
+    }
+  ],
+  "constraints": [
+    {
+      "severity": "must",
+      "category": "performance",
+      "statement": "Mobile app cart-load p95 must stay under 1.5 seconds on a 3G connection, measured with synthetic transactions hourly; regressions block release.",
+      "source_excerpt": "Mobile app cart-load p95 must stay under 1.5 seconds on a 3G connection. We measure with synthetic transactions hourly. Regressions block release.",
+      "applies_to": [
+        "mobile-app"
+      ],
+      "id": "C-01"
+    },
+    {
+      "severity": "must",
+      "category": "performance",
+      "statement": "POS lane transaction latency for a single SKU scan must stay under 250ms p95 including network round trip.",
+      "source_excerpt": "POS lane transaction latency for a single SKU scan must stay under 250ms p95 including the network round trip.",
+      "applies_to": [
+        "pos"
+      ],
+      "id": "C-02"
+    },
+    {
+      "severity": "must",
+      "category": "performance",
+      "statement": "Search query latency p95 in the mobile app and on the web must stay under 800ms.",
+      "source_excerpt": "Search query latency p95 in the mobile app and on the web must stay under 800ms.",
+      "applies_to": [
+        "mobile-app",
+        "ecommerce"
+      ],
+      "id": "C-03"
+    },
+    {
+      "severity": "must",
+      "category": "integration",
+      "statement": "All customer identity must flow through NorthStar Identity (NSID); new auth flows must not introduce a separate customer credential store.",
+      "source_excerpt": "All customer identity must flow through NorthStar Identity (NSID). New auth flows MUST NOT introduce a separate customer credential store. Federation with NSID is the only supported pattern.",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-04"
+    },
+    {
+      "severity": "must",
+      "category": "integration",
+      "statement": "All payment authorization must go through the PaymentGateway service; direct calls to card processors are forbidden for PCI scope.",
+      "source_excerpt": "All payment authorization MUST go through the PaymentGateway service. Direct calls to card processors are forbidden \u2014 this is a PCI scope requirement.",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-05"
+    },
+    {
+      "severity": "must",
+      "category": "integration",
+      "statement": "All prescription-related operations must go through the Rx Hub service, the only system of record for prescriptions.",
+      "source_excerpt": "All prescription-related operations MUST go through the Rx Hub service. Rx Hub is the only system of record for prescriptions; writes to other stores cause reconciliation failures.",
+      "applies_to": [
+        "pharmacy"
+      ],
+      "id": "C-06"
+    },
+    {
+      "severity": "must",
+      "category": "security",
+      "statement": "Card data must never touch application servers; only tokenized references from PaymentGateway may be stored.",
+      "source_excerpt": "Card data must never touch our application servers. PaymentGateway hands back a tokenized reference; our code stores only the token.",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-07"
+    },
+    {
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Features surfacing medication names in push notifications, emails, SMS, or in-app text require explicit patient opt-in stored on the prescription record.",
+      "source_excerpt": "Any feature that surfaces a medication name (push notifications, emails, SMS, in-app text) requires: Explicit patient opt-in stored on the prescription record",
+      "applies_to": [
+        "pharmacy",
+        "mobile-app"
+      ],
+      "id": "C-08"
+    },
+    {
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Medication notifications must deliver only to the patient's verified contact method, never the household account default.",
+      "source_excerpt": "Delivery only to the patient's verified contact method, never the household account default",
+      "applies_to": [
+        "pharmacy",
+        "mobile-app"
+      ],
+      "id": "C-09"
+    },
+    {
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Medication notifications require an audit log of every notification sent, retained 7 years.",
+      "source_excerpt": "Audit log of every notification sent, retained 7 years",
+      "applies_to": [
+        "pharmacy",
+        "mobile-app"
+      ],
+      "id": "C-10"
+    },
+    {
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Customer-facing payment flows must screen customer name against OFAC SDN list before any transaction over $10,000, handled by PaymentGateway.",
+      "source_excerpt": "Customer-facing payment flows must screen the customer name against the OFAC SDN list before any transaction over $10,000. This is handled by PaymentGateway; do not bypass it.",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-11"
+    },
+    {
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Price personalization based on customer segment or inventory state requires disclosure and Legal review sign-off before shipping.",
+      "source_excerpt": "Price personalization based on customer segment or inventory state requires disclosure and Legal review. Cannot ship without sign-off.",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-12"
+    },
+    {
+      "severity": "must",
+      "category": "offline",
+      "statement": "POS lanes must continue to process cash sales even when the WAN is down, using local SQLite cache refreshed hourly when online.",
+      "source_excerpt": "POS lanes MUST continue to process cash sales even when the WAN is down. The local SQLite cache holds the SKU catalog and refreshes hourly when online.",
+      "applies_to": [
+        "pos"
+      ],
+      "id": "C-13"
+    },
+    {
+      "severity": "must",
+      "category": "offline",
+      "statement": "Returns under $50 must be processable offline; returns over $50 require manager approval and online authorization.",
+      "source_excerpt": "Returns under $50 MUST be processable offline. Returns over $50 require manager approval and online authorization.",
+      "applies_to": [
+        "pos"
+      ],
+      "id": "C-14"
+    },
+    {
+      "severity": "forbidden",
+      "category": "offline",
+      "statement": "Card sales when the WAN is down are forbidden; PCI requires online authorization.",
+      "source_excerpt": "Card sales when the WAN is down: FORBIDDEN. PCI requires online auth.",
+      "applies_to": [
+        "pos"
+      ],
+      "id": "C-15"
+    },
+    {
+      "severity": "must",
+      "category": "platform",
+      "statement": "Store-associate handhelds running Android 7 cannot use BLE central role (only peripheral supported), Camera2 API features beyond preview + still capture, or background services running more than 60 seconds.",
+      "source_excerpt": "Store-associate handhelds running Android 7 (legacy hardware in stores until the FY26 refresh) cannot use: BLE central role (only peripheral supported), Camera2 API features beyond preview + still capture, Background services that run more than 60 seconds.",
+      "applies_to": [
+        "pos"
+      ],
+      "id": "C-16"
+    },
+    {
+      "severity": "must",
+      "category": "platform",
+      "statement": "Stories depending on functionality unavailable on Android 7 must explicitly state this and either gate by hardware capability or wait for the FY26 hardware refresh.",
+      "source_excerpt": "Stories that depend on functionality unavailable on Android 7 must explicitly say so and either gate by hardware capability or wait for the refresh.",
+      "applies_to": [
+        "pos"
+      ],
+      "id": "C-17"
+    },
+    {
+      "severity": "must",
+      "category": "data",
+      "statement": "Customer PII for US customers must remain in US-East and US-West regions; cross-region replication to APAC/EU is forbidden.",
+      "source_excerpt": "Customer PII for US customers must remain in our US-East and US-West regions. Cross-region replication to APAC/EU is forbidden under the current privacy program.",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-18"
+    },
+    {
+      "severity": "forbidden",
+      "category": "performance",
+      "statement": "Polling for inventory updates from the mobile app at intervals shorter than 60 seconds is forbidden; use the inventory event stream instead.",
+      "source_excerpt": "Polling for inventory updates from the mobile app at intervals shorter than 60 seconds. Use the inventory event stream instead.",
+      "applies_to": [
+        "mobile-app",
+        "inventory"
+      ],
+      "id": "C-19"
+    },
+    {
+      "severity": "forbidden",
+      "category": "integration",
+      "statement": "Synchronous calls from any consumer-facing surface to the legacy mainframe (HOST/3270) are forbidden; always go through the integration broker.",
+      "source_excerpt": "Synchronous calls from any consumer-facing surface to the legacy mainframe (HOST/3270). Always go through the integration broker.",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-20"
+    },
+    {
+      "severity": "forbidden",
+      "category": "security",
+      "statement": "Custom encryption is forbidden; use the platform KMS and standard libraries.",
+      "source_excerpt": "Custom encryption. Use the platform KMS and our standard libraries. Rolling your own crypto is forbidden.",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-21"
+    },
+    {
+      "severity": "forbidden",
+      "category": "integration",
+      "statement": "Direct database access to the loyalty system from non-loyalty services is forbidden; use the Loyalty API.",
+      "source_excerpt": "Direct database access to the loyalty system from non-loyalty services. Use the Loyalty API.",
+      "applies_to": [
+        "loyalty"
+      ],
+      "id": "C-22"
+    },
+    {
+      "severity": "should",
+      "category": "other",
+      "statement": "Feature flagging via LaunchDarkly should be used for any change that touches a customer-facing surface.",
+      "source_excerpt": "Feature flagging via LaunchDarkly for any change that touches a customer-facing surface",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-23"
+    },
+    {
+      "severity": "should",
+      "category": "other",
+      "statement": "Server-driven UI should be used for any flow that changes more than monthly.",
+      "source_excerpt": "Server-driven UI for any flow that changes more than monthly",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-24"
+    },
+    {
+      "severity": "should",
+      "category": "integration",
+      "statement": "gRPC should be used for service-to-service communication; REST only for external/partner APIs.",
+      "source_excerpt": "gRPC for service-to-service; REST only for external/partner APIs",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-25"
+    },
+    {
+      "severity": "should",
+      "category": "other",
+      "statement": "All new services should emit OpenTelemetry traces by default.",
+      "source_excerpt": "All new services emit OpenTelemetry traces by default",
+      "applies_to": [
+        "*"
+      ],
+      "id": "C-26"
+    }
+  ],
+  "epics": [
+    {
+      "title": "POS Offline Resilience",
+      "description": "Enable point-of-sale systems to continue processing cash transactions during internet outages by leveraging local data caches, ensuring revenue continuity during connectivity disruptions while maintaining payment compliance constraints.",
+      "stories": [
+        {
+          "id": "ST-01",
+          "title": "Enable offline cash sales at POS during WAN outages",
+          "description": "POS systems currently cannot process any transactions when internet connectivity is lost, preventing even cash sales during outages. This causes revenue loss and customer frustration during peak hours. Implementation must use the existing local SQLite cache (refreshed hourly when online) per C-13. Card transactions remain forbidden offline per C-15 (PCI requirement).",
+          "user_story": "As a store cashier, I want to ring up cash sales even when the internet is down, so that customers can complete purchases and the store does not lose revenue during outages.",
+          "acceptance_criteria": [
+            "Given the POS lane has lost WAN connectivity, when a cashier scans a SKU and selects cash payment, then the transaction completes successfully using the local SQLite cache.",
+            "Given the POS lane is offline, when a cashier attempts a card payment, then the system displays an error message stating card payments require internet connectivity.",
+            "Given the POS lane reconnects after being offline, when the system comes back online, then all offline cash transactions sync to the central system within 5 minutes.",
+            "Given the local SQLite cache is older than 2 hours, when a cashier attempts an offline sale, then the system displays a warning that pricing may be stale but allows the transaction to proceed.",
+            "Given a POS lane processes 50 offline cash transactions, when measured under load testing, then SKU lookup from SQLite cache maintains p95 latency under 250ms per C-02."
+          ],
+          "priority": "High",
+          "tags": [
+            "pos",
+            "offline-mode",
+            "payments",
+            "performance"
+          ],
+          "tasks": [
+            {
+              "title": "Implement network connectivity detection and offline mode toggle in POS application.",
+              "type": "backend",
+              "id": "ST-01-TK-01"
+            },
+            {
+              "title": "Create transaction queue service to store offline cash sales locally and sync on reconnection.",
+              "type": "backend",
+              "id": "ST-01-TK-02"
+            },
+            {
+              "title": "Add payment method validation to block card transactions when offline and display error UI.",
+              "type": "frontend",
+              "id": "ST-01-TK-03"
+            },
+            {
+              "title": "Implement cache staleness indicator to display warning when SQLite data exceeds 2-hour threshold.",
+              "type": "frontend",
+              "id": "ST-01-TK-04"
+            },
+            {
+              "title": "Build transaction reconciliation service to merge offline sales into central system within 5-minute SLA.",
+              "type": "backend",
+              "id": "ST-01-TK-05"
+            },
+            {
+              "title": "Create load testing suite to validate p95 latency under 250ms for 50 concurrent offline transactions.",
+              "type": "qa",
+              "id": "ST-01-TK-06"
+            }
+          ]
+        }
+      ],
+      "id": "EP-01"
+    },
+    {
+      "title": "Mobile App Inventory Intelligence",
+      "description": "Integrate real-time inventory data into mobile app search and browsing experiences to prevent customers from attempting to purchase out-of-stock items, reducing fulfillment failures and improving NPS.",
+      "stories": [
+        {
+          "id": "ST-02",
+          "title": "Filter out-of-stock items from mobile app search results",
+          "description": "Mobile app search returns out-of-stock items as top results, leading to fulfillment failures and significant NPS damage (-30 vs +18 baseline). Implementation must respect 800ms p95 search latency constraint (C-03) and avoid polling inventory at intervals shorter than 60 seconds (C-19). The story assumes real-time inventory data is available via the inventory event stream.",
+          "user_story": "As a mobile app customer, I want search results to show only in-stock items at my selected store, so that I do not waste time adding unavailable products to my cart and experiencing fulfillment failures.",
+          "acceptance_criteria": [
+            "Given a customer has selected a preferred store, when they search for a product, then out-of-stock items at that store do not appear in the top 10 results.",
+            "Given inventory changes for a SKU, when the inventory event stream publishes the update, then the search index reflects the new stock status within 90 seconds.",
+            "Given a customer searches for 'diapers size 4', when 3 results are in stock and 5 are out of stock, then only the 3 in-stock items appear in search results.",
+            "Given mobile app search under realistic 3G network conditions, when measuring p95 latency with inventory filtering enabled, then latency remains under 800ms per C-03.",
+            "Given a customer has no preferred store selected, when they search, then results include all items with a stock availability badge indicating nearest in-stock location."
+          ],
+          "priority": "High",
+          "tags": [
+            "mobile-app",
+            "inventory",
+            "search",
+            "performance"
+          ],
+          "tasks": [
+            {
+              "title": "Subscribe search indexing service to inventory event stream for real-time stock status updates.",
+              "type": "data",
+              "id": "ST-02-TK-01"
+            },
+            {
+              "title": "Extend search index schema to include per-store stock status and nearest-location metadata.",
+              "type": "data",
+              "id": "ST-02-TK-02"
+            },
+            {
+              "title": "Implement search query logic to filter out-of-stock SKUs based on customer's preferred store selection.",
+              "type": "backend",
+              "id": "ST-02-TK-03"
+            },
+            {
+              "title": "Add stock availability badge UI component for search results when no preferred store is selected.",
+              "type": "frontend",
+              "id": "ST-02-TK-04"
+            },
+            {
+              "title": "Optimize search response payload and caching strategy to maintain p95 latency under 800ms on 3G.",
+              "type": "backend",
+              "id": "ST-02-TK-05"
+            },
+            {
+              "title": "Create performance test suite to validate latency constraint under realistic network conditions.",
+              "type": "qa",
+              "id": "ST-02-TK-06"
+            }
+          ]
+        }
+      ],
+      "id": "EP-02"
+    },
+    {
+      "title": "Pharmacy System Integration",
+      "description": "Consolidate fragmented pharmacy refill request pathways into a single system of record (Rx Hub) to eliminate duplicate submissions, reduce customer complaints, and ensure compliance with architectural constraints.",
+      "stories": [
+        {
+          "id": "ST-03",
+          "title": "Consolidate pharmacy refill flows to single system of record",
+          "description": "Mobile app and IVR phone line write refill requests to separate backends without real-time reconciliation, causing the top complaint to pharmacy help line. Per C-06, all prescription operations must flow through Rx Hub. This story requires migrating both refill entry points to write to Rx Hub and decommissioning the duplicate backend. Medication-related notifications during this work must comply with C-08, C-09, and C-10.",
+          "user_story": "As a pharmacy customer, I want my refill requests to be recorded consistently regardless of whether I use the mobile app or phone line, so that the pharmacy has an accurate record when I arrive to pick up my medication.",
+          "acceptance_criteria": [
+            "Given a customer submits a refill via mobile app, when the request is processed, then it writes to Rx Hub and appears in the pharmacy fulfillment queue within 30 seconds.",
+            "Given a customer submits a refill via IVR, when the request is processed, then it writes to Rx Hub and appears in the pharmacy fulfillment queue within 30 seconds.",
+            "Given a customer submits the same refill via both channels within 10 minutes, when the system detects the duplicate, then it consolidates to a single fulfillment request and notifies the customer.",
+            "Given the legacy refill backend, when both channels are migrated to Rx Hub, then the legacy system is deprecated and all writes go only to Rx Hub per C-06.",
+            "Given pharmacy staff query refills, when they search for a customer's prescription, then they see a unified view of all refill requests regardless of submission channel."
+          ],
+          "priority": "High",
+          "tags": [
+            "pharmacy",
+            "mobile-app",
+            "integration",
+            "compliance"
+          ],
+          "tasks": [
+            {
+              "title": "Migrate mobile app refill submission endpoint to write directly to Rx Hub API.",
+              "type": "backend",
+              "id": "ST-03-TK-01"
+            },
+            {
+              "title": "Migrate IVR phone system refill submission to write directly to Rx Hub API.",
+              "type": "backend",
+              "id": "ST-03-TK-02"
+            },
+            {
+              "title": "Implement duplicate detection logic in Rx Hub to consolidate refills submitted via multiple channels within 10-minute window.",
+              "type": "backend",
+              "id": "ST-03-TK-03"
+            },
+            {
+              "title": "Build unified pharmacy staff view that aggregates refill requests from Rx Hub regardless of submission source.",
+              "type": "frontend",
+              "id": "ST-03-TK-04"
+            },
+            {
+              "title": "Deprecate legacy refill backend and update routing to ensure all writes flow only to Rx Hub per C-06.",
+              "type": "infra",
+              "id": "ST-03-TK-05"
+            },
+            {
+              "title": "Validate medication-related notifications comply with C-08, C-09, and C-10 during migration.",
+              "type": "qa",
+              "id": "ST-03-TK-06"
+            }
+          ]
+        }
+      ],
+      "id": "EP-03"
+    },
+    {
+      "title": "Loyalty Program Transparency",
+      "description": "Surface loyalty tier rules, earning mechanics, and expiration timelines in customer-facing interfaces to reduce confusion around tier downgrades and improve program engagement.",
+      "stories": [
+        {
+          "id": "ST-04",
+          "title": "Surface loyalty tier earning and expiration rules in customer-facing UI",
+          "description": "Customers do not understand how they earn or lose loyalty tier status, causing confusion when downgraded. The rules and timing are not visible on any customer-facing surface. Implementation must integrate via the Loyalty API per C-22 (direct database access forbidden). Story assumes tier calculation logic is already implemented in the loyalty system and only requires exposure in UI.",
+          "user_story": "As a loyalty program member, I want to see how I earn and maintain my tier status including expiration dates, so that I understand when I might be downgraded and can take action to maintain my benefits.",
+          "acceptance_criteria": [
+            "Given a customer views their loyalty profile in the mobile app, when the screen loads, then it displays their current tier, points balance, points needed for next tier, and tier expiration date.",
+            "Given a customer is within 30 days of tier expiration, when they view their profile, then a prominent notice explains they will be downgraded if they do not earn X additional points by the expiration date.",
+            "Given a customer taps 'How do I earn points?', when the help screen loads, then it displays a clear breakdown of point-earning activities (e.g., $1 spent = 1 point, pharmacy refills = 50 points).",
+            "Given the loyalty system via Loyalty API per C-22, when tier rules change, then customer-facing displays reflect the new rules within 24 hours without requiring app update.",
+            "Given a customer receives a tier downgrade email, when they tap the link in the email, then they land on a page explaining why they were downgraded and how to re-earn the tier."
+          ],
+          "priority": "Medium",
+          "tags": [
+            "loyalty",
+            "mobile-app",
+            "ecommerce"
+          ],
+          "tasks": [
+            {
+              "title": "Create Loyalty API integration layer to fetch tier status, points balance, and expiration dates per C-22.",
+              "type": "backend",
+              "id": "ST-04-TK-01"
+            },
+            {
+              "title": "Build loyalty profile screen UI to display current tier, points needed for next tier, and expiration timeline.",
+              "type": "frontend",
+              "id": "ST-04-TK-02"
+            },
+            {
+              "title": "Implement 30-day expiration warning banner with dynamic point gap calculation.",
+              "type": "frontend",
+              "id": "ST-04-TK-03"
+            },
+            {
+              "title": "Create point-earning rules help screen with configurable content pulled from Loyalty API.",
+              "type": "frontend",
+              "id": "ST-04-TK-04"
+            },
+            {
+              "title": "Build tier downgrade landing page linked from email notifications explaining downgrade reason and re-earn path.",
+              "type": "frontend",
+              "id": "ST-04-TK-05"
+            }
+          ]
+        }
+      ],
+      "id": "EP-04"
+    },
+    {
+      "title": "Store-Associate Platform Constraints",
+      "description": "Document hardware and OS limitations of current store-associate tooling (Android 7 handheld scanners) to prevent engineering teams from designing incompatible features prior to FY26 hardware refresh.",
+      "stories": [
+        {
+          "id": "ST-05",
+          "title": "Document Android 7 hardware limitations for store-associate tooling",
+          "description": "Store-side handheld scanners run Android 7 and cannot receive security patches; replacement approved for FY26. Per C-16 and C-17, new tooling must account for Android 7 limitations: no BLE central role (peripheral only), Camera2 API limited to preview + still capture, background services capped at 60 seconds. This is a documentation/guidance story, not a feature build. Any new store-associate feature stories must explicitly state Android 7 compatibility or wait for FY26 refresh.",
+          "user_story": "As an engineer building store-associate tooling, I want clear documentation of Android 7 hardware constraints, so that I do not design features that cannot run on current devices and avoid rework or deployment blockers.",
+          "acceptance_criteria": [
+            "Given the engineering wiki, when an engineer navigates to the store-associate hardware section, then a page lists Android 7 limitations from C-16 including BLE, Camera2, and background service constraints.",
+            "Given a new feature proposal for store-associate tools, when submitted for technical review, then the review checklist includes an Android 7 compatibility assessment per C-17.",
+            "Given the FY26 hardware refresh timeline, when documented, then it includes the expected Android version upgrade and deprecated limitations that will be lifted post-refresh.",
+            "Given an engineer attempts to use BLE central role in store-associate code, when the CI pipeline runs, then a linting rule flags the usage and links to the Android 7 constraints documentation."
+          ],
+          "priority": "Medium",
+          "tags": [
+            "store-associate",
+            "pos",
+            "platform"
+          ],
+          "tasks": [
+            {
+              "title": "Create engineering wiki page documenting Android 7 BLE, Camera2, and background service limitations per C-16.",
+              "type": "spike",
+              "id": "ST-05-TK-01"
+            },
+            {
+              "title": "Add Android 7 compatibility assessment to store-associate feature review checklist per C-17.",
+              "type": "spike",
+              "id": "ST-05-TK-02"
+            },
+            {
+              "title": "Document FY26 hardware refresh timeline and expected Android version upgrade on wiki page.",
+              "type": "spike",
+              "id": "ST-05-TK-03"
+            },
+            {
+              "title": "Implement CI linting rule to flag BLE central role usage in store-associate codebase.",
+              "type": "infra",
+              "id": "ST-05-TK-04"
+            }
+          ]
+        }
+      ],
+      "id": "EP-05"
+    }
+  ],
+  "gaps": [
+    {
+      "title": "Reconciliation process for offline POS transactions",
+      "description": "ST-01 enables offline cash sales using local SQLite cache, but neither the new stories nor existing backlog address how offline transactions reconcile with central systems when connectivity resumes, including conflict resolution for inventory, returns, or pricing discrepancies.",
+      "evidence": "ST-01 references C-13's hourly cache refresh and offline cash sales capability, but no story covers the post-outage sync process that would be required for these transactions to flow into central reporting, inventory, and accounting systems."
+    },
+    {
+      "title": "Real-time inventory event stream integration for mobile app",
+      "description": "ST-02 assumes real-time inventory data is available via the inventory event stream and must respect C-19's prohibition on polling, but no story addresses how the mobile app consumes this event stream or handles the push notifications/updates required to keep search results current.",
+      "evidence": "ST-02 explicitly states 'The story assumes real-time inventory data is available via the inventory event stream' and references C-19, but neither new stories nor existing backlog (NS-412, NS-219, NS-419, NS-289) describe event stream subscription or client-side event handling."
+    },
+    {
+      "title": "IVR phone line migration to Rx Hub",
+      "description": "ST-03 requires migrating both mobile app and IVR refill entry points to Rx Hub, but no story addresses the IVR system integration work, including API contracts, error handling for voice flows, or decommissioning of the IVR's duplicate backend.",
+      "evidence": "ST-03 states 'Mobile app and IVR phone line write refill requests to separate backends' and requires 'migrating both refill entry points to write to Rx Hub,' but existing tickets (NS-176, NS-205) don't cover IVR-specific integration."
+    },
+    {
+      "title": "Pharmacy notification audit logging infrastructure",
+      "description": "ST-03 references C-08, C-09, and C-10 which require audit logs of medication notifications retained for 7 years, but no story addresses whether this logging infrastructure exists or needs to be built for the consolidated Rx Hub flows.",
+      "evidence": "C-10 mandates 'Audit log of every notification sent, retained 7 years' and ST-03 explicitly calls out compliance with C-08, C-09, and C-10, but NS-321 (the only audit log ticket) addresses HIPAA retention for general pharmacy logs, not notification-specific audit trails."
+    },
+    {
+      "title": "Android 7 hardware refresh migration plan",
+      "description": "ST-05 documents Android 7 limitations and notes replacement is approved for FY26, but no story addresses the migration plan for existing store-associate tooling that may currently violate C-16/C-17 constraints or how to handle the transition period.",
+      "evidence": "ST-05 states 'Store-side handheld scanners run Android 7 and cannot receive security patches; replacement approved for FY26' and C-17 requires stories to 'either gate by hardware capability or wait for the refresh,' but no backlog item covers inventory of affected tools or migration strategy."
+    }
+  ],
+  "conflicts": [
+    {
+      "story_id": "ST-01",
+      "with": "C-13",
+      "severity": "low",
+      "reason": "ST-01 describes the capability that C-13 already mandates as 'must' \u2014 this is alignment, not conflict; however, if ST-01 implies net-new work when C-13 suggests the capability should already exist, there's a gap between current state and constraint."
+    }
+  ],
+  "duplicates": [
+    {
+      "story_id": "ST-04",
+      "existing_id": "NS-389",
+      "confidence": "high",
+      "reason": "Both address surfacing loyalty tier earning/downgrade rules to customers; NS-389 focuses on email context while ST-04 targets UI, but the underlying capability (exposing tier rules) is the same work."
+    },
+    {
+      "story_id": "ST-02",
+      "existing_id": "NS-412",
+      "confidence": "medium",
+      "reason": "Both address inventory visibility in search results; NS-412 focuses on store-specific 'in stock' badges while ST-02 filters out-of-stock items entirely, but both solve the same customer problem of misleading availability."
+    }
+  ]
+}

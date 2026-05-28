@@ -1,0 +1,16 @@
+NorthStar Retail — cross-team planning, 2026-05-08
+Attendees: Hiroshi (Store Ops), Aisha (Engineering Mobile), Jamal (Pharmacy), Priya (CS), Marcus (PM)
+
+Marcus: Let's go around. What's top of mind?
+
+Hiroshi (Store Ops): Self-checkout latency. Lanes 7 and 8 hit 8-second receipts last weekend. Cashiers are escalating. Not blocking the store but customers notice.
+
+Aisha (Mobile): Two things. First, deep links from email are broken on Android — clicks open the app then bounce to the home screen instead of the product. Marketing's CTR is wrong because of it. Second, the React Native upgrade — we want to bump to the new arch in Q3 but I need product to weigh in on what regresses.
+
+Jamal (Pharmacy): Pharmacy app — refill reminders are firing twice. Customers are getting two emails 30 minutes apart. Trust hit.
+
+Priya (CS): Two reports of the loyalty tier downgrade email being confusing — same as the NS-389 ticket we already have. Not new.
+
+Marcus: OK. Self-checkout perf, Android deep links, double-firing pharmacy reminders, RN upgrade. Plus the loyalty repeat. Did I get all of them?
+
+(general agreement)

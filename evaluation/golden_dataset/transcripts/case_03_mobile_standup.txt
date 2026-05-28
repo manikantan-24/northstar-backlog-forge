@@ -1,0 +1,112 @@
+# NorthStar Retail — #mobile-team Slack standup digest
+# Week of June 2 — Monday through Friday rollups, exported
+
+Monday standup
+--------------
+
+marcus  Morning. Three things from me today: 1) the search ranker
+        spike from last week is wrapping up, 2) we have a customer
+        complaint thread escalated from Priya about checkout abandon
+        rate, 3) coffee machine on floor 4 is broken again, can
+        someone from facilities ping Devon? It's making me feral.
+
+lia     I'll take care of the coffee machine 🙏
+
+marcus  thank you queen
+
+zhao    on my side — pulling together the Apple Pay design doc for
+        the POS. Hiroshi wants me to scope this for Q3. Should I
+        target the lane hardware or just the mobile-app side?
+
+devon   Both. The lane hardware is the harder one (firmware
+        partner involvement) but mobile-side Apple Pay at checkout
+        is a quick win for the app.
+
+marcus  +1. We should also do Google Pay at the same time, it's
+        basically free if the SDK is wrapped right.
+
+priya   👋 chiming in — the checkout abandon rate is up 4% week
+        over week. Anyone seen the funnel data?
+
+zhao    yeah pulled it yesterday. Big drop on the payment-method
+        screen. People are getting to checkout and bailing because
+        we don't take their preferred wallet.
+
+priya   Got it. Apple Pay / Google Pay it is then.
+
+Tuesday standup
+---------------
+
+marcus  Spike summary on search ranking: if we factor in the
+        customer's purchase history we get a +12% relevance score
+        on the offline-eval set. The model is small enough to run
+        in the edge cache, latency stays under the 800ms p95 budget.
+
+devon   nice. Sounds like a real story.
+
+zhao    isn't there already an NS-something for purchase-history
+        ranking?
+
+marcus  ugh let me check. … yeah NS-251 is "search ranking: factor
+        in customer purchase history". It's been in the backlog for
+        a year.
+
+devon   So we resurrect that one, attach the spike doc, and push it
+        up the priority list. Don't write a new story.
+
+marcus  ok cool
+
+priya   tangent — did anyone watch the new Severance season? I'm
+        only on episode 2 and already losing it
+
+lia     yes!! Don't spoil anything
+
+Wednesday standup
+-----------------
+
+marcus  Carrying over: Apple Pay design doc still in flight, zhao
+        is targeting Friday for first review.
+
+zhao    yes, on track. One question for Elena — does Apple Pay at
+        the POS lane hit any new PCI scope? Or is it the same as
+        any other tokenized card?
+
+devon   Elena's out today. Ping her async — short answer is it
+        should be fine because PaymentGateway handles the
+        tokenization and the lane never sees the PAN, but get her
+        formal sign-off.
+
+marcus  also, dumb question — is there an architecture rule
+        against doing the Apple Pay handoff client-side without
+        going through PaymentGateway? Like just calling Apple's
+        endpoint directly from the app.
+
+devon   Yes — direct calls to card processors are forbidden under
+        Section 2 of the architecture constraints. Everything goes
+        through PaymentGateway, no exceptions. Don't even sketch
+        that design.
+
+Thursday standup
+----------------
+
+zhao    quick thing: lunch order is going in at noon, the new
+        ramen place — let me know if you want in
+
+(7 emoji reactions — no further discussion)
+
+marcus  back to work. We have a new ask from CX — customers want
+        to see their loyalty points balance in the cart screen, not
+        just on the home tab. Devon, is that small?
+
+devon   trivial — it's already fetched on cart load, just needs a
+        UI element. Add a story.
+
+Friday standup
+--------------
+
+marcus  vacation reminder — I'm out next week, lia is acting lead.
+
+lia     ok queen 🫡
+
+zhao    Apple Pay POS design doc dropped — link in #payments. PR
+        with the loyalty-cart UI mockup also up.

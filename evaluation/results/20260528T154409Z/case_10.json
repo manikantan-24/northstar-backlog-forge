@@ -1,0 +1,81 @@
+{
+  "case_id": "case_10",
+  "description": "Compliance-driven transcript. Three findings \u2014 HIPAA, GDPR, PCI \u2014 each becomes a story. None should be flagged as a duplicate (these are new) and all should carry compliance tags.",
+  "deterministic_average": 1.0,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 3 stories in [3, 6]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "3/3 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "3/3 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "No forbidden topics specified"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 1.0,
+      "observations": [
+        "No expected duplicates"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 1,
+      "story_granularity": 5,
+      "tag_accuracy": 5,
+      "conflict_reasoning": 4
+    },
+    "reasons": {
+      "ac_quality": "Most acceptance criteria are concrete and testable with clear Given/When/Then structure, though a few (like 'when reviewed against HIPAA requirements') are slightly subjective rather than mechanically verifiable.",
+      "priority_justification": "All three stories are marked High priority but have zero-length priority_rationale fields, earning the 'weak_priority_rationale' guardrail warning; regulatory urgency is implied but never explicitly stated.",
+      "story_granularity": "Each story addresses a single, coherent compliance violation with a well-scoped deliverable (email PHI removal, consent mechanism, receipt field masking) that is neither too broad nor atomically small.",
+      "tag_accuracy": "Tags are consistently drawn from system domains (pharmacy, pos, loyalty, mobile-app, compliance, security, payments, ecommerce) and accurately reflect each story's scope and cross-cutting concerns.",
+      "conflict_reasoning": "The flagged conflict correctly identifies that C-08 permits medication name disclosure with opt-in while ST-01 removes names entirely, though the conflict could be a design decision rather than a true violation if generic messages are the chosen compliance path."
+    },
+    "overall_comment": "This is a well-structured backlog with excellent story granularity, clear acceptance criteria, and appropriate tagging, but it is severely undermined by completely missing priority justifications despite regulatory deadlines mentioned in the summary. The guardrail findings correctly flag the missing source_topic_id traceability and thin rationales, which would need to be remediated before this backlog could be considered release-ready.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.0,
+      "story_granularity": 1.0,
+      "tag_accuracy": 1.0,
+      "conflict_reasoning": 0.75
+    },
+    "average_normalized": 0.7
+  },
+  "synthesis_summary": {
+    "epic_count": 1,
+    "story_count": 3,
+    "duplicates": 0,
+    "conflicts": 1,
+    "gaps": 3
+  }
+}

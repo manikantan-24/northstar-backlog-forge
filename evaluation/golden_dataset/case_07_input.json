@@ -1,0 +1,7 @@
+{
+  "case_id": "case_07",
+  "description": "Multiple requested capabilities all conflict with the PCI / offline-mode constraints in the architecture wiki. The Gap Detector must flag at least one constraint conflict, ideally multiple.",
+  "transcript_path": "evaluation/golden_dataset/transcripts/case_07_conflict_heavy.txt",
+  "constraints_path": "samples/architecture_constraints.md",
+  "backlog_path": "samples/jira_backlog.json"
+}
