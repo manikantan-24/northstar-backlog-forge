@@ -1163,9 +1163,9 @@ def _delete_history_entry(entry: dict) -> None:
         except OSError:
             pass
     if deleted:
-        st.toast(f"Deleted run metadata · {deleted} file(s)", icon="✕")
+        st.toast(f"Deleted run metadata · {deleted} file(s)", icon="🗑️")
     else:
-        st.toast(f"No metadata file found for run {run_id}", icon="⚠")
+        st.toast(f"No metadata file found for run {run_id}", icon="⚠️")
 
 
 def _load_history_into_state(entry: dict[str, Any]) -> None:
@@ -2261,6 +2261,15 @@ if run_clicked or _main_canvas_run:
             st.warning(f"Skipping vision attachments: {e}")
             _vision_atts = None
 
+    # Capture all session-state values NOW (main thread) before starting
+    # the background thread. st.session_state is NOT thread-safe — reading
+    # it from a daemon thread causes "has no attribute 'models'" errors.
+    _thread_models       = dict(st.session_state.get("models") or {})
+    _thread_is_compare   = bool(st.session_state.get("compare_enabled"))
+    _thread_compare_pset = st.session_state.get("compare_with_preset", "free")
+    _thread_active_pset  = (st.session_state.get("active_preset") or "balanced").title()
+    _thread_auto_switch  = bool(st.session_state.get("auto_switch"))
+
     # Thread the pipeline so the Cancel button stays responsive. The run
     # executes in a daemon thread; the main thread polls a result queue.
     # _PipelineCancelled raised in the progress callback propagates out of
@@ -2269,17 +2278,15 @@ if run_clicked or _main_canvas_run:
 
     def _run_pipeline():
         try:
-            _is_compare = bool(st.session_state.get("compare_enabled"))
-            if _is_compare:
-                secondary_preset = st.session_state.get("compare_with_preset", "free")
-                secondary_models = dict(MODEL_PRESETS.get(secondary_preset, MODEL_PRESETS["free"]))
-                primary_label = (st.session_state.get("active_preset") or "primary").title()
-                secondary_label = secondary_preset.title()
+            if _thread_is_compare:
+                secondary_models = dict(MODEL_PRESETS.get(
+                    _thread_compare_pset, MODEL_PRESETS["free"]
+                ))
                 cmp = orch.run_compare(
-                    primary_models=st.session_state.models,
+                    primary_models=_thread_models,
                     secondary_models=secondary_models,
-                    primary_label=primary_label,
-                    secondary_label=secondary_label,
+                    primary_label=_thread_active_pset,
+                    secondary_label=_thread_compare_pset.title(),
                     progress_callback=_on_progress,
                     transcript_text=transcript_text,
                     constraint_text=constraint_text,
@@ -2288,7 +2295,7 @@ if run_clicked or _main_canvas_run:
                     live_confluence_page_id=_live_conf_pid or None,
                     live_jira=_use_live_jira,
                     vision_attachments=_vision_atts,
-                    auto_switch=bool(st.session_state.get("auto_switch")),
+                    auto_switch=_thread_auto_switch,
                 )
                 r = cmp["primary"]
                 r["_compare_secondary"] = cmp["secondary"]
@@ -2302,11 +2309,11 @@ if run_clicked or _main_canvas_run:
                     existing_tickets=existing_tickets,
                     redact_pii=redact_pii,
                     progress_callback=_on_progress,
-                    models=st.session_state.models,
+                    models=_thread_models,
                     live_confluence_page_id=_live_conf_pid or None,
                     live_jira=_use_live_jira,
                     vision_attachments=_vision_atts,
-                    auto_switch=bool(st.session_state.get("auto_switch")),
+                    auto_switch=_thread_auto_switch,
                 )
                 _result_q.put(("ok", r))
         except _PipelineCancelled:
@@ -2699,12 +2706,12 @@ else:
                     show_duplicate_compare_dialog()
                 elif akey == "edit":
                     st.session_state.stories_edit_mode = True
-                    st.toast("Edit mode on — open the Epics tab to edit", icon="✎")
+                    st.toast("Edit mode on — open the Epics tab to edit", icon="✏️")
                 elif akey == "review":
                     st.session_state.stories_edit_mode = False
-                    st.toast("Stories are in the Epics tab below", icon="◇")
+                    st.toast("Stories are in the Epics tab below", icon="📋")
                 elif akey == "export":
-                    st.toast("Download buttons are inside each tab", icon="↓")
+                    st.toast("Download buttons are inside each tab", icon="⬇️")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ---- Cost / token panel (expander) ----
