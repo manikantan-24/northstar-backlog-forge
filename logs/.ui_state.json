@@ -8,12 +8,12 @@
   "backlog_choice": [
     "JIRA backlog (30 tickets)"
   ],
-  "active_preset": "balanced",
+  "active_preset": "local",
   "models": {
-    "parser": "gemini-2.5-flash",
-    "constraint": "gemini-2.5-flash",
+    "parser": "ollama/llama3.2:3b",
+    "constraint": "ollama/llama3.2:3b",
     "story_writer": "claude-sonnet-4-5",
-    "epic_decomposer": "gemini-2.5-flash",
+    "epic_decomposer": "ollama/llama3.2:3b",
     "gap_detector": "claude-sonnet-4-5"
   }
 }

@@ -1428,7 +1428,17 @@ VISION_SAMPLE_OPTIONS = {
     "Whiteboard — sprint planning sketch": SAMPLES_DIR / "whiteboard_sprint_planning.png",
 }
 
+def _expander_label(title: str, choices: list, empty_hint: str = "") -> str:
+    """Compact expander label that stays on ONE line inside the narrow sidebar.
+    Shows a ✓ badge + count when something is selected, empty hint otherwise."""
+    if not choices:
+        return f"{title}  {empty_hint}"
+    count = f"  ·  {len(choices)} selected" if len(choices) > 1 else "  ✓"
+    return f"{title}{count}"
+
+
 with st.sidebar:
+    # ── Brand ──────────────────────────────────────────────────────────────
     st.markdown(
         '<div class="acc-brand">'
         '<span class="acc-wordmark">accenture<span class="acc-mark">&gt;</span></span>'
@@ -1445,97 +1455,87 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    st.markdown("### Transcript")
-    transcript_choice = st.multiselect(
-        "Source",
-        options=list(TRANSCRIPT_OPTIONS.keys()),
-        default=_default_multi("transcript_choice", TRANSCRIPT_OPTIONS),
-        label_visibility="collapsed",
-        key="transcript_choice",
-        help="Pick one or more bundled transcripts / docs — combined into a single source for the Parser. You can also drop your own files below; samples + uploads are merged.",
-    )
-    with st.expander("↑  Upload your own (txt / md / pdf)", expanded=False):
-        transcript_upload = st.file_uploader(
-            "transcript upload", type=["txt", "md", "pdf"],
-            accept_multiple_files=True,
-            key="transcript_upload", label_visibility="collapsed",
-            help="Combined with any samples selected above.",
+    # ── INPUTS — one expander per section, dynamic label shows selection ─────
+    # Auto-expand Transcript only if nothing is selected yet (first load).
+    _saved_transcript = _default_multi("transcript_choice", TRANSCRIPT_OPTIONS)
+    with st.expander(
+        _expander_label("📝 Transcript", _saved_transcript, empty_hint="pick a source"),
+        expanded=not bool(_saved_transcript),
+    ):
+        transcript_choice = st.multiselect(
+            "Transcript",
+            options=list(TRANSCRIPT_OPTIONS.keys()),
+            default=_saved_transcript,
+            label_visibility="collapsed",
+            key="transcript_choice",
+            help="Pick one or more bundled transcripts — combined into one source.",
         )
-
-    # Vision input — separate uploader so it doesn't compete with the
-    # text-transcript picker. Vision-capable models (Claude Sonnet/Opus/
-    # Haiku 4.x) accept the images alongside whatever text source is
-    # active. Whiteboard photos and screenshots flow through here.
-    with st.expander("Add whiteboard photos / screenshots", expanded=False):
+        transcript_upload = st.file_uploader(
+            "↑ Upload (txt / md / pdf)", type=["txt", "md", "pdf"],
+            accept_multiple_files=True, key="transcript_upload",
+            help="Optional — combined with any samples selected above.",
+        )
+        st.caption("**📷 Whiteboard / vision**")
         vision_samples = st.multiselect(
-            "Sample images",
+            "Vision samples",
             options=list(VISION_SAMPLE_OPTIONS.keys()),
             default=_default_multi("vision_samples", VISION_SAMPLE_OPTIONS) if _persisted_ui.get("vision_samples") else [],
-            key="vision_samples",
-            help="Bundled sample images — select to feed one straight into the Parser, no upload needed.",
+            key="vision_samples", label_visibility="collapsed",
+            help="Bundled whiteboard images — fed directly to the Parser.",
         )
         vision_uploads = st.file_uploader(
-            "…or upload your own (PNG / JPG / WEBP)",
-            type=["png", "jpg", "jpeg", "webp", "gif"],
-            accept_multiple_files=True,
-            key="vision_uploads",
-            help=(
-                "Vision-capable models only. Each image is sent as a "
-                "first-class source material block to the Parser agent "
-                "alongside any text transcript."
-            ),
+            "↑ Upload whiteboard (PNG / JPG)", type=["png", "jpg", "jpeg", "webp"],
+            accept_multiple_files=True, key="vision_uploads",
+            help="Vision-capable models only.",
         )
 
-    st.markdown("### Architecture / wiki")
-    constraints_choice = st.multiselect(
-        "Constraints source",
-        options=list(CONSTRAINTS_OPTIONS.keys()),
-        default=_default_multi("constraints_choice", CONSTRAINTS_OPTIONS),
-        label_visibility="collapsed",
-        key="constraints_choice",
-        help="Pick one or more bundled wiki / architecture pages (combined), or leave empty to skip the Constraint Extractor. You can also drop your own files below.",
-    )
-    with st.expander("↑  Upload your own (md / txt)", expanded=False):
+    _saved_constraints = _default_multi("constraints_choice", CONSTRAINTS_OPTIONS)
+    with st.expander(
+        _expander_label("📐 Wiki", _saved_constraints, empty_hint="optional"),
+        expanded=False,
+    ):
+        constraints_choice = st.multiselect(
+            "Wiki",
+            options=list(CONSTRAINTS_OPTIONS.keys()),
+            default=_saved_constraints,
+            label_visibility="collapsed",
+            key="constraints_choice",
+            help="Pick one or more wiki pages. Leave empty to skip the Constraint Extractor.",
+        )
         constraints_upload = st.file_uploader(
-            "constraints upload", type=["md", "txt"],
-            accept_multiple_files=True,
-            key="constraints_upload", label_visibility="collapsed",
+            "↑ Upload wiki (md / txt)", type=["md", "txt"],
+            accept_multiple_files=True, key="constraints_upload",
             help="Combined with any wiki samples selected above.",
         )
 
-    st.markdown("### Existing backlog")
-    backlog_choice = st.multiselect(
-        "Backlog source",
-        options=list(BACKLOG_OPTIONS.keys()),
-        default=_default_multi("backlog_choice", BACKLOG_OPTIONS),
-        label_visibility="collapsed",
-        key="backlog_choice",
-        help="Pick one or more bundled JIRA / GitHub exports — all tickets merged for duplicate detection. Leave empty to skip. You can also drop your own files below.",
-    )
-    with st.expander("↑  Upload your own (JSON)", expanded=False):
+    _saved_backlog = _default_multi("backlog_choice", BACKLOG_OPTIONS)
+    with st.expander(
+        _expander_label("🗂 Backlog", _saved_backlog, empty_hint="optional"),
+        expanded=False,
+    ):
+        backlog_choice = st.multiselect(
+            "Backlog",
+            options=list(BACKLOG_OPTIONS.keys()),
+            default=_saved_backlog,
+            label_visibility="collapsed",
+            key="backlog_choice",
+            help="Ticket exports merged for duplicate detection. Leave empty to skip.",
+        )
         backlog_upload = st.file_uploader(
-            "backlog upload", type=["json"],
-            accept_multiple_files=True,
-            key="backlog_upload", label_visibility="collapsed",
+            "↑ Upload backlog (JSON)", type=["json"],
+            accept_multiple_files=True, key="backlog_upload",
             help="Merged with any backlog samples selected above.",
         )
 
-    # ---------------- Live Atlassian sources ----------------
-    # When toggled on, the orchestrator pulls constraint_text from the
-    # given Confluence page (instead of the file selected above) and
-    # existing_tickets from the configured Jira project (instead of the
-    # backlog JSON selected above). Either or both can be enabled
-    # independently. Credentials come from .env — see README.
-    st.markdown("### Live Atlassian sources")
-    with st.expander("Use live Confluence / Jira", expanded=False):
+    # Live Atlassian — key integration, shown directly under Inputs
+    _live_conf_active = bool(st.session_state.get("use_live_confluence"))
+    _live_jira_active = bool(st.session_state.get("use_live_jira"))
+    _live_label = "☁ Live Atlassian" + (" — active" if (_live_conf_active or _live_jira_active) else "")
+    with st.expander(_live_label, expanded=False):
         use_live_confluence = st.toggle(
             "Pull constraints from live Confluence",
             value=False,
-            help=(
-                "Fetches a Confluence page by ID and uses it as the wiki / "
-                "architecture-constraints source for this run. Overrides the "
-                "Architecture/wiki selector above when on."
-            ),
+            help="Fetches a Confluence page by ID. Overrides the Architecture/wiki selector above.",
             key="use_live_confluence",
         )
         live_confluence_page_id = ""
@@ -1545,107 +1545,37 @@ with st.sidebar:
                 value=os.environ.get("CONFLUENCE_PAGE_ID", ""),
                 placeholder="e.g. 65830",
                 key="live_confluence_page_id",
-                help=(
-                    "Numeric page id from the Confluence URL "
-                    "(e.g. .../wiki/spaces/SD/pages/<ID>/...)."
-                ),
             )
-
         use_live_jira = st.toggle(
             "Pull backlog from live Jira",
             value=False,
-            help=(
-                f"Fetches issues from project "
-                f"`{os.environ.get('JIRA_PROJECT_KEY') or '?'}` "
-                "in your configured Jira tenant. Overrides the Existing-"
-                "backlog selector above when on."
-            ),
+            help=f"Fetches issues from project `{os.environ.get('JIRA_PROJECT_KEY') or '?'}`. Overrides the backlog selector above.",
             key="use_live_jira",
         )
 
-    st.markdown("### Privacy")
-    redact_pii = st.toggle(
-        "Mask personal & sensitive info",
-        value=False,
-        help=(
-            "Replace emails, phones, SSNs, card numbers, and (conservatively-"
-            "matched) personal names with stable placeholders before sending "
-            "to Claude. The final synthesis is un-redacted; the audit log "
-            "stays redacted for compliance review."
-        ),
-    )
-
-    st.markdown("### Options")
-    dry_run = st.toggle(
-        "Dry run (preview prompts only)",
-        value=False,
-        help=(
-            "Build the prompts each agent would send, but skip every LLM call. "
-            "The main canvas shows a source preview on the left and the "
-            "constructed prompts on the right — useful for prompt inspection "
-            "without spending API credit."
-        ),
-    )
-    auto_switch = st.toggle(
-        "Auto-switch model (vision + on failure)",
-        value=False,
-        key="auto_switch",
-        help=(
-            "Off (default): the exact preset is honoured — easy to verify which "
-            "model ran, and a stage that errors stops there.\n\n"
-            "On: if a stage's provider fails (rate limit / outage), it retries on "
-            "the other provider; and an attached image bumps the Parser to a "
-            "vision-capable Claude model. Every switch is shown in the live log "
-            "(⚠ FAILOVER) and the audit trail — nothing changes silently."
-        ),
-    )
-
-    # ---------------- MODELS ----------------
-    # Preset radio (Free / Balanced / Premium) + Advanced per-stage override
-    # expander. Using st.radio instead of st.columns(3) of buttons because
-    # the sidebar is too narrow — button labels wrap to "Pre / miu / m".
-    # The orchestrator receives `models=session_state.models` at run time
-    # regardless of how the user got there.
+    # ── MODELS — always visible, just one radio row ─────────────────────────
     st.markdown("### Models")
-
     _preset_labels = ["Local", "Free", "Balanced", "Premium"]
     _label_to_key = {"Local": "local", "Free": "free", "Balanced": "balanced", "Premium": "premium"}
     _key_to_label = {v: k for k, v in _label_to_key.items()}
-
-    # If the active preset is "custom", default the radio to whichever
-    # preset most closely matches (or just Balanced) but the caption below
-    # will say "Custom" to keep the user oriented.
     _active = st.session_state.active_preset
-    # BUG FIX: default was 1 (Free) before "Local" was added at index 0,
-    # making the fallback point at the wrong preset. Default to Balanced (2).
     _radio_index = _preset_labels.index(_key_to_label[_active]) if _active in _key_to_label else 2
 
-    _picked_label = st.radio(
+    _picked_label = st.selectbox(
         "Model preset",
         options=_preset_labels,
         index=_radio_index,
-        horizontal=True,
         label_visibility="collapsed",
         key="preset_radio",
         help=(
-            "Local: Ollama (llama3.2:3b) for extraction stages + Claude for reasoning · needs ollama serve.  "
+            "Local: Ollama (llama3.2:3b) for extraction + Claude for reasoning · needs ollama serve.  "
             "Free: all Gemini Flash · free tier.  "
-            "Balanced: Gemini Flash for extraction + Claude Sonnet for Story Writer & Gap Detector.  "
-            "Premium: all Claude Sonnet 4.5."
+            "Balanced: Gemini Flash + Claude Sonnet for Story Writer & Gap Detector.  "
+            "Premium: all Claude Sonnet."
         ),
     )
     _picked_key = _label_to_key[_picked_label]
 
-    # Apply the picked preset whenever it doesn't match active state. We
-    # skip when active is "custom" AND the radio defaulted — otherwise
-    # the radio would force a reset of the user's custom overrides.
-    #
-    # IMPORTANT: _save_ui_state must be called HERE before st.rerun().
-    # st.rerun() halts script execution immediately, so the _save_ui_state
-    # call at the bottom of the sidebar block is never reached on a preset
-    # switch. Without saving first, the persisted file stays stale and the
-    # next rerun re-loads the old preset — which is why Local appeared to
-    # revert to Gemini.
     def _apply_preset(key: str) -> None:
         st.session_state.models = dict(MODEL_PRESETS[key])
         st.session_state.active_preset = key
@@ -1661,147 +1591,89 @@ with st.sidebar:
     if _picked_key != _active and _active != "custom":
         _apply_preset(_picked_key)
     elif _active == "custom" and _picked_key != _key_to_label.get(_active):
-        # User clicked a preset while in custom mode — replace overrides.
         _apply_preset(_picked_key)
 
-    # (The static "Active: <preset> · ~$X per run" caption was removed:
-    #  the figures it carried were hardcoded constants that didn't match
-    #  reality — Balanced shipped a $0.005/run label while the real cost
-    #  on the bundled sample is closer to $0.10. The pre-run cost
-    #  estimate strip below now carries the real number based on the
-    #  actual inputs that are loaded.)
-
-    with st.expander("Advanced — per-stage override", expanded=False):
-        # Each selectbox writes back to session_state.models[<stage>] and
-        # flips active_preset → "custom" so the chip row reflects that the
-        # mix is no longer a vanilla preset.
+    with st.expander("⚙ Per-stage override", expanded=False):
         _stage_labels = {
-            "parser":          "Parser",
-            "constraint":      "Constraint Extractor",
-            "story_writer":    "Story Writer",
-            "epic_decomposer": "Epic Decomposer",
-            "gap_detector":    "Gap Detector",
+            "parser": "Parser", "constraint": "Constraint Extractor",
+            "story_writer": "Story Writer", "epic_decomposer": "Epic Decomposer",
+            "gap_detector": "Gap Detector",
         }
         for _stage in STAGE_KEYS:
             _cur = st.session_state.models.get(_stage, MODEL_PRESETS["balanced"][_stage])
-            try:
-                _idx = MODEL_OPTIONS.index(_cur)
-            except ValueError:
-                _idx = 0
-            _picked = st.selectbox(
-                _stage_labels[_stage],
-                options=MODEL_OPTIONS,
-                index=_idx,
-                key=f"model_pick_{_stage}",
-            )
-            if _picked != _cur:
-                st.session_state.models[_stage] = _picked
-                # Any deviation from a preset → "custom".
-                _matches = next(
-                    (
-                        name for name, mp in MODEL_PRESETS.items()
-                        if mp == st.session_state.models
-                    ),
-                    None,
-                )
+            try: _idx = MODEL_OPTIONS.index(_cur)
+            except ValueError: _idx = 0
+            _spicked = st.selectbox(_stage_labels[_stage], options=MODEL_OPTIONS, index=_idx, key=f"model_pick_{_stage}")
+            if _spicked != _cur:
+                st.session_state.models[_stage] = _spicked
+                _matches = next((n for n, mp in MODEL_PRESETS.items() if mp == st.session_state.models), None)
                 st.session_state.active_preset = _matches or "custom"
-        st.caption(
-            "Mix and match per stage. Claude needs `ANTHROPIC_API_KEY`; "
-            "Gemini needs `GOOGLE_API_KEY` (free at aistudio.google.com)."
-        )
+        st.caption("Claude needs `ANTHROPIC_API_KEY` · Gemini needs `GOOGLE_API_KEY` · Local needs `ollama serve`")
 
-    # ---------------- Compare mode ----------------
-    # Run the pipeline twice — once with the primary preset above, once
-    # with a secondary preset chosen here — and show a side-by-side
-    # summary in the results. Useful for evaluating whether the cheaper
-    # Free preset is producing similar output to the Premium preset.
-    with st.expander("⚖  Compare providers", expanded=False):
-        compare_enabled = st.toggle(
-            "Run a second pass with a different preset",
-            value=False,
-            key="compare_enabled",
-            help=(
-                "Runs the pipeline twice (sequentially). Doubles wall time and "
-                "API spend; surfaces a side-by-side metrics summary so you can "
-                "see which preset produced more / better output."
-            ),
-        )
-        compare_with_preset = "free"
-        if compare_enabled:
-            compare_with_preset = st.selectbox(
-                "Compare against preset",
-                options=list(MODEL_PRESETS.keys()),
-                index=list(MODEL_PRESETS.keys()).index("free"),
-                key="compare_with_preset",
-            )
-
+    # ── ESTIMATED RUN COST — always visible ────────────────────────────────
     _vision_present = bool(vision_samples) or bool(vision_uploads)
-    _transcript_ready = (
-        bool(transcript_choice)        # at least one sample selected
-        or bool(transcript_upload)     # or uploaded file(s)
-        or _vision_present             # or a whiteboard image alone
-    )
+    _transcript_ready = bool(transcript_choice) or bool(transcript_upload) or _vision_present
 
-    # ---------------- Pre-run cost estimate ----------------
-    # Quick heuristic so the user knows roughly what a Synthesize click
-    # will spend BEFORE they spend it. Input-token estimate comes from
-    # the size of whatever the sidebar currently has selected; output is
-    # a fixed budget per stage tuned from prior runs. Cheap to compute —
-    # only file size + a price-table lookup per stage.
     _pre_cost_usd, _pre_in_tokens, _pre_out_tokens = _estimate_pre_run_cost(
-        transcript_choice=transcript_choice,
-        transcript_upload=transcript_upload,
-        constraints_choice=constraints_choice,
-        constraints_upload=constraints_upload,
-        backlog_choice=backlog_choice,
-        backlog_upload=backlog_upload,
+        transcript_choice=transcript_choice, transcript_upload=transcript_upload,
+        constraints_choice=constraints_choice, constraints_upload=constraints_upload,
+        backlog_choice=backlog_choice, backlog_upload=backlog_upload,
         models=st.session_state.models,
     )
     if _transcript_ready and (_pre_in_tokens > 0 or _pre_out_tokens > 0):
         cost_line = (
             f"≈ <strong style='color:var(--accent)'>${_pre_cost_usd:.4f}</strong> "
             f"<span style='color:var(--text-faint)'>·</span> "
-            f"<span style='color:var(--text-muted)'>"
-            f"{_pre_in_tokens // 1000}k in, ~{_pre_out_tokens // 1000}k out"
-            f"</span>"
+            f"<span style='color:var(--text-muted)'>{_pre_in_tokens // 1000}k in, ~{_pre_out_tokens // 1000}k out</span>"
         )
         st.markdown(
-            "<div style='padding:0.55rem 0.8rem;background:var(--bg-elev-1);"
+            "<div style='padding:0.45rem 0.8rem;background:var(--bg-elev-1);"
             "border:1px solid var(--border);border-left:3px solid var(--accent);"
-            "border-radius:8px;font-size:0.82rem;margin-bottom:0.6rem;'>"
-            "<span style='font-size:0.65rem;font-weight:700;letter-spacing:0.12em;"
-            "text-transform:uppercase;color:var(--accent);display:block;"
-            "margin-bottom:0.25rem;'>Estimated run cost</span>"
+            "border-radius:8px;font-size:0.82rem;margin-bottom:0.5rem;'>"
+            "<span style='font-size:0.62rem;font-weight:700;letter-spacing:0.12em;"
+            "text-transform:uppercase;color:var(--accent);display:block;margin-bottom:0.2rem;'>"
+            "Estimated run cost</span>"
             f"{cost_line}</div>",
             unsafe_allow_html=True,
         )
 
-    st.markdown("### Action")
+    # ── SYNTHESIZE — always visible ─────────────────────────────────────────
     run_clicked = st.button(
-        "▶  Synthesize",
-        type="primary",
-        use_container_width=True,
+        "▶  Synthesize", type="primary", use_container_width=True,
         disabled=not _transcript_ready,
     )
     if not _transcript_ready:
         st.caption("↑ Pick a transcript source first.")
 
-    # Jira publish — show in sidebar whenever Jira is configured and a
-    # result exists, so it's always reachable without hunting the top nav.
     _sb_jira_ready = bool(
         os.environ.get("JIRA_BASE_URL") and os.environ.get("JIRA_EMAIL")
         and os.environ.get("JIRA_API_TOKEN") and os.environ.get("JIRA_PROJECT_KEY")
     )
     if _sb_jira_ready and st.session_state.get("result"):
-        if st.button(
-            f"⤴  Push to Jira ({os.environ.get('JIRA_PROJECT_KEY')})",
-            use_container_width=True, key="sidebar_jira_btn",
-            help="Create Epics → Stories → Sub-tasks in your live Jira project.",
-        ):
+        if st.button(f"⤴  Push to Jira ({os.environ.get('JIRA_PROJECT_KEY')})",
+                     use_container_width=True, key="sidebar_jira_btn"):
             show_jira_dialog()
-    elif _sb_jira_ready and not st.session_state.get("result"):
+    elif _sb_jira_ready:
         st.caption("Run a synthesis first, then push to Jira.")
 
+    # ── ADVANCED OPTIONS — collapsed, rarely needed ─────────────────────────
+    with st.expander("⚙ Advanced options", expanded=False):
+        redact_pii = st.toggle("Mask personal & sensitive info", value=False,
+            help="Replace PII with stable placeholders before sending to the LLM. Un-redacted in output.")
+        dry_run = st.toggle("Dry run (preview prompts only)", value=False,
+            help="Build prompts but skip all LLM calls — useful for inspection without API spend.")
+        auto_switch = st.toggle("Auto-switch model on failure / vision", value=False, key="auto_switch",
+            help="On failure, retry on the other provider. Bumps Parser to Claude when an image is attached.")
+        compare_enabled = st.toggle("Compare two presets side-by-side", value=False, key="compare_enabled",
+            help="Runs the pipeline twice and shows a side-by-side summary. Doubles cost and time.")
+        compare_with_preset = "free"
+        if compare_enabled:
+            compare_with_preset = st.selectbox("Compare against",
+                options=list(MODEL_PRESETS.keys()),
+                index=list(MODEL_PRESETS.keys()).index("free"),
+                key="compare_with_preset")
+
+    # ── FOOTER ─────────────────────────────────────────────────────────────
     st.markdown(
         '<div class="acc-footer">'
         '<span class="acc-mark">accenture&gt;</span> · AI-First Agentic Solutions<br>'
@@ -2125,12 +1997,6 @@ if run_clicked or _main_canvas_run:
     # Cancel support — a threading.Event lets the progress callback signal
     # the run thread to abort cleanly between stages.
     _cancel_event = threading.Event()
-    _cancel_placeholder = st.empty()
-    if _cancel_placeholder.button(
-        "✕  Cancel run", key="cancel_run_btn",
-        help="Stop the pipeline after the current stage finishes.",
-    ):
-        _cancel_event.set()
 
     try:
         orch = Orchestrator()
@@ -2321,20 +2187,15 @@ if run_clicked or _main_canvas_run:
         except Exception as exc:  # noqa: BLE001
             _result_q.put(("error", exc))
 
+    # The native Streamlit "Stop" button (top-right during a run) cancels
+    # the script immediately. For a graceful between-stage cancel, the
+    # _cancel_event is also wired — set it via the progress callback check.
+    # We show a small hint so the user knows where to click.
+    st.caption("💡 Click **Stop** (top-right) to cancel the run.")
+
     _thread = threading.Thread(target=_run_pipeline, daemon=True)
     _thread.start()
-
-    # Poll: re-render the live log while the thread runs; check for cancel.
-    while _thread.is_alive():
-        if _cancel_placeholder.button(
-            "✕  Cancel run", key="cancel_poll_btn",
-            help="Stop after the current stage finishes.",
-        ):
-            _cancel_event.set()
-        time.sleep(0.4)
-
-    _thread.join()
-    _cancel_placeholder.empty()  # remove the Cancel button once done
+    _thread.join()   # block main thread; UI updates come from the callback thread
 
     _status, _payload = _result_q.get()
     if _status == "cancelled":
@@ -2549,24 +2410,7 @@ elif result is None:
     )
 
     # Primary action on the main canvas — large, centered, mirrors the
-    # sidebar's Synthesize button. Sets `main_run_clicked` and reruns;
-    # the run handler at the top of the script picks either source.
-    with st.expander("▸  How the five-agent pipeline works", expanded=False):
-        st.markdown(
-            "**Parser** reads the transcript and extracts distinct topics.\n\n"
-            "**Constraint Extractor** reads the wiki for architecture rules.\n\n"
-            "**Story Writer** drafts user stories with Given/When/Then "
-            "acceptance criteria for each topic, respecting constraints.\n\n"
-            "**Epic Decomposer** groups stories into epics and breaks each "
-            "story into 3-7 concrete tasks.\n\n"
-            "**Gap Detector** compares new stories against the existing "
-            "backlog and constraints to find duplicates, conflicts, and gaps.\n\n"
-            "Every agent decision is captured in `audit_trail.md` — a "
-            "chronological trace a reviewer can read top-to-bottom."
-        )
-
-    # Primary action on the main canvas — large, centered, mirrors the
-    # sidebar's Synthesize button. Placed below the explainer so it's
+    # sidebar's Synthesize button. Placed below the explainer card so it's
     # the last thing the eye lands on before clicking.
     st.markdown("<div style='height:0.8rem'/>", unsafe_allow_html=True)
     _, _main_cta_col, _ = st.columns([1, 2, 1])

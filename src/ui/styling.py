@@ -126,6 +126,15 @@ section[data-testid="stSidebar"] {
     background: var(--bg-elev-1);
     border-right: 1px solid var(--border);
 }
+/* Compact the horizontal radio so all 4 presets fit on two rows of 2,
+   with smaller font so Local / Free / Balanced / Premium don't overflow. */
+section[data-testid="stSidebar"] [data-testid="stRadio"] > div {
+    gap: 0.3rem !important;
+}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    font-size: 0.82rem !important;
+    padding: 0.1rem 0 !important;
+}
 section[data-testid="stSidebar"] h3,
 section[data-testid="stSidebar"] .stMarkdown h3 {
     color: var(--text);
