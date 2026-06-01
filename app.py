@@ -16,13 +16,19 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import queue as _queue
 import re
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+
+class _PipelineCancelled(Exception):
+    """Raised inside the run thread when the user clicks Cancel."""
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -1780,6 +1786,22 @@ with st.sidebar:
     if not _transcript_ready:
         st.caption("↑ Pick a transcript source first.")
 
+    # Jira publish — show in sidebar whenever Jira is configured and a
+    # result exists, so it's always reachable without hunting the top nav.
+    _sb_jira_ready = bool(
+        os.environ.get("JIRA_BASE_URL") and os.environ.get("JIRA_EMAIL")
+        and os.environ.get("JIRA_API_TOKEN") and os.environ.get("JIRA_PROJECT_KEY")
+    )
+    if _sb_jira_ready and st.session_state.get("result"):
+        if st.button(
+            f"⤴  Push to Jira ({os.environ.get('JIRA_PROJECT_KEY')})",
+            use_container_width=True, key="sidebar_jira_btn",
+            help="Create Epics → Stories → Sub-tasks in your live Jira project.",
+        ):
+            show_jira_dialog()
+    elif _sb_jira_ready and not st.session_state.get("result"):
+        st.caption("Run a synthesis first, then push to Jira.")
+
     st.markdown(
         '<div class="acc-footer">'
         '<span class="acc-mark">accenture&gt;</span> · AI-First Agentic Solutions<br>'
@@ -2100,10 +2122,21 @@ if run_clicked or _main_canvas_run:
         unsafe_allow_html=True,
     )
 
+    # Cancel support — a threading.Event lets the progress callback signal
+    # the run thread to abort cleanly between stages.
+    _cancel_event = threading.Event()
+    _cancel_placeholder = st.empty()
+    if _cancel_placeholder.button(
+        "✕  Cancel run", key="cancel_run_btn",
+        help="Stop the pipeline after the current stage finishes.",
+    ):
+        _cancel_event.set()
+
     try:
         orch = Orchestrator()
     except Exception as e:
         _progress_placeholder.error(f"Orchestrator init failed: {e}")
+        _cancel_placeholder.empty()
         st.stop()
 
     # Per-stage start timestamps so completed/failed events can report
@@ -2166,6 +2199,11 @@ if run_clicked or _main_canvas_run:
             _render_pipeline(stage_states=stage_states)
         _render_log()
 
+        # Check for user-initiated cancel between stages. Only interrupt on
+        # "completed" or "skipped" events so we never cut a stage mid-call.
+        if event in ("completed", "skipped") and _cancel_event.is_set():
+            raise _PipelineCancelled("Run cancelled by user.")
+
     # First-run model download — sentence-transformers downloads ~80MB on
     # first use. Pre-warm the embedding tool inside a spinner so the user
     # sees what's happening instead of an unexplained pause partway through
@@ -2223,52 +2261,88 @@ if run_clicked or _main_canvas_run:
             st.warning(f"Skipping vision attachments: {e}")
             _vision_atts = None
 
-    _is_compare_run = bool(st.session_state.get("compare_enabled"))
-    try:
-        if _is_compare_run:
-            secondary_preset = st.session_state.get("compare_with_preset", "free")
-            secondary_models = dict(MODEL_PRESETS.get(secondary_preset, MODEL_PRESETS["free"]))
-            primary_label = (st.session_state.get("active_preset") or "primary").title()
-            secondary_label = secondary_preset.title()
-            compare_result = orch.run_compare(
-                primary_models=st.session_state.models,
-                secondary_models=secondary_models,
-                primary_label=primary_label,
-                secondary_label=secondary_label,
-                progress_callback=_on_progress,
-                transcript_text=transcript_text,
-                constraint_text=constraint_text,
-                existing_tickets=existing_tickets,
-                redact_pii=redact_pii,
-                live_confluence_page_id=_live_conf_pid or None,
-                live_jira=_use_live_jira,
-                vision_attachments=_vision_atts,
-                auto_switch=bool(st.session_state.get("auto_switch")),
-            )
-            # Surface the primary result through the normal render path;
-            # the secondary + comparison ride along in session state and
-            # are rendered by a dedicated banner below.
-            result = compare_result["primary"]
-            result["_compare_secondary"] = compare_result["secondary"]
-            result["_compare_summary"] = compare_result["comparison"]
-            result["_compare_labels"] = compare_result["labels"]
-        else:
-            result = orch.run(
-                transcript_text=transcript_text,
-                constraint_text=constraint_text,
-                existing_tickets=existing_tickets,
-                redact_pii=redact_pii,
-                progress_callback=_on_progress,
-                models=st.session_state.models,
-                live_confluence_page_id=_live_conf_pid or None,
-                live_jira=_use_live_jira,
-                vision_attachments=_vision_atts,
-                auto_switch=bool(st.session_state.get("auto_switch")),
-            )
-    except Exception as e:
-        _progress_placeholder.error(f"Pipeline failed: {e}")
+    # Thread the pipeline so the Cancel button stays responsive. The run
+    # executes in a daemon thread; the main thread polls a result queue.
+    # _PipelineCancelled raised in the progress callback propagates out of
+    # orch.run() and is caught in the thread, put on the queue as an error.
+    _result_q: _queue.Queue = _queue.Queue()
+
+    def _run_pipeline():
+        try:
+            _is_compare = bool(st.session_state.get("compare_enabled"))
+            if _is_compare:
+                secondary_preset = st.session_state.get("compare_with_preset", "free")
+                secondary_models = dict(MODEL_PRESETS.get(secondary_preset, MODEL_PRESETS["free"]))
+                primary_label = (st.session_state.get("active_preset") or "primary").title()
+                secondary_label = secondary_preset.title()
+                cmp = orch.run_compare(
+                    primary_models=st.session_state.models,
+                    secondary_models=secondary_models,
+                    primary_label=primary_label,
+                    secondary_label=secondary_label,
+                    progress_callback=_on_progress,
+                    transcript_text=transcript_text,
+                    constraint_text=constraint_text,
+                    existing_tickets=existing_tickets,
+                    redact_pii=redact_pii,
+                    live_confluence_page_id=_live_conf_pid or None,
+                    live_jira=_use_live_jira,
+                    vision_attachments=_vision_atts,
+                    auto_switch=bool(st.session_state.get("auto_switch")),
+                )
+                r = cmp["primary"]
+                r["_compare_secondary"] = cmp["secondary"]
+                r["_compare_summary"] = cmp["comparison"]
+                r["_compare_labels"] = cmp["labels"]
+                _result_q.put(("ok", r))
+            else:
+                r = orch.run(
+                    transcript_text=transcript_text,
+                    constraint_text=constraint_text,
+                    existing_tickets=existing_tickets,
+                    redact_pii=redact_pii,
+                    progress_callback=_on_progress,
+                    models=st.session_state.models,
+                    live_confluence_page_id=_live_conf_pid or None,
+                    live_jira=_use_live_jira,
+                    vision_attachments=_vision_atts,
+                    auto_switch=bool(st.session_state.get("auto_switch")),
+                )
+                _result_q.put(("ok", r))
+        except _PipelineCancelled:
+            _result_q.put(("cancelled", None))
+        except Exception as exc:  # noqa: BLE001
+            _result_q.put(("error", exc))
+
+    _thread = threading.Thread(target=_run_pipeline, daemon=True)
+    _thread.start()
+
+    # Poll: re-render the live log while the thread runs; check for cancel.
+    while _thread.is_alive():
+        if _cancel_placeholder.button(
+            "✕  Cancel run", key="cancel_poll_btn",
+            help="Stop after the current stage finishes.",
+        ):
+            _cancel_event.set()
+        time.sleep(0.4)
+
+    _thread.join()
+    _cancel_placeholder.empty()  # remove the Cancel button once done
+
+    _status, _payload = _result_q.get()
+    if _status == "cancelled":
+        progress_log.append(
+            '<div class="log-line log-failed"><span class="log-icon">✕</span>'
+            '<strong>Run cancelled by user</strong></div>'
+        )
+        _render_log()
+        st.warning("Run cancelled — partial results (if any) were not saved.")
+        st.stop()
+    elif _status == "error":
+        _progress_placeholder.error(f"Pipeline failed: {_payload}")
         st.stop()
 
+    result = _payload
     elapsed = time.perf_counter() - t0
     n_done = sum(1 for s in stage_states if s == "done")
     n_failed = sum(1 for s in stage_states if s == "failed")
