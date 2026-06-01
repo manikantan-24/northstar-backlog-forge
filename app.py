@@ -1633,15 +1633,30 @@ with st.sidebar:
     # Apply the picked preset whenever it doesn't match active state. We
     # skip when active is "custom" AND the radio defaulted — otherwise
     # the radio would force a reset of the user's custom overrides.
-    if _picked_key != _active and _active != "custom":
-        st.session_state.models = dict(MODEL_PRESETS[_picked_key])
-        st.session_state.active_preset = _picked_key
+    #
+    # IMPORTANT: _save_ui_state must be called HERE before st.rerun().
+    # st.rerun() halts script execution immediately, so the _save_ui_state
+    # call at the bottom of the sidebar block is never reached on a preset
+    # switch. Without saving first, the persisted file stays stale and the
+    # next rerun re-loads the old preset — which is why Local appeared to
+    # revert to Gemini.
+    def _apply_preset(key: str) -> None:
+        st.session_state.models = dict(MODEL_PRESETS[key])
+        st.session_state.active_preset = key
+        _save_ui_state({
+            "transcript_choice":   transcript_choice,
+            "constraints_choice":  constraints_choice,
+            "backlog_choice":      backlog_choice,
+            "active_preset":       key,
+            "models":              dict(MODEL_PRESETS[key]),
+        })
         st.rerun()
+
+    if _picked_key != _active and _active != "custom":
+        _apply_preset(_picked_key)
     elif _active == "custom" and _picked_key != _key_to_label.get(_active):
         # User clicked a preset while in custom mode — replace overrides.
-        st.session_state.models = dict(MODEL_PRESETS[_picked_key])
-        st.session_state.active_preset = _picked_key
-        st.rerun()
+        _apply_preset(_picked_key)
 
     # (The static "Active: <preset> · ~$X per run" caption was removed:
     #  the figures it carried were hardcoded constants that didn't match
