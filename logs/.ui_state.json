@@ -14,6 +14,6 @@
     "constraint": "gemini-2.5-flash",
     "story_writer": "claude-sonnet-4-5",
     "epic_decomposer": "gemini-2.5-flash",
-    "gap_detector": "gemini-2.5-flash"
+    "gap_detector": "claude-sonnet-4-5"
   }
 }

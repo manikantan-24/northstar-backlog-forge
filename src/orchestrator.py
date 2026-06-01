@@ -130,7 +130,7 @@ def _fallback_model(model_id: str) -> str | None:
         # Prefer Ollama when it's running — avoids Claude spend on transient
         # Gemini 503s/quota errors.
         if _ollama_available():
-            return "ollama/llama3.1"
+            return "ollama/llama3.2:3b"
         return "claude-sonnet-4-5"
     if mid.startswith("ollama"):
         return "claude-sonnet-4-5"

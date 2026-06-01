@@ -1243,11 +1243,11 @@ MODEL_PRESETS: dict[str, dict[str, str]] = {
     "local": {
         # Free local models (Ollama) for the mechanical stages;
         # Claude for the two reasoning-heavy stages.
-        # Requires: ollama serve + ollama pull llama3.1
-        "parser":          "ollama/llama3.1",
-        "constraint":      "ollama/llama3.1",
+        # Requires: ollama serve + ollama pull llama3.2:3b
+        "parser":          "ollama/llama3.2:3b",
+        "constraint":      "ollama/llama3.2:3b",
         "story_writer":    "claude-sonnet-4-5",
-        "epic_decomposer": "ollama/llama3.1",
+        "epic_decomposer": "ollama/llama3.2:3b",
         "gap_detector":    "claude-sonnet-4-5",
     },
     "free": {
@@ -1258,11 +1258,15 @@ MODEL_PRESETS: dict[str, dict[str, str]] = {
         "gap_detector":    "gemini-2.5-flash",
     },
     "balanced": {
+        # Gemini Flash for mechanical extraction stages (fast, cheap);
+        # Claude Sonnet for the two reasoning-heavy stages.
+        # Story Writer needs nuanced judgment for priority + AC quality.
+        # Gap Detector needs strong reasoning to detect constraint conflicts.
         "parser":          "gemini-2.5-flash",
         "constraint":      "gemini-2.5-flash",
         "story_writer":    "claude-sonnet-4-5",
         "epic_decomposer": "gemini-2.5-flash",
-        "gap_detector":    "gemini-2.5-flash",
+        "gap_detector":    "claude-sonnet-4-5",
     },
     "premium": {
         "parser":          "claude-sonnet-4-5",
@@ -1277,7 +1281,7 @@ MODEL_PRESETS: dict[str, dict[str, str]] = {
 PRESET_COST_BAND = {
     "local":    "Local (Ollama) · ~$0  —  needs ollama serve",
     "free":     "Free tier (Gemini) · ~$0",
-    "balanced": "~$0.005 per run",
+    "balanced": "~$0.01 per run",   # now 2× Claude stages (Story Writer + Gap Detector)
     "premium":  "~$0.03 per run",
     "custom":   "custom mix",
 }
@@ -1288,6 +1292,7 @@ MODEL_OPTIONS = [
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-2.5-pro",
+    "ollama/llama3.2:3b",
     "ollama/llama3.1",
     "ollama/mistral",
     "ollama/phi3",
@@ -1354,14 +1359,26 @@ if "models" not in st.session_state:
     # Default = Balanced (or persisted preset). Per-key overrides go into
     # this dict from the advanced expander; preset buttons replace it.
     _saved_preset = _persisted_ui.get("active_preset", "balanced")
-    if _saved_preset not in MODEL_PRESETS:
+    if _saved_preset not in MODEL_PRESETS and _saved_preset != "custom":
         _saved_preset = "balanced"
-    st.session_state.models = dict(MODEL_PRESETS[_saved_preset])
-    # If the saved preset was "custom", restore the saved per-stage map
+    # BUG FIX: always load models from the saved preset on first init.
+    # Previously a stale persisted preset (e.g. "free") would silently
+    # override whatever the user selected, because models are loaded here
+    # before the radio renders.
+    base_preset = _saved_preset if _saved_preset in MODEL_PRESETS else "balanced"
+    st.session_state.models = dict(MODEL_PRESETS[base_preset])
+    # If the saved preset was "custom", restore the saved per-stage map.
+    # BUG FIX: widen the validity check to accept any recognised prefix
+    # (claude-*, gemini-*, ollama/*) so Ollama model IDs are not silently
+    # dropped when restoring a custom map.
     saved_custom = _persisted_ui.get("models") or {}
     if _saved_preset == "custom" and isinstance(saved_custom, dict):
+        _valid_prefixes = ("claude-", "gemini-", "ollama/")
         for k, v in saved_custom.items():
-            if k in STAGE_KEYS and v in MODEL_OPTIONS:
+            if k in STAGE_KEYS and (
+                v in MODEL_OPTIONS
+                or any(str(v).startswith(p) for p in _valid_prefixes)
+            ):
                 st.session_state.models[k] = v
 if "active_preset" not in st.session_state:
     st.session_state.active_preset = _persisted_ui.get("active_preset", "balanced")
@@ -1593,7 +1610,9 @@ with st.sidebar:
     # preset most closely matches (or just Balanced) but the caption below
     # will say "Custom" to keep the user oriented.
     _active = st.session_state.active_preset
-    _radio_index = _preset_labels.index(_key_to_label[_active]) if _active in _key_to_label else 1
+    # BUG FIX: default was 1 (Free) before "Local" was added at index 0,
+    # making the fallback point at the wrong preset. Default to Balanced (2).
+    _radio_index = _preset_labels.index(_key_to_label[_active]) if _active in _key_to_label else 2
 
     _picked_label = st.radio(
         "Model preset",
@@ -1603,8 +1622,9 @@ with st.sidebar:
         label_visibility="collapsed",
         key="preset_radio",
         help=(
+            "Local: Ollama (llama3.2:3b) for extraction stages + Claude for reasoning · needs ollama serve.  "
             "Free: all Gemini Flash · free tier.  "
-            "Balanced: Gemini Flash + Claude Sonnet for the Story Writer.  "
+            "Balanced: Gemini Flash for extraction + Claude Sonnet for Story Writer & Gap Detector.  "
             "Premium: all Claude Sonnet 4.5."
         ),
     )

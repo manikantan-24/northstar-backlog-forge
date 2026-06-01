@@ -47,7 +47,7 @@ from tools.claude_tool import ClaudeTool, PROMPTS_DIR  # reuse JSON extractor + 
 logger = get_logger(__name__)
 
 DEFAULT_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-DEFAULT_MODEL    = os.environ.get("OLLAMA_MODEL", "llama3.1")
+DEFAULT_MODEL    = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 
 
 class OllamaTool(Tool):
@@ -108,6 +108,11 @@ class OllamaTool(Tool):
             "options": {
                 "num_predict": max_tokens,
                 "temperature": 0.0,   # deterministic — same as our Claude/Gemini calls
+                # Override the default 4096-token context window. The
+                # constraint-extractor + epic-decomposer prompts + their
+                # inputs can reach 3000+ tokens; 8192 gives comfortable
+                # headroom without requiring a large model.
+                "num_ctx": 8192,
             },
         }
         try:
