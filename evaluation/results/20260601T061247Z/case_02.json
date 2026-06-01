@@ -1,0 +1,82 @@
+{
+  "case_id": "case_02",
+  "description": "Pharmacy refill escalation meeting. Should produce stories around medication-refill push notifications and household-account verification. Expect a HIPAA conflict (surfacing medication names in notifications) and a duplicate against NS-176 (Pharmacy refill SMS reminder).",
+  "deterministic_average": 0.8333333333333334,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 4 stories in [2, 6]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "4/4 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "2/2 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "0 forbidden topic violations of 2 checked"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.0,
+      "observations": [
+        "0/1 expected duplicates found",
+        "Expected duplicate (['sms', 'refill', 'reminder'] \u2194 NS-176) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "1/1 expected conflicts flagged"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 4,
+      "story_granularity": 4,
+      "tag_accuracy": 4,
+      "conflict_reasoning": 2
+    },
+    "reasons": {
+      "ac_quality": "Most criteria are concrete and testable with clear Given/When/Then structure, though a few (like ST-04's pointer to NS-176) are meta-level rather than genuinely testable acceptance criteria.",
+      "priority_justification": "Priority rationales cite specific business impacts (revenue loss, HIPAA violations, customer demographics) with evidence from speakers, though ST-04's 'Medium' could better explain why it's not High given the accessibility gap.",
+      "story_granularity": "Stories are well-sized single deliverables (proactive push, opt-in capability, patient routing, SMS prioritization), though ST-04 is unusual as a pointer story rather than implementation work.",
+      "tag_accuracy": "Tags are consistently applied and appropriate (pharmacy, mobile-app, compliance, security), with only one non-canonical tag ('sms') flagged by guardrails, showing good vocabulary discipline.",
+      "conflict_reasoning": "ST-01's conflict with C-09 is incorrectly reasoned\u2014the story explicitly routes through NSID per C-04 and doesn't describe account-level delivery; the C-10 conflict is valid but marked 'medium' when missing mandatory audit logging should be 'high'."
+    },
+    "overall_comment": "This is a strong backlog synthesis with well-structured stories, clear compliance awareness, and good traceability to source topics. The conflict detection has significant errors, incorrectly flagging ST-01 for C-09 when the story text explicitly addresses patient-scoped routing, and the gaps section identifies real infrastructure needs that should have been flagged as conflicts with specific stories.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.75,
+      "story_granularity": 0.75,
+      "tag_accuracy": 0.75,
+      "conflict_reasoning": 0.25
+    },
+    "average_normalized": 0.65
+  },
+  "synthesis_summary": {
+    "epic_count": 1,
+    "story_count": 4,
+    "duplicates": 1,
+    "conflicts": 2,
+    "gaps": 3
+  }
+}

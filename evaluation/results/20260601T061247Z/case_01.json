@@ -1,0 +1,83 @@
+{
+  "case_id": "case_01",
+  "description": "The bundled NorthStar Retail Q3 planning meeting. Should produce three high-priority topics (POS offline, pharmacy unification, search-inventory), flag duplicates against NS-412 and NS-389, and conflict-flag any offline card-sale story.",
+  "deterministic_average": 0.8333333333333334,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 8 stories in [4, 10]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "8/8 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "4/4 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "0 forbidden topic violations of 3 checked"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.0,
+      "observations": [
+        "0/2 expected duplicates found",
+        "Expected duplicate (['search', 'inventory'] \u2194 NS-412) not found at confidence \u2265 medium",
+        "Expected duplicate (['loyalty', 'tier'] \u2194 NS-389) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "1/1 expected conflicts flagged"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 4,
+      "story_granularity": 4,
+      "tag_accuracy": 4,
+      "conflict_reasoning": 5
+    },
+    "reasons": {
+      "ac_quality": "Most acceptance criteria use testable Given/When/Then format with concrete observables (e.g., 'p95 latency remains under 800ms', '95%+ accuracy'), though a few could be more measurable (e.g., ST-02's 'marked as blocked' is procedural rather than system-observable).",
+      "priority_justification": "Priority rationales cite specific evidence like NPS deltas (-30 vs +18), revenue loss during outages, and regulatory mandates (C-06, C-12), though ST-02's Medium rating could better explain why documentation is lower priority than ST-01's operational impact.",
+      "story_granularity": "Stories are well-scoped to single deliverables (offline cash sales, search ranking, refill consolidation) with clear boundaries, though ST-08 (audit existing tooling) feels slightly spike-like and might expand into multiple stories during refinement.",
+      "tag_accuracy": "Tags are consistently applied and semantically appropriate (pos, mobile-app, pharmacy, compliance), with guardrail findings correctly flagging non-canonical tags like 'platform' and 'search' rather than marking them incorrect.",
+      "conflict_reasoning": "ST-02's conflict with C-15 is correctly identified with precise constraint citation ('PCI requires online authorization'), and the story explicitly acknowledges this is a documentation/waiver-request story rather than a deliverable feature, which is the right interpretation."
+    },
+    "overall_comment": "This is a high-quality backlog synthesis with strong traceability from raw quotes through constraints to stories, testable acceptance criteria using Given/When/Then, and evidence-backed priority rationales. The team should refine ST-08's scope during grooming and address the four identified gaps (offline reconciliation, IVR-mobile status sync, inventory feedback loop, hardware migration) in a follow-up planning session.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.75,
+      "story_granularity": 0.75,
+      "tag_accuracy": 0.75,
+      "conflict_reasoning": 1.0
+    },
+    "average_normalized": 0.8
+  },
+  "synthesis_summary": {
+    "epic_count": 4,
+    "story_count": 8,
+    "duplicates": 1,
+    "conflicts": 1,
+    "gaps": 4
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "case_id": "case_09",
+  "description": "Cross-team planning meeting touching POS, mobile, and pharmacy. The system must produce one story per concrete ask AND catch the NS-389 loyalty duplicate.",
+  "deterministic_average": 0.8333333333333334,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 4 stories in [3, 8]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "4/4 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "3/3 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "No forbidden topics specified"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.0,
+      "observations": [
+        "0/1 expected duplicates found",
+        "Expected duplicate (['loyalty', 'tier'] \u2194 NS-389) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 4,
+      "story_granularity": 4,
+      "tag_accuracy": 4,
+      "conflict_reasoning": 2
+    },
+    "reasons": {
+      "ac_quality": "Most acceptance criteria are concrete and testable with specific metrics (p95 < 2s, 5% margin, 7-day monitoring), though ST-03's criteria could be more precise about what constitutes acceptable regression.",
+      "priority_justification": "Priorities are well-justified with clear business impact (customer complaints, corrupted metrics, trust erosion), though ST-03's 'Medium' could better explain why Q3 timeline doesn't elevate urgency.",
+      "story_granularity": "Stories are appropriately sized as single deliverable behaviors (fix receipt latency, fix deep links, evaluate upgrade, eliminate duplicates), though ST-03 might be split into assessment and implementation stories.",
+      "tag_accuracy": "Tags are contextually appropriate and drawn from a consistent domain vocabulary (pos, mobile-app, pharmacy, performance, compliance), with guardrails correctly flagging non-canonical additions.",
+      "conflict_reasoning": "ST-04 conflicts correctly identify relevant HIPAA constraints (C-08, C-09, C-10), but the reasoning is weak\u2014the acceptance criteria *do* explicitly address opt-in (C-08), verified delivery (C-09), and audit logging (C-10), so these should not be flagged as conflicts."
+    },
+    "overall_comment": "This is a strong backlog synthesis with well-structured stories, clear traceability to source topics, and comprehensive task breakdowns. The primary weakness is incorrectly flagged conflicts for ST-04, where the acceptance criteria actually do address the cited constraints, suggesting the conflict detection logic needs refinement to recognize when requirements are already incorporated.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.75,
+      "story_granularity": 0.75,
+      "tag_accuracy": 0.75,
+      "conflict_reasoning": 0.25
+    },
+    "average_normalized": 0.65
+  },
+  "synthesis_summary": {
+    "epic_count": 3,
+    "story_count": 4,
+    "duplicates": 0,
+    "conflicts": 3,
+    "gaps": 4
+  }
+}

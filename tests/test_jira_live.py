@@ -358,3 +358,104 @@ def test_live_caches_first_list_all(monkeypatch):
     jt.list_all()
     jt.list_all()
     assert call_count["n"] == 1, "Second list_all() should hit the cache, not the API"
+
+
+# --------------------------------------------------------------- write tests
+
+def _patch_post(monkeypatch, responder):
+    """Patch `requests.post` and capture each call's JSON body."""
+    captured: list[dict] = []
+    import requests
+
+    def _fake_post(url, *, json=None, auth=None, headers=None, timeout=None, **kwargs):
+        captured.append({"url": url, "fields": (json or {}).get("fields", {})})
+        return responder(url, json or {}, **kwargs)
+
+    monkeypatch.setattr(requests, "post", _fake_post)
+    return captured
+
+
+def _live_writer():
+    return JiraTool(
+        mode="live", base_url="https://t.atlassian.net",
+        email="a@b.c", api_token="tok", project_key="NS",
+    )
+
+
+def test_create_issue_success_returns_key_and_url(monkeypatch):
+    def responder(url, body, **kw):
+        return _FakeResponse(201, {"key": "NS-7"})
+    _patch_post(monkeypatch, responder)
+    from tools.jira_tool import _text_adf
+    out = _live_writer().create_issue(
+        summary="Offline cash sales", description_adf=_text_adf("x"),
+        issue_type="Story", labels=["pos", "offline mode"],
+    )
+    assert out["key"] == "NS-7"
+    assert out["url"] == "https://t.atlassian.net/browse/NS-7"
+
+
+def test_create_issue_sanitizes_labels(monkeypatch):
+    cap = _patch_post(monkeypatch, lambda u, b, **k: _FakeResponse(201, {"key": "NS-8"}))
+    from tools.jira_tool import _text_adf
+    _live_writer().create_issue(summary="s", description_adf=_text_adf("x"),
+                                labels=["offline mode", "pos"])
+    assert cap[0]["fields"]["labels"] == ["offline-mode", "pos"]  # spaces -> hyphens
+
+
+def test_create_issue_falls_back_when_parent_rejected(monkeypatch):
+    # First attempt (with parent) 400s; fallback without parent succeeds.
+    seq = [_FakeResponse(400, text="parent not allowed"), _FakeResponse(201, {"key": "NS-9"})]
+    _patch_post(monkeypatch, lambda u, b, **k: seq.pop(0))
+    from tools.jira_tool import _text_adf
+    out = _live_writer().create_issue(summary="s", description_adf=_text_adf("x"),
+                                      issue_type="Sub-task", parent_key="NS-1")
+    assert out["key"] == "NS-9"
+
+
+def test_create_issue_auth_failure_raises(monkeypatch):
+    _patch_post(monkeypatch, lambda u, b, **k: _FakeResponse(401, text="nope"))
+    from tools.jira_tool import _text_adf
+    with pytest.raises(ToolError):
+        _live_writer().create_issue(summary="s", description_adf=_text_adf("x"))
+
+
+def test_publish_synthesis_creates_epic_story_subtask(monkeypatch):
+    n = {"i": 0}
+    def responder(url, body, **kw):
+        n["i"] += 1
+        return _FakeResponse(201, {"key": f"NS-{100 + n['i']}"})
+    cap = _patch_post(monkeypatch, responder)
+
+    result = {"epics": [{
+        "id": "EP-01", "title": "POS Offline", "description": "keep selling",
+        "stories": [{
+            "id": "ST-01", "title": "Offline cash sales", "description": "d",
+            "user_story": "As a cashier...", "acceptance_criteria": ["Given... then..."],
+            "priority": "High", "priority_rationale": "revenue", "tags": ["pos"],
+            "source_topic_id": "T-01", "potential_constraint_conflicts": ["C-02"],
+            "tasks": [{"id": "ST-01-TK-01", "title": "Embed SQLite", "type": "infra"}],
+        }],
+    }]}
+    out = _live_writer().publish_synthesis(result, create_subtasks=True)
+
+    assert out["counts"] == {"epics": 1, "stories": 1, "subtasks": 1}
+    types = [c["fields"]["issuetype"]["name"] for c in cap]
+    assert types == ["Epic", "Story", "Sub-task"]
+    # Story is parented to the epic; sub-task to the story.
+    assert cap[1]["fields"]["parent"]["key"] == "NS-101"
+    assert cap[2]["fields"]["parent"]["key"] == "NS-102"
+
+
+def test_publish_synthesis_partial_failure_is_recorded(monkeypatch):
+    # The epic fails on *every* fallback (incl. the Task fallback); the story
+    # still gets created. Key the failure off the summary so only the epic dies.
+    def responder(url, body, **kw):
+        if body.get("fields", {}).get("summary") == "E":
+            return _FakeResponse(400, text="no epic type")
+        return _FakeResponse(201, {"key": "NS-200"})
+    _patch_post(monkeypatch, responder)
+    result = {"epics": [{"title": "E", "stories": [{"title": "S", "tasks": []}]}]}
+    out = _live_writer().publish_synthesis(result, create_subtasks=False)
+    assert out["counts"]["stories"] == 1
+    assert any("epic" in e.lower() for e in out["errors"])

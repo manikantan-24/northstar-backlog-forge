@@ -98,6 +98,20 @@ def _build_tool_for_model(model_id: str, *, claude_fallback: Tool | None = None)
     )
 
 
+def _fallback_model(model_id: str) -> str | None:
+    """The 'other provider' to retry a failed stage on.
+
+    Claude → Gemini and vice-versa, so a provider outage (rate limit, 5xx,
+    timeout) on one vendor doesn't sink the whole run.
+    """
+    mid = (model_id or "").lower()
+    if mid.startswith("claude"):
+        return "gemini-2.5-flash"
+    if mid.startswith("gemini"):
+        return "claude-sonnet-4-5"
+    return None
+
+
 def _summarize_models(models: dict[str, str]) -> str:
     """Build a short display string for the UI's `model` field.
 
@@ -154,6 +168,7 @@ class Orchestrator:
         live_confluence_page_id: str | None = None,
         live_jira: bool = False,
         vision_attachments: list | None = None,
+        auto_switch: bool = True,
     ) -> dict[str, Any]:
         """Run the full pipeline. Returns the synthesized result dict.
 
@@ -244,6 +259,19 @@ class Orchestrator:
                 key = k.replace("constraint_extractor", "constraint")
                 if v and key in resolved_models:
                     resolved_models[key] = v
+
+        # ---- Vision auto-switch ----
+        # The Gemini tool wrapper doesn't forward image attachments, so a
+        # whiteboard/screenshot would be silently dropped if the Parser is on
+        # a Gemini model. When vision input is present, bump the Parser to a
+        # vision-capable Claude model so the image is actually read.
+        if auto_switch and vision_attachments and resolved_models.get("parser", "").lower().startswith("gemini"):
+            logger.info(
+                "Vision attachment present — switching parser %s → claude-sonnet-4-5 "
+                "(Gemini wrapper can't carry images).",
+                resolved_models["parser"],
+            )
+            resolved_models["parser"] = "claude-sonnet-4-5"
 
         # ---- Dry-run short-circuit ----
         # Build prompts for each agent without invoking the LLM. Each agent
@@ -396,6 +424,44 @@ class Orchestrator:
                 _emit(stage_idx, stage_name, "failed", str(e)[:120])
                 return None
 
+        def _attempt_failover(stage_idx: int, stage_name: str, err: Exception, run_with_tool) -> bool:
+            """A stage's primary provider failed after retries. Retry the stage
+            once on the *other* provider (Claude↔Gemini). Returns True on a
+            successful retry; otherwise records the failure + emits 'failed'.
+
+            Skipped when a test injected a non-real tool (single fake provider)
+            so the mocked suite behaves exactly as before."""
+            key = stage_name.replace("constraint_extractor", "constraint")
+            primary = resolved_models.get(key, "")
+            fb_model = _fallback_model(primary)
+            injected_fake = self.claude is not None and not isinstance(self.claude, ClaudeTool)
+
+            def _give_up(e):
+                logger.warning("%s failed: %s", stage_name, e)
+                audit.record_failure(stage_name, str(e))
+                _emit(stage_idx, stage_name, "failed", str(e)[:120])
+                return False
+
+            # Failover is opt-in (the `auto_switch` toggle) so the exact preset
+            # is honoured by default and nothing changes provider silently.
+            if not auto_switch or not fb_model or injected_fake:
+                return _give_up(err)
+            try:
+                fb_tool = _build_tool_for_model(fb_model, claude_fallback=self.claude)
+            except ToolError:
+                return _give_up(err)
+            _emit(stage_idx, stage_name, "failover", f"{primary} failed — retrying on {fb_model}")
+            try:
+                run_with_tool(fb_tool)
+            except Exception as e2:  # noqa: BLE001 — any failure here is terminal for the stage
+                return _give_up(f"{err} | failover({fb_model}): {e2}")
+            audit.record(
+                stage_name, "provider_failover",
+                payload={"from": primary, "to": fb_model, "error": str(err)[:200]},
+                reasoning=f"Primary provider failed; stage succeeded on {fb_model}.",
+            )
+            return True
+
         # ---- Stage 1: Parse the transcript into topics ----
         # The parser runs when EITHER text OR vision input is present —
         # a whiteboard photo with no text is still a valid input for a
@@ -413,9 +479,12 @@ class Orchestrator:
                     _emit(0, "parser", "completed",
                           f"{len(memory.get('topics', []))} topics extracted")
                 except AgentError as e:
-                    logger.warning("Parser failed: %s", e)
-                    audit.record_failure("parser", str(e))
-                    _emit(0, "parser", "failed", str(e)[:120])
+                    def _retry_parser(t):
+                        ParserAgent(tool=t, memory=memory, audit=audit).run(
+                            transcript_text, vision_attachments=vision_attachments)
+                    if _attempt_failover(0, "parser", e, _retry_parser):
+                        _emit(0, "parser", "completed",
+                              f"{len(memory.get('topics', []))} topics extracted (via failover)")
         else:
             _emit(0, "parser", "skipped", "no transcript provided")
 
@@ -436,9 +505,12 @@ class Orchestrator:
                     _emit(1, "constraint_extractor", "completed",
                           f"{len(memory.get('constraints', []))} constraints captured")
                 except AgentError as e:
-                    logger.warning("Constraint Extractor failed: %s", e)
-                    audit.record_failure("constraint_extractor", str(e))
-                    _emit(1, "constraint_extractor", "failed", str(e)[:120])
+                    def _retry_constraint(t):
+                        ConstraintAgent(tool=t, confluence=self.confluence,
+                                        memory=memory, audit=audit).run(constraint_text)
+                    if _attempt_failover(1, "constraint_extractor", e, _retry_constraint):
+                        _emit(1, "constraint_extractor", "completed",
+                              f"{len(memory.get('constraints', []))} constraints captured (via failover)")
         else:
             _emit(1, "constraint_extractor", "skipped", "no wiki / constraints provided")
 
@@ -454,9 +526,11 @@ class Orchestrator:
                     _emit(2, "story_writer", "completed",
                           f"{len(memory.get('stories', []))} user stories written")
                 except AgentError as e:
-                    logger.warning("Story Writer failed: %s", e)
-                    audit.record_failure("story_writer", str(e))
-                    _emit(2, "story_writer", "failed", str(e)[:120])
+                    def _retry_story(t):
+                        StoryWriterAgent(tool=t, memory=memory, audit=audit).run()
+                    if _attempt_failover(2, "story_writer", e, _retry_story):
+                        _emit(2, "story_writer", "completed",
+                              f"{len(memory.get('stories', []))} user stories written (via failover)")
         else:
             _emit(2, "story_writer", "skipped", "no topics — Parser produced nothing")
 
@@ -472,9 +546,11 @@ class Orchestrator:
                     _emit(3, "epic_decomposer", "completed",
                           f"{len(memory.get('epics', []))} epics with task breakdowns")
                 except AgentError as e:
-                    logger.warning("Epic Decomposer failed: %s", e)
-                    audit.record_failure("epic_decomposer", str(e))
-                    _emit(3, "epic_decomposer", "failed", str(e)[:120])
+                    def _retry_epic(t):
+                        EpicDecomposerAgent(tool=t, memory=memory, audit=audit).run()
+                    if _attempt_failover(3, "epic_decomposer", e, _retry_epic):
+                        _emit(3, "epic_decomposer", "completed",
+                              f"{len(memory.get('epics', []))} epics with task breakdowns (via failover)")
         else:
             _emit(3, "epic_decomposer", "skipped", "no stories to group")
 
@@ -501,9 +577,17 @@ class Orchestrator:
                         f"{len(memory.get('gaps', []))} gaps",
                     )
                 except AgentError as e:
-                    logger.warning("Gap Detector failed: %s", e)
-                    audit.record_failure("gap_detector", str(e))
-                    _emit(4, "gap_detector", "failed", str(e)[:120])
+                    def _retry_gap(t):
+                        GapDetectorAgent(
+                            tool=t, jira=self.jira, github=self.github,
+                            memory=memory, audit=audit,
+                            use_embeddings_for_duplicates=use_embeddings_for_duplicates,
+                        ).run()
+                    if _attempt_failover(4, "gap_detector", e, _retry_gap):
+                        _emit(4, "gap_detector", "completed",
+                              f"{len(memory.get('duplicates', []))} dupes, "
+                              f"{len(memory.get('conflicts', []))} conflicts, "
+                              f"{len(memory.get('gaps', []))} gaps (via failover)")
         else:
             _emit(4, "gap_detector", "skipped", "no stories to compare")
 

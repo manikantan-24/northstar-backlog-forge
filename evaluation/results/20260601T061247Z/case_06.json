@@ -1,0 +1,84 @@
+{
+  "case_id": "case_06",
+  "description": "Every theme raised in the meeting maps to an existing JIRA ticket. The Gap Detector must catch all three as duplicates rather than presenting them as new stories.",
+  "deterministic_average": 0.8333333333333334,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 3 stories in [2, 6]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "3/3 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "3/3 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "No forbidden topics specified"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.0,
+      "observations": [
+        "0/3 expected duplicates found",
+        "Expected duplicate (['stock', 'badge'] \u2194 NS-412) not found at confidence \u2265 medium",
+        "Expected duplicate (['loyalty', 'tier'] \u2194 NS-389) not found at confidence \u2265 medium",
+        "Expected duplicate (['pos', 'offline'] \u2194 NS-101) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 3,
+      "story_granularity": 4,
+      "tag_accuracy": 5,
+      "conflict_reasoning": 5
+    },
+    "reasons": {
+      "ac_quality": "Most acceptance criteria are concrete and testable with clear Given/When/Then structure, though a few (like ST-03's 5-minute upload window) lack specific measurement hooks.",
+      "priority_justification": "ST-01 and ST-03 cite concrete customer impact (wasted trips, revenue loss), but ST-02's 'Medium' priority rationale is somewhat hand-wavy ('generates contacts and erodes trust' without quantifying escalation volume).",
+      "story_granularity": "All three stories represent single, cohesive deliverable behaviours with clear scope boundaries, though ST-03 is slightly broad given the offline queue, upload sync, and staleness warning are bundled together.",
+      "tag_accuracy": "Tags are appropriate, consistent, and directly map to constraint applies_to vocabulary (mobile-app, pos, inventory, loyalty, ecommerce, offline-mode, payments).",
+      "conflict_reasoning": "No conflicts are flagged, and correctly so\u2014ST-01 lists C-16 as 'potential' (not a violation, just a design consideration), ST-03 explicitly respects C-11/C-12/C-13, and no other constraints are violated."
+    },
+    "overall_comment": "This is a strong synthesis that correctly recognizes the meeting's purpose (escalating existing tickets, not new work) and translates those escalations into well-scoped stories with solid acceptance criteria. The main weaknesses are slightly generic priority reasoning for ST-02 and a lack of explicit conflict flagging where C-16 is cited but not analyzed for actual violation.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.5,
+      "story_granularity": 0.75,
+      "tag_accuracy": 1.0,
+      "conflict_reasoning": 1.0
+    },
+    "average_normalized": 0.8
+  },
+  "synthesis_summary": {
+    "epic_count": 3,
+    "story_count": 3,
+    "duplicates": 2,
+    "conflicts": 0,
+    "gaps": 3
+  }
+}

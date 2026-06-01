@@ -59,7 +59,7 @@ def test_orchestrator_end_to_end_with_mocks():
 
     fake_claude = FakeClaudeTool({
         # Parser
-        "extract the **distinct topics**": {
+        "extract the distinct topics": {
             "summary": "Two themes discussed.",
             "topics": [
                 {"theme": "pos-offline", "summary": "POS goes offline when WAN drops",
@@ -71,7 +71,7 @@ def test_orchestrator_end_to_end_with_mocks():
             ],
         },
         # Constraint extractor
-        "extract the **architectural constraints**": {
+        "extract the architectural constraints": {
             "constraints": [
                 {"severity": "must", "category": "offline", "statement": "POS must support cash sales offline",
                  "source_excerpt": "cash sales when WAN is down", "applies_to": ["pos"]},
@@ -114,7 +114,7 @@ def test_orchestrator_end_to_end_with_mocks():
             ],
         },
         # Epic decomposer
-        "group them into **epics**": {
+        "group them into epics": {
             "epics": [
                 {
                     "id": "EP-01",
@@ -161,7 +161,7 @@ def test_orchestrator_end_to_end_with_mocks():
             ],
         },
         # Gap detector
-        "identify three distinct things": {
+        "Duplicate detection is handled separately": {
             "duplicates": [
                 {
                     "story_id": "ST-02",

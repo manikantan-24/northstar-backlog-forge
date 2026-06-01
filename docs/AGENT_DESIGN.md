@@ -56,7 +56,7 @@ Each agent has a single responsibility. Here's the contract.
 
 ### Story Writer Agent
 - **Input:** `topics` + `constraints` from memory
-- **Output (to memory):** `stories` — list of full story records with `acceptance_criteria`, `priority`, `tags`, `source_topic_id`, `potential_constraint_conflicts`
+- **Output (to memory):** `stories` — list of full story records with `acceptance_criteria`, `priority`, `tags`, `source_topic_id`, `potential_constraint_conflicts`, and an `evidence` block attached deterministically by the agent from the cited topic (not produced by the model)
 - **Tools used:** `claude_tool`
 - **Failure mode:** if topics are empty, agent is skipped. If the LLM call fails permanently, the pipeline produces no stories — but topics and constraints are still preserved in memory and the audit log.
 

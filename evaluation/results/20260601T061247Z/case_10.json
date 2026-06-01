@@ -1,0 +1,81 @@
+{
+  "case_id": "case_10",
+  "description": "Compliance-driven transcript. Three findings \u2014 HIPAA, GDPR, PCI \u2014 each becomes a story. None should be flagged as a duplicate (these are new) and all should carry compliance tags.",
+  "deterministic_average": 1.0,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 3 stories in [3, 6]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "3/3 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "3/3 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "No forbidden topics specified"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 1.0,
+      "observations": [
+        "No expected duplicates"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 5,
+      "story_granularity": 4,
+      "tag_accuracy": 5,
+      "conflict_reasoning": 2
+    },
+    "reasons": {
+      "ac_quality": "Most acceptance criteria are concrete and testable with clear Given/When/Then structure, though a few (e.g., 'Legal reviews the implementation') are subjective rather than mechanically verifiable.",
+      "priority_justification": "Each priority rationale cites specific regulatory consequences (90-day remediation windows, 4% revenue fines, loss of processing privileges) with clear business impact, justifying the High priority assignments without hand-waving.",
+      "story_granularity": "Stories are appropriately scoped to single compliance violations with deliverable behaviour, though ST-02 is slightly broad (spanning mobile, web, backend, and Salesforce integration) and might benefit from vertical slicing.",
+      "tag_accuracy": "Tags are consistently drawn from a clear domain vocabulary (pharmacy, mobile-app, compliance, security, pos, payments, loyalty, ecommerce) and accurately reflect each story's technical and domain scope.",
+      "conflict_reasoning": "The flagged conflicts cite the correct constraint IDs but mischaracterize the violations: ST-01 AC5 explicitly addresses C-10 (7-year audit retention), C-08 is about surfacing medication *names* which the story intentionally avoids, and C-09's 'verified contact method' concern is speculative without evidence the story violates it."
+    },
+    "overall_comment": "This is a strong backlog synthesis with well-justified priorities, testable acceptance criteria, and appropriate story sizing for compliance remediation work. The conflict detection, however, flags issues that are either already addressed in the ACs or based on overly strict interpretation of constraints, reducing its utility for the delivery team.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 1.0,
+      "story_granularity": 0.75,
+      "tag_accuracy": 1.0,
+      "conflict_reasoning": 0.25
+    },
+    "average_normalized": 0.75
+  },
+  "synthesis_summary": {
+    "epic_count": 1,
+    "story_count": 3,
+    "duplicates": 0,
+    "conflicts": 3,
+    "gaps": 4
+  }
+}

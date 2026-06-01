@@ -32,7 +32,7 @@ class LegAwareFakeClaudeTool:
     stage, and a different set on the second call.
 
     Each stage's prompt template carries a distinct prefix string (e.g.
-    "extract the **distinct topics**") which we use as the stage key.
+    "extract the distinct topics") which we use as the stage key.
     The first time we see a given prefix we serve from `primary_responses`;
     the second time, from `secondary_responses`. This mirrors how the real
     orchestrator runs the pipeline twice in `run_compare`.
@@ -98,7 +98,7 @@ def _build_primary_responses() -> dict[str, dict]:
     1 conflict, and 1 gap — a realistic baseline to compare against.
     """
     return {
-        "extract the **distinct topics**": {
+        "extract the distinct topics": {
             "summary": "Two themes.",
             "topics": [
                 {"theme": "pos-offline", "summary": "POS offline",
@@ -109,7 +109,7 @@ def _build_primary_responses() -> dict[str, dict]:
                  "sentiment": "concern"},
             ],
         },
-        "extract the **architectural constraints**": {
+        "extract the architectural constraints": {
             "constraints": [
                 {"severity": "forbidden", "category": "compliance",
                  "statement": "Card sales offline are forbidden",
@@ -150,7 +150,7 @@ def _build_primary_responses() -> dict[str, dict]:
                 },
             ],
         },
-        "group them into **epics**": {
+        "group them into epics": {
             "epics": [
                 {"id": "EP-01", "title": "POS Resilience",
                  "stories": [{"id": "ST-01",
@@ -175,7 +175,7 @@ def _build_primary_responses() -> dict[str, dict]:
                               "tasks": [{"id": "T2", "title": "x", "type": "frontend"}]}]},
             ],
         },
-        "identify three distinct things": {
+        "Duplicate detection is handled separately": {
             "duplicates": [{"story_id": "ST-02", "existing_id": "NS-389",
                             "confidence": "high", "reason": "tier downgrade overlap"}],
             "conflicts": [{"story_id": "ST-01", "constraint_id": "C-01",
@@ -197,7 +197,7 @@ def _build_secondary_responses() -> dict[str, dict]:
       - 2 gaps         (primary has 1)
     """
     return {
-        "extract the **distinct topics**": {
+        "extract the distinct topics": {
             "summary": "One theme.",
             "topics": [
                 {"theme": "pos-offline", "summary": "POS offline",
@@ -205,7 +205,7 @@ def _build_secondary_responses() -> dict[str, dict]:
                  "sentiment": "concern"},
             ],
         },
-        "extract the **architectural constraints**": {
+        "extract the architectural constraints": {
             "constraints": [],
         },
         "draft well-formed user stories": {
@@ -227,7 +227,7 @@ def _build_secondary_responses() -> dict[str, dict]:
                 },
             ],
         },
-        "group them into **epics**": {
+        "group them into epics": {
             "epics": [
                 {"id": "EP-01", "title": "POS Resilience",
                  "stories": [{"id": "ST-01",
@@ -242,7 +242,7 @@ def _build_secondary_responses() -> dict[str, dict]:
                               "tasks": [{"id": "T1", "title": "x", "type": "infra"}]}]},
             ],
         },
-        "identify three distinct things": {
+        "Duplicate detection is handled separately": {
             "duplicates": [],
             "conflicts": [],
             "gaps": [

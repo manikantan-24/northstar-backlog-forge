@@ -1,7 +1,13 @@
 {
-  "transcript_choice": "Pharmacy refill escalation (eval case 02)",
-  "constraints_choice": "Architecture constraints (recommended)",
-  "backlog_choice": "JIRA backlog \u2014 30 tickets (recommended)",
+  "transcript_choice": [
+    "Meeting notes \u2014 NorthStar Q3 planning"
+  ],
+  "constraints_choice": [
+    "Architecture constraints (recommended)"
+  ],
+  "backlog_choice": [
+    "JIRA backlog \u2014 30 tickets (recommended)"
+  ],
   "active_preset": "balanced",
   "models": {
     "parser": "gemini-2.5-flash",

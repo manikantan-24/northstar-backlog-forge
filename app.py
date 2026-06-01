@@ -52,8 +52,8 @@ from ui.styling import get_css  # noqa: E402
 from pricing import estimate_cost_usd  # noqa: E402
 
 st.set_page_config(
-    page_title="Backlog Synthesizer",
-    page_icon="◆",
+    page_title="Backlog Synthesizer · Accenture",
+    page_icon="🟣",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -187,16 +187,20 @@ def _estimate_pre_run_cost(
     ratio. Output token budgets come from `_PRE_RUN_OUTPUT_BUDGET`,
     measured on prior runs of the bundled sample.
     """
-    def _chars_of(choice_key: str, options: dict, upload) -> int:
-        val = options.get(choice_key)
-        if val == "__upload__":
-            return int(getattr(upload, "size", 0) or 0)
-        if not val:
-            return 0
-        try:
-            return Path(str(val)).stat().st_size
-        except OSError:
-            return 0
+    def _chars_of(selected, options: dict, upload) -> int:
+        labels = selected if isinstance(selected, list) else ([selected] if selected else [])
+        total = 0
+        for lbl in labels:
+            val = options.get(lbl)
+            if val and val != "__upload__":
+                try:
+                    total += Path(str(val)).stat().st_size
+                except OSError:
+                    pass
+        # Uploads are always combined with the selected samples now.
+        ups = upload if isinstance(upload, list) else ([upload] if upload else [])
+        total += sum(int(getattr(u, "size", 0) or 0) for u in ups)
+        return total
 
     transcript_chars = _chars_of(transcript_choice, TRANSCRIPT_OPTIONS, transcript_upload)
     constraint_chars = _chars_of(constraints_choice, CONSTRAINTS_OPTIONS, constraints_upload)
@@ -1311,6 +1315,26 @@ def _default_index(saved_key: str, options_dict: dict) -> int:
     return 0
 
 
+def _default_multi(saved_key: str, options_dict: dict) -> list[str]:
+    """Default selection for a multi-select source picker.
+
+    Accepts persisted state that's either a list (new) or a single string
+    (older single-select state), filters to currently-valid options, and
+    falls back to the first concrete (non-upload) sample."""
+    saved = _persisted_ui.get(saved_key)
+    keys = list(options_dict.keys())
+    if isinstance(saved, str):
+        saved = [saved]
+    if isinstance(saved, list):
+        valid = [s for s in saved if s in keys]
+        if valid:
+            return valid
+    for k, v in options_dict.items():
+        if v not in ("__upload__", ""):
+            return [k]
+    return []
+
+
 if "models" not in st.session_state:
     # Default = Balanced (or persisted preset). Per-key overrides go into
     # this dict from the advanced expander; preset buttons replace it.
@@ -1346,26 +1370,34 @@ TRANSCRIPT_OPTIONS = {
         GOLDEN_TRANSCRIPTS_DIR / "case_03_mobile_standup.txt",
     "Customer support note (eval case 04 — negative)":
         GOLDEN_TRANSCRIPTS_DIR / "case_04_support_note.txt",
-    "Upload my own…": "__upload__",
 }
 CONSTRAINTS_OPTIONS = {
     "Architecture constraints (recommended)":
         SAMPLES_DIR / "architecture_constraints.md",
     "Product strategy doc":
         SAMPLES_DIR / "product_strategy.md",
-    "(none — skip the Constraint Extractor)": "",
-    "Upload my own…": "__upload__",
 }
 BACKLOG_OPTIONS = {
     "JIRA backlog — 30 tickets (recommended)":
         SAMPLES_DIR / "jira_backlog.json",
     "GitHub issues — 6 tickets":
         SAMPLES_DIR / "github_issues.json",
-    "(none — skip duplicate detection)": "",
-    "Upload my own…": "__upload__",
+}
+
+# Bundled sample images for the vision input — selectable directly so a
+# whiteboard demo needs no upload. Maps label → image path.
+VISION_SAMPLE_OPTIONS = {
+    "Whiteboard — sprint planning sketch": SAMPLES_DIR / "whiteboard_sprint_planning.png",
 }
 
 with st.sidebar:
+    st.markdown(
+        '<div class="acc-brand">'
+        '<span class="acc-wordmark">accenture<span class="acc-mark">&gt;</span></span>'
+        '<span class="acc-eyebrow">AI-First Agentic Solutions</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.markdown(
         '<div class="app-header">'
         '<span class="app-mark">◆</span>'
@@ -1376,19 +1408,20 @@ with st.sidebar:
     )
 
     st.markdown("### Transcript")
-    transcript_choice = st.selectbox(
+    transcript_choice = st.multiselect(
         "Source",
         options=list(TRANSCRIPT_OPTIONS.keys()),
-        index=_default_index("transcript_choice", TRANSCRIPT_OPTIONS),
+        default=_default_multi("transcript_choice", TRANSCRIPT_OPTIONS),
         label_visibility="collapsed",
         key="transcript_choice",
-        help="Meeting notes, strategy doc, or transcript — the document the Parser Agent reads.",
+        help="Pick one or more bundled transcripts / docs — combined into a single source for the Parser. You can also drop your own files below; samples + uploads are merged.",
     )
-    transcript_upload = None
-    if TRANSCRIPT_OPTIONS[transcript_choice] == "__upload__":
+    with st.expander("⤓  Upload your own (txt / md / pdf)", expanded=False):
         transcript_upload = st.file_uploader(
-            "Upload transcript", type=["txt", "md", "pdf"],
+            "transcript upload", type=["txt", "md", "pdf"],
+            accept_multiple_files=True,
             key="transcript_upload", label_visibility="collapsed",
+            help="Combined with any samples selected above.",
         )
 
     # Vision input — separate uploader so it doesn't compete with the
@@ -1396,8 +1429,15 @@ with st.sidebar:
     # Haiku 4.x) accept the images alongside whatever text source is
     # active. Whiteboard photos and screenshots flow through here.
     with st.expander("Add whiteboard photos / screenshots", expanded=False):
+        vision_samples = st.multiselect(
+            "Sample images",
+            options=list(VISION_SAMPLE_OPTIONS.keys()),
+            default=_default_multi("vision_samples", VISION_SAMPLE_OPTIONS) if _persisted_ui.get("vision_samples") else [],
+            key="vision_samples",
+            help="Bundled sample images — select to feed one straight into the Parser, no upload needed.",
+        )
         vision_uploads = st.file_uploader(
-            "Vision attachments (PNG / JPG / WEBP)",
+            "…or upload your own (PNG / JPG / WEBP)",
             type=["png", "jpg", "jpeg", "webp", "gif"],
             accept_multiple_files=True,
             key="vision_uploads",
@@ -1409,35 +1449,37 @@ with st.sidebar:
         )
 
     st.markdown("### Architecture / wiki")
-    constraints_choice = st.selectbox(
+    constraints_choice = st.multiselect(
         "Constraints source",
         options=list(CONSTRAINTS_OPTIONS.keys()),
-        index=_default_index("constraints_choice", CONSTRAINTS_OPTIONS),
+        default=_default_multi("constraints_choice", CONSTRAINTS_OPTIONS),
         label_visibility="collapsed",
         key="constraints_choice",
-        help="Architecture constraints — performance budgets, required integrations, compliance rules.",
+        help="Pick one or more bundled wiki / architecture pages (combined), or leave empty to skip the Constraint Extractor. You can also drop your own files below.",
     )
-    constraints_upload = None
-    if CONSTRAINTS_OPTIONS[constraints_choice] == "__upload__":
+    with st.expander("⤓  Upload your own (md / txt)", expanded=False):
         constraints_upload = st.file_uploader(
-            "Upload wiki / constraints", type=["md", "txt"],
+            "constraints upload", type=["md", "txt"],
+            accept_multiple_files=True,
             key="constraints_upload", label_visibility="collapsed",
+            help="Combined with any wiki samples selected above.",
         )
 
     st.markdown("### Existing backlog")
-    backlog_choice = st.selectbox(
+    backlog_choice = st.multiselect(
         "Backlog source",
         options=list(BACKLOG_OPTIONS.keys()),
-        index=_default_index("backlog_choice", BACKLOG_OPTIONS),
+        default=_default_multi("backlog_choice", BACKLOG_OPTIONS),
         label_visibility="collapsed",
         key="backlog_choice",
-        help="JIRA / GitHub ticket export. Enables duplicate detection.",
+        help="Pick one or more bundled JIRA / GitHub exports — all tickets merged for duplicate detection. Leave empty to skip. You can also drop your own files below.",
     )
-    backlog_upload = None
-    if BACKLOG_OPTIONS[backlog_choice] == "__upload__":
+    with st.expander("⤓  Upload your own (JSON)", expanded=False):
         backlog_upload = st.file_uploader(
-            "Upload backlog JSON", type=["json"],
+            "backlog upload", type=["json"],
+            accept_multiple_files=True,
             key="backlog_upload", label_visibility="collapsed",
+            help="Merged with any backlog samples selected above.",
         )
 
     # ---------------- Live Atlassian sources ----------------
@@ -1504,6 +1546,19 @@ with st.sidebar:
             "The main canvas shows a source preview on the left and the "
             "constructed prompts on the right — useful for prompt inspection "
             "without spending API credit."
+        ),
+    )
+    auto_switch = st.toggle(
+        "Auto-switch model (vision + on failure)",
+        value=False,
+        key="auto_switch",
+        help=(
+            "Off (default): the exact preset is honoured — easy to verify which "
+            "model ran, and a stage that errors stops there.\n\n"
+            "On: if a stage's provider fails (rate limit / outage), it retries on "
+            "the other provider; and an attached image bumps the Parser to a "
+            "vision-capable Claude model. Every switch is shown in the live log "
+            "(⚠ FAILOVER) and the audit trail — nothing changes silently."
         ),
     )
 
@@ -1624,9 +1679,11 @@ with st.sidebar:
             key="compare_with_preset",
         )
 
+    _vision_present = bool(vision_samples) or bool(vision_uploads)
     _transcript_ready = (
-        TRANSCRIPT_OPTIONS[transcript_choice] != "__upload__"
-        or transcript_upload is not None
+        bool(transcript_choice)        # at least one sample selected
+        or bool(transcript_upload)     # or uploaded file(s)
+        or _vision_present             # or a whiteboard image alone
     )
 
     # ---------------- Pre-run cost estimate ----------------
@@ -1673,14 +1730,13 @@ with st.sidebar:
     if not _transcript_ready:
         st.caption("↑ Pick a transcript source first.")
 
-    # Run history — always show the button. Even when empty it explains where
-    # past runs come from.
-    st.markdown("### Run history")
-    history_btn = st.button(
-        "⌕  View past runs",
-        use_container_width=True,
-        key="open_history_btn",
-        help="Past runs persisted to logs/runs/*.json.",
+    st.markdown(
+        '<div class="acc-footer">'
+        '<span class="acc-mark">accenture&gt;</span> · AI-First Agentic Solutions<br>'
+        'Demonstration on mock data — fictional client <strong>NorthStar Retail</strong>. '
+        'Jira / Confluence run in mock mode by default; live Atlassian is optional.'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
 # Persist user's selections so a hard browser reload preserves them.
@@ -1695,15 +1751,120 @@ _save_ui_state({
 
 # -------------------------------------------------------- main canvas
 
-st.markdown(
-    '<div class="app-header">'
-    '<span class="app-mark">◆</span>'
-    '<div><div class="app-title">Synthesize epics, stories and tasks</div>'
-    '<div class="app-tagline">'
-    "From a transcript + a wiki + an existing backlog — in one multi-agent pass."
-    "</div></div></div>",
-    unsafe_allow_html=True,
-)
+# ---- Top-nav dialogs ----
+@st.dialog("How it works", width="large")
+def show_how_it_works_dialog() -> None:
+    st.markdown(
+        "**Backlog Synthesizer** runs five specialized agents in sequence — each does "
+        "one job and writes to a shared, audited memory:\n\n"
+        "1. **Parser** — extracts the distinct topics from the transcript.\n"
+        "2. **Constraint Extractor** — reads the wiki for `must` / `forbidden` rules.\n"
+        "3. **Story Writer** — drafts a user story (Given/When/Then AC + priority) per topic.\n"
+        "4. **Epic Decomposer** — groups stories into epics and breaks each into tasks.\n"
+        "5. **Gap Detector** — local embeddings flag duplicates against your backlog; the "
+        "LLM flags conflicts vs. constraints and missing gaps.\n\n"
+        "Every step is captured in an **audit trail**, and you can push the result straight "
+        "into **Jira** as Epic → Story → Sub-task."
+    )
+    st.caption("Pick sources on the left (or upload your own / a whiteboard image), then Synthesize.")
+
+
+@st.dialog("Export", width="large")
+def show_export_dialog() -> None:
+    res = st.session_state.get("result")
+    if not res:
+        st.info("Run a synthesis first — then export it here.")
+        return
+    from output_formatter import _render_markdown as _bm  # local import
+    rd = st.session_state.get("run_dir")
+    stem = rd.name if rd else datetime.now().strftime("%Y%m%d_%H%M%S")
+    md = _bm(res, source_label=st.session_state.get("source_label", ""))
+    js = json.dumps({k: v for k, v in res.items() if k != "audit_trail"}, indent=2)
+    st.download_button("↓  synthesis.md", md, file_name=f"{stem}_synthesis.md",
+                       mime="text/markdown", use_container_width=True)
+    st.download_button("↓  synthesis.json", js, file_name=f"{stem}_synthesis.json",
+                       mime="application/json", use_container_width=True)
+    st.download_button("↓  audit_trail.md", res.get("audit_trail", ""),
+                       file_name=f"{stem}_audit_trail.md", mime="text/markdown",
+                       use_container_width=True)
+
+
+@st.dialog("Create in Jira", width="large")
+def show_jira_dialog() -> None:
+    res = st.session_state.get("result")
+    if not res:
+        st.info("Run a synthesis first — then publish it to Jira here.")
+        return
+    _ready = all(os.environ.get(k) for k in
+                 ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "JIRA_PROJECT_KEY"))
+    if not _ready:
+        st.warning("Set JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN / JIRA_PROJECT_KEY in `.env` to enable.")
+        return
+    _proj = os.environ.get("JIRA_PROJECT_KEY")
+    _subs = st.checkbox("Also create sub-tasks", value=True, key="jira_dlg_subtasks")
+    st.caption(f"Writes real issues to **{_proj}** — Epic → Story → Sub-task, with acceptance "
+               "criteria, priority, and conflict flags in each description.")
+    if st.button(f"⤴  Create in Jira ({_proj})", type="primary",
+                 use_container_width=True, key="jira_dlg_go"):
+        with st.spinner(f"Creating issues in {_proj}…"):
+            try:
+                from tools.jira_tool import JiraTool
+                st.session_state["jira_publish_result"] = JiraTool(mode="live").publish_synthesis(
+                    res, create_subtasks=_subs)
+            except Exception as e:  # noqa: BLE001
+                st.session_state["jira_publish_result"] = {"error": str(e)}
+    _pub = st.session_state.get("jira_publish_result")
+    if _pub:
+        if _pub.get("error"):
+            st.error(f"Jira publish failed: {_pub['error']}")
+        else:
+            _c = _pub["counts"]
+            st.success(f"Created {_c['epics']} epic(s), {_c['stories']} story(ies), "
+                       f"{_c['subtasks']} sub-task(s) in {_pub['project']}.")
+            for _it in _pub["created"]:
+                if _it["level"] in ("epic", "story"):
+                    _pad = "" if _it["level"] == "epic" else "&nbsp;&nbsp;&nbsp;&nbsp;↳ "
+                    st.markdown(f'{_pad}<a href="{_it["url"]}" target="_blank">{_it["key"]}</a> — {_it["summary"]}',
+                                unsafe_allow_html=True)
+
+
+# ---- Header + adaptive top-right nav ----
+_result_exists = bool(st.session_state.get("result"))
+_hdr_left, _hdr_right = st.columns(([5, 5] if _result_exists else [6, 3]),
+                                   vertical_alignment="center")
+with _hdr_left:
+    st.markdown(
+        '<div class="app-header">'
+        '<span class="app-mark">◆</span>'
+        '<div><div class="app-title">Synthesize epics, stories and tasks</div>'
+        '<div class="app-tagline">'
+        "Turn a meeting transcript, an architecture wiki, and your live backlog into an "
+        "audited, conflict-checked sprint backlog — in one ~30-second multi-agent pass."
+        "</div></div></div>",
+        unsafe_allow_html=True,
+    )
+with _hdr_right:
+    _navs = [("home", "⌂ Home"), ("history", "⌕ History"), ("help", "❓ Help")]
+    if _result_exists:
+        _navs += [("export", "↓ Export"), ("jira", "⤴ Jira")]
+    _nav_cols = st.columns(len(_navs))
+    _nav_clicked: dict[str, bool] = {}
+    for _col, (_key, _label) in zip(_nav_cols, _navs):
+        with _col:
+            _nav_clicked[_key] = st.button(_label, key=f"nav_{_key}", use_container_width=True)
+
+if _nav_clicked.get("home"):
+    for _k in ("result", "run_dir", "dry_run_result", "jira_publish_result"):
+        st.session_state[_k] = None
+    st.rerun()
+if _nav_clicked.get("history"):
+    show_run_history_dialog()
+if _nav_clicked.get("help"):
+    show_how_it_works_dialog()
+if _nav_clicked.get("export"):
+    show_export_dialog()
+if _nav_clicked.get("jira"):
+    show_jira_dialog()
 
 _pipeline_placeholder = st.empty()
 _progress_placeholder = st.empty()
@@ -1722,13 +1883,20 @@ with _pipeline_placeholder.container():
 
 # -------------------------------------------------------- run handler
 
-def _read_uploaded_text(uploaded) -> str:
+def _as_upload_list(uploaded) -> list:
+    """Normalise the uploader return (None / single / list) to a clean list."""
     if uploaded is None:
-        return ""
+        return []
+    if isinstance(uploaded, list):
+        return [u for u in uploaded if u is not None]
+    return [uploaded]
+
+
+def _read_one_text(uploaded) -> str:
     name = uploaded.name
     suffix = Path(name).suffix.lower()
     if suffix == ".pdf":
-        tmp = ROOT / "logs" / f"_upload_{int(time.time())}_{name}"
+        tmp = ROOT / "logs" / f"_upload_{int(time.time() * 1000)}_{name}"
         tmp.parent.mkdir(parents=True, exist_ok=True)
         tmp.write_bytes(uploaded.getvalue())
         try:
@@ -1738,21 +1906,70 @@ def _read_uploaded_text(uploaded) -> str:
     return uploaded.getvalue().decode("utf-8", errors="replace")
 
 
+def _read_uploaded_text(uploaded) -> str:
+    """Read one or more uploaded text/pdf files into a single string.
+
+    Multiple files are concatenated with a labelled separator so the Parser
+    sees one combined source while still being able to tell the documents
+    apart (e.g. several meeting transcripts, or a transcript + a Slack export)."""
+    files = _as_upload_list(uploaded)
+    if not files:
+        return ""
+    if len(files) == 1:
+        return _read_one_text(files[0])
+    parts = [f"===== {f.name} =====\n{_read_one_text(f)}" for f in files]
+    return "\n\n".join(parts)
+
+
 def _read_uploaded_tickets(uploaded) -> list[dict]:
-    if uploaded is None:
-        return []
-    raw = uploaded.getvalue().decode("utf-8", errors="replace")
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise InputError(f"Backlog JSON parse error: {e}") from e
-    if not isinstance(data, list):
-        raise InputError("Backlog JSON must be a list of ticket objects.")
-    return data
+    """Read and MERGE tickets from one or more uploaded JSON backlog files.
+
+    Each file may be a list of tickets or a `{"items": [...]}` wrapper.
+    All tickets across files are concatenated into one backlog."""
+    merged: list[dict] = []
+    for f in _as_upload_list(uploaded):
+        raw = f.getvalue().decode("utf-8", errors="replace")
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise InputError(f"Backlog JSON parse error in {f.name}: {e}") from e
+        if isinstance(data, dict) and isinstance(data.get("items"), list):
+            data = data["items"]
+        if not isinstance(data, list):
+            raise InputError(f"Backlog JSON in {f.name} must be a list of tickets (or an {{\"items\": [...]}} object).")
+        merged.extend(data)
+    return merged
 
 
-if history_btn:
-    show_run_history_dialog()
+def _resolve_text(selected, options: dict, uploaded):
+    """Combine all selected sample docs + any uploaded files into one text
+    source. Returns (combined_text, [source_names]). Multiple sources are
+    concatenated with a labelled separator so the Parser can still tell them
+    apart; a single source is returned as-is."""
+    pairs: list[tuple[str, str]] = []  # (name, text)
+    for lbl in (selected or []):
+        val = options.get(lbl)
+        if val and val != "__upload__":
+            pairs.append((Path(str(val)).name, load_text(str(val))))
+    for f in _as_upload_list(uploaded):
+        pairs.append((f.name, _read_one_text(f)))
+    if not pairs:
+        return "", []
+    if len(pairs) == 1:
+        return pairs[0][1], [pairs[0][0]]
+    combined = "\n\n".join(f"===== {n} =====\n{t}" for n, t in pairs)
+    return combined, [n for n, _ in pairs]
+
+
+def _resolve_tickets(selected, options: dict, uploaded) -> list[dict]:
+    """Merge tickets from all selected sample backlogs + uploaded JSON files."""
+    merged: list[dict] = []
+    for lbl in (selected or []):
+        val = options.get(lbl)
+        if val and val != "__upload__":
+            merged.extend(load_tickets(str(val)))
+    merged.extend(_read_uploaded_tickets(uploaded))
+    return merged
 
 
 # The sidebar Synthesize button and the home-screen ANALYZE button both
@@ -1763,30 +1980,26 @@ _main_canvas_run = bool(st.session_state.pop("_pending_run", False))
 
 if run_clicked or _main_canvas_run:
     # ---- Resolve inputs ----
+    # Each picker is multi-select: combine every chosen sample (+ uploads)
+    # into one source. Transcripts/wikis are concatenated; backlogs merged.
     try:
-        t_choice_val = TRANSCRIPT_OPTIONS[transcript_choice]
-        if t_choice_val == "__upload__":
-            transcript_text = _read_uploaded_text(transcript_upload)
-            source_label = transcript_upload.name if transcript_upload else "(uploaded)"
+        transcript_text, _t_names = _resolve_text(
+            transcript_choice, TRANSCRIPT_OPTIONS, transcript_upload)
+        if not _t_names:
+            source_label = "(uploaded)"
+        elif len(_t_names) == 1:
+            source_label = _t_names[0]
         else:
-            transcript_text = load_text(str(t_choice_val))
-            source_label = Path(t_choice_val).name
+            source_label = (
+                f"{len(_t_names)} sources: " + ", ".join(_t_names[:3])
+                + ("…" if len(_t_names) > 3 else "")
+            )
 
-        c_choice_val = CONSTRAINTS_OPTIONS[constraints_choice]
-        if c_choice_val == "__upload__":
-            constraint_text = _read_uploaded_text(constraints_upload)
-        elif c_choice_val == "":
-            constraint_text = ""
-        else:
-            constraint_text = load_text(str(c_choice_val))
+        constraint_text, _ = _resolve_text(
+            constraints_choice, CONSTRAINTS_OPTIONS, constraints_upload)
 
-        b_choice_val = BACKLOG_OPTIONS[backlog_choice]
-        if b_choice_val == "__upload__":
-            existing_tickets = _read_uploaded_tickets(backlog_upload)
-        elif b_choice_val == "":
-            existing_tickets = []
-        else:
-            existing_tickets = load_tickets(str(b_choice_val))
+        existing_tickets = _resolve_tickets(
+            backlog_choice, BACKLOG_OPTIONS, backlog_upload)
     except InputError as e:
         st.error(f"Could not load inputs: {e}")
         st.stop()
@@ -1841,6 +2054,19 @@ if run_clicked or _main_canvas_run:
     # Per-stage start timestamps so completed/failed events can report
     # how long the stage actually took. Reset on every pipeline run.
     stage_started_at: dict[int, float] = {}
+    # Running log of every agent event. We APPEND to this (rather than
+    # overwriting the placeholder per event) so each agent's lines stay
+    # visible as the next stage runs.
+    progress_log: list[str] = []
+    # Track failovers / failures so we can show an end-of-run summary, a toast,
+    # and a persistent badge — nothing changes provider silently.
+    _events_seen = {"failover": [], "failed": []}
+
+    def _render_log():
+        _progress_placeholder.markdown(
+            '<div class="progress-log">' + "".join(progress_log) + "</div>",
+            unsafe_allow_html=True,
+        )
 
     def _on_progress(stage_index: int, stage_name: str, event: str, detail: str):
         now = time.perf_counter()
@@ -1853,6 +2079,14 @@ if run_clicked or _main_canvas_run:
             stage_states[stage_index] = "failed"
         elif event == "skipped":
             stage_states[stage_index] = "skipped"
+        elif event == "failover":
+            stage_states[stage_index] = "active"  # still working, just on the other provider
+
+        pretty_name = stage_name.replace("_", " ").title()
+        if event == "failover":
+            _events_seen["failover"].append(pretty_name)
+        elif event == "failed":
+            _events_seen["failed"].append(pretty_name)
 
         # Build an "elapsed" suffix once the stage finishes so reviewers
         # can see which agent dominates wall time.
@@ -1862,15 +2096,20 @@ if run_clicked or _main_canvas_run:
             elapsed_suffix = f" · {secs:.1f}s"
 
         st.session_state["current_stage"] = stage_index
-        pretty_name = stage_name.replace("_", " ").title()
-        line = (
-            f'<div class="progress-status">'
-            f'<strong>{pretty_name.upper()}</strong>{_esc(event)}'
+        icon = {"started": "▸", "completed": "✓", "failed": "✗",
+                "skipped": "–", "failover": "⚠"}.get(event, "·")
+        evt_label = "FAILOVER" if event == "failover" else _esc(event)
+        entry = (
+            f'<div class="log-line log-{_esc(event)}">'
+            f'<span class="log-icon">{icon}</span>'
+            f'<strong>{_esc(pretty_name)}</strong> '
+            f'<span class="log-evt">{evt_label}</span>'
             f'{(" · " + _esc(detail)) if detail else ""}{elapsed_suffix}</div>'
         )
+        progress_log.append(entry)
         with _pipeline_placeholder.container():
             _render_pipeline(stage_states=stage_states)
-        _progress_placeholder.markdown(line, unsafe_allow_html=True)
+        _render_log()
 
     # First-run model download — sentence-transformers downloads ~80MB on
     # first use. Pre-warm the embedding tool inside a spinner so the user
@@ -1904,10 +2143,17 @@ if run_clicked or _main_canvas_run:
     # without the image rather than failing.
     _vision_atts = None
     _vision_files = st.session_state.get("vision_uploads") or []
-    if _vision_files:
+    _vision_sample_labels = st.session_state.get("vision_samples") or []
+    if _vision_files or _vision_sample_labels:
         try:
             from tools.base import VisionAttachment
             _vision_atts = []
+            # Bundled sample images selected directly from the dropdown.
+            for _lbl in _vision_sample_labels:
+                _p = VISION_SAMPLE_OPTIONS.get(_lbl)
+                if _p:
+                    _vision_atts.append(VisionAttachment.from_path(_p))
+            # Plus any user uploads.
             for f in _vision_files:
                 _vision_atts.append(
                     VisionAttachment.from_bytes(
@@ -1916,6 +2162,8 @@ if run_clicked or _main_canvas_run:
                         label=getattr(f, "name", "upload"),
                     )
                 )
+            if not _vision_atts:
+                _vision_atts = None
         except Exception as e:  # noqa: BLE001
             st.warning(f"Skipping vision attachments: {e}")
             _vision_atts = None
@@ -1940,6 +2188,7 @@ if run_clicked or _main_canvas_run:
                 live_confluence_page_id=_live_conf_pid or None,
                 live_jira=_use_live_jira,
                 vision_attachments=_vision_atts,
+                auto_switch=bool(st.session_state.get("auto_switch")),
             )
             # Surface the primary result through the normal render path;
             # the secondary + comparison ride along in session state and
@@ -1959,6 +2208,7 @@ if run_clicked or _main_canvas_run:
                 live_confluence_page_id=_live_conf_pid or None,
                 live_jira=_use_live_jira,
                 vision_attachments=_vision_atts,
+                auto_switch=bool(st.session_state.get("auto_switch")),
             )
     except Exception as e:
         _progress_placeholder.error(f"Pipeline failed: {e}")
@@ -1981,10 +2231,32 @@ if run_clicked or _main_canvas_run:
             token_usage=result.get("token_usage"),
             models_per_stage=result.get("models") or st.session_state.models,
         )
-    _progress_placeholder.markdown(
-        f'<div class="progress-status">{summary_tag}</div>',
-        unsafe_allow_html=True,
-    )
+    progress_log.append(f'<div class="log-line log-done"><span class="log-icon">✓</span>{summary_tag}</div>')
+
+    # ---- Failover / failure summary (so nothing is missed) ----
+    _fo = _events_seen["failover"]
+    _fl = _events_seen["failed"]
+    st.session_state["failover_count"] = len(_fo)
+    st.session_state["failed_count"] = len(_fl)
+    if _fo:
+        progress_log.append(
+            '<div class="log-line log-failover"><span class="log-icon">⚠</span>'
+            f'<strong>Provider failover</strong> · {len(_fo)} stage(s) switched provider: '
+            f'{_esc(", ".join(_fo))}</div>'
+        )
+    if _fl:
+        progress_log.append(
+            '<div class="log-line log-failed"><span class="log-icon">✗</span>'
+            f'<strong>Failed</strong> · {len(_fl)} stage(s): {_esc(", ".join(_fl))}</div>'
+        )
+    _render_log()
+    try:
+        if _fl:
+            st.toast(f"⚠ {len(_fl)} stage(s) failed: {', '.join(_fl)}", icon="⚠️")
+        elif _fo:
+            st.toast(f"⚠ {len(_fo)} stage(s) failed over to the other provider", icon="⚠️")
+    except Exception:  # noqa: BLE001 — toast is best-effort
+        pass
 
     # ---- Persist outputs ----
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -2201,6 +2473,18 @@ else:
     )
 
     _render_kpis(result)
+
+    # Persistent failover / failure badge so it's visible even after the live
+    # log scrolls away (the audit trail has the full detail).
+    _fo_n = int(st.session_state.get("failover_count") or 0)
+    _fl_n = int(st.session_state.get("failed_count") or 0)
+    if _fo_n or _fl_n:
+        _bits = []
+        if _fl_n:
+            _bits.append(f"✗ {_fl_n} stage(s) failed")
+        if _fo_n:
+            _bits.append(f"⚠ {_fo_n} stage(s) failed over to the other provider")
+        st.warning(" · ".join(_bits) + " — see the **Audit trail** tab for details.")
 
     # ---- Compare-mode banner ----
     # When the run was a compare, surface the side-by-side metrics
@@ -2474,3 +2758,62 @@ else:
             st.caption(f"All three artifacts also live on the server under `{rel}/`.")
         except ValueError:
             pass
+
+    # ---- Create in Jira (live write-back) — closes the loop end-to-end ----
+    st.markdown("### Create in Jira")
+    _jira_ready = bool(
+        os.environ.get("JIRA_BASE_URL") and os.environ.get("JIRA_EMAIL")
+        and os.environ.get("JIRA_API_TOKEN") and os.environ.get("JIRA_PROJECT_KEY")
+    )
+    if not _jira_ready:
+        st.caption(
+            "Set `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` / `JIRA_PROJECT_KEY` in "
+            "`.env` to push this synthesis into a live Jira project as Epic → Story → Sub-task."
+        )
+    else:
+        _proj = os.environ.get("JIRA_PROJECT_KEY")
+        _c1, _c2 = st.columns([1, 1])
+        with _c1:
+            _subtasks = st.checkbox("Also create sub-tasks", value=True, key="jira_subtasks")
+        with _c2:
+            _go = st.button(
+                f"⤴  Create in Jira ({_proj})",
+                type="primary", use_container_width=True, key="jira_publish_btn",
+            )
+        st.caption(
+            "Writes real issues to your live Jira project — Epics → Stories → Sub-tasks, with "
+            "acceptance criteria, priority, and conflict flags in each description."
+        )
+        if _go:
+            with st.spinner(f"Creating issues in {_proj}…"):
+                try:
+                    from tools.jira_tool import JiraTool
+                    st.session_state["jira_publish_result"] = JiraTool(mode="live").publish_synthesis(
+                        result, create_subtasks=_subtasks,
+                    )
+                except Exception as e:  # noqa: BLE001 — surface, never crash the page
+                    st.session_state["jira_publish_result"] = {"error": str(e)}
+
+        _pub = st.session_state.get("jira_publish_result")
+        if _pub:
+            if _pub.get("error"):
+                st.error(f"Jira publish failed: {_pub['error']}")
+            else:
+                _cnt = _pub["counts"]
+                st.success(
+                    f"Created {_cnt['epics']} epic(s), {_cnt['stories']} story(ies), "
+                    f"{_cnt['subtasks']} sub-task(s) in project {_pub['project']}."
+                )
+                _links = []
+                for _it in _pub["created"]:
+                    if _it["level"] in ("epic", "story"):
+                        _pad = "" if _it["level"] == "epic" else "&nbsp;&nbsp;&nbsp;&nbsp;↳ "
+                        _links.append(
+                            f'{_pad}<a href="{_it["url"]}" target="_blank">{_it["key"]}</a> — {_it["summary"]}'
+                        )
+                if _links:
+                    st.markdown("<br>".join(_links), unsafe_allow_html=True)
+                if _pub.get("errors"):
+                    with st.expander(f"{len(_pub['errors'])} item(s) needed a fallback / were skipped"):
+                        for _e in _pub["errors"]:
+                            st.write("• " + _e)

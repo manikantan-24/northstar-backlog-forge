@@ -152,12 +152,12 @@ def test_orchestrator_redacts_inputs_when_redact_pii_is_true():
             captured_prompts.append(user_message)
             self.calls += 1
             # Return a minimal valid response for whichever agent is calling
-            if "extract the **distinct topics**" in user_message:
+            if "extract the distinct topics" in user_message:
                 return ({"summary": "S", "topics": [
                     {"theme": "x", "summary": "x", "raw_quote": "q",
                      "speaker": "[NAME_1]", "sentiment": "neutral"}
                 ]}, {"input_tokens": 10, "output_tokens": 20})
-            if "extract the **architectural constraints**" in user_message:
+            if "extract the architectural constraints" in user_message:
                 return ({"constraints": []}, {"input_tokens": 5, "output_tokens": 5})
             if "draft well-formed user stories" in user_message:
                 return ({"stories": []}, {"input_tokens": 5, "output_tokens": 5})

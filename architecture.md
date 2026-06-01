@@ -63,7 +63,7 @@ flowchart TB
 | **Constraint Extractor** | Pull architectural constraints, integrations, and platform rules from wiki / Confluence content | Confluence-style markdown | List of `constraint` records (must / should / forbidden) | `claude_tool`, `confluence_tool` |
 | **Story Writer** | Draft user stories with Given/When/Then acceptance criteria for each topic | Topics from Parser, constraints from Constraint Extractor | List of `story` records | `claude_tool` |
 | **Epic Decomposer** | Group stories into epics; break each story into 3-7 concrete tasks | Stories from Story Writer | Tree of `epic → stories → tasks` | `claude_tool` |
-| **Gap Detector** | Compare new stories against existing backlog and constraints to find duplicates, conflicts, and gaps | Stories + epics + constraints + existing tickets | Lists of `duplicate`, `conflict`, `gap` records with confidence | `claude_tool`, `jira_tool`, `github_tool` |
+| **Gap Detector** | Find conflicts (vs. constraints) and gaps via the LLM; duplicates are detected separately by local embedding similarity | Stories + constraints + existing tickets | Lists of `duplicate` (from embeddings), `conflict`, `gap` records | `claude_tool`, `embedding_tool`, `jira_tool`, `github_tool` |
 
 Each agent runs independently. The orchestrator chains them in this order, blocking on the previous agent's memory writes before invoking the next.
 

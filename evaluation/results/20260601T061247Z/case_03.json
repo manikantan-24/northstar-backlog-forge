@@ -1,0 +1,83 @@
+{
+  "case_id": "case_03",
+  "description": "Mobile team Slack standup rollup. Tests robustness: the transcript mixes real product asks with off-topic chatter (lunch, music, vacation). Should produce stories about search ranking + Apple Pay POS, ignore the chatter. Expect a duplicate against NS-251 (search purchase-history ranking) and NS-243 (Apple Pay / Google Pay at POS).",
+  "deterministic_average": 0.8333333333333334,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 5 stories in [2, 6]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "5/5 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "2/2 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "0 forbidden topic violations of 3 checked"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 0.0,
+      "observations": [
+        "0/2 expected duplicates found",
+        "Expected duplicate (['search', 'ranking', 'purchase history'] \u2194 NS-251) not found at confidence \u2265 high",
+        "Expected duplicate (['apple pay', 'google pay', 'pos'] \u2194 NS-243) not found at confidence \u2265 medium"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 3,
+      "story_granularity": 3,
+      "tag_accuracy": 4,
+      "conflict_reasoning": 5
+    },
+    "reasons": {
+      "ac_quality": "Most criteria are concrete and testable with clear Given/When/Then structure, though ST-01's '2 percentage point decrease' criterion is measurable but may be difficult to attribute causally within the two-week window.",
+      "priority_justification": "ST-01 and ST-02 provide solid quantitative justification (4% abandonment increase, 12% relevance improvement), but ST-03/ST-04 rationales are somewhat circular ('parity feature... should be implemented simultaneously') and ST-05's 'UI polish' reasoning is vague about impact.",
+      "story_granularity": "ST-01 is appropriately sized as a single mobile feature, but ST-03 and ST-04 are nearly identical POS stories that should likely be combined (they share firmware partner dependency and differ only by wallet provider), creating artificial decomposition.",
+      "tag_accuracy": "Tags are generally appropriate and consistent (mobile-app, pos, payments, loyalty), though the guardrail findings correctly note non-canonical tags like 'checkout', 'hardware', 'ui' that should be standardized.",
+      "conflict_reasoning": "No conflicts were flagged and correctly so\u2014all stories explicitly reference the PaymentGateway constraint (C-05) in their descriptions and none violate the stated architectural rules."
+    },
+    "overall_comment": "This is a well-structured synthesis with strong traceability from topics to stories and mostly testable acceptance criteria. The main weaknesses are splitting Apple Pay and Google Pay POS work into separate stories (ST-03/ST-04) when they share identical infrastructure dependencies, and some hand-wavy priority justifications for lower-priority items that lean on generic benefits rather than quantified business impact.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.5,
+      "story_granularity": 0.5,
+      "tag_accuracy": 0.75,
+      "conflict_reasoning": 1.0
+    },
+    "average_normalized": 0.7
+  },
+  "synthesis_summary": {
+    "epic_count": 3,
+    "story_count": 5,
+    "duplicates": 4,
+    "conflicts": 0,
+    "gaps": 3
+  }
+}

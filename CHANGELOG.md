@@ -13,7 +13,7 @@ The format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - **Confluence write capability** — `ConfluenceTool.create_page` + `scripts/seed_confluence.py` push the sample wiki content (`samples/architecture_constraints.md`, `samples/product_strategy.md`) into a real space. Used to seed the demo environment.
 - **Persistent vector store** — `MemoryStore` writes embedding vectors and KV state to `.cache/memory/` keyed by corpus hash, so re-runs on the same backlog skip the embed step. Toggle via `MEMORY_PERSISTENT=1` or the constructor.
 - **Strict PII redaction mode** — `assert_redacted()` + `StrictRedactionViolation` halt the run if any PII pattern slips past the redactor at a tool boundary. Audit-logged.
-- **Story evidence** — every story carries a structured `evidence` block linking back to the parser-extracted source quote. Rendered inline in the Epics tab as a blockquote with speaker attribution.
+- **Story evidence** — every story carries a structured `evidence` block linking back to its source topic quote. Evidence is attached deterministically by the system from the cited `source_topic_id` (not produced by the model, so it can't be hallucinated). Rendered inline in the Epics tab as a blockquote with speaker attribution.
 - **LLM-as-judge evaluation** — the previously-stubbed `evaluation/llm_as_judge.py` is now fully wired into `run_evaluation.py` via `--use-llm-judge`. Scores normalised to [0, 1] across five qualitative dimensions.
 - **Regression dashboard** — `evaluation/dashboard.py` aggregates results across runs and surfaces cases whose deterministic score dropped ≥ 0.10 vs. the previous run.
 - **A/B prompt comparison** — `evaluation/ab_compare.py` swaps a candidate prompt in, runs the golden suite, then restores the original. Per-case deltas + verdict.
@@ -33,6 +33,36 @@ The format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - `Orchestrator.run` accepts `strict_redact`, `persistent_memory`, `live_confluence_page_id`, `live_jira`, `vision_image_path`, and `compare_models` kwargs without breaking the existing default-args contract.
 - `requirements.txt` adds `requests`, `pandas` (for cost-panel charts), and annotates `chromadb` / `pypdf` for clarity.
 - Streamlit CSS extended with empty-state + main-CTA + stage-animation rules. Existing classes preserved.
+- **Prompts V2** — all six prompt files rewritten for consistency and robustness: a single `id` field on every artifact (no `topic_id`/`epic_id` drift); explicit modal-verb→severity mapping in the Constraint Extractor; story `evidence` removed from the model's output (now system-attached); the Gap Detector scoped to conflicts + gaps only (duplicates are embeddings-only) with gaps gaining `id` + `related_ids`; re-added worked examples to the Story Writer and Gap Detector. Mocked-test fixtures re-anchored to stable prompt phrases.
+
+### Fixed
+- **case_07 (conflict-heavy) regression** — the Parser was dropping requests that were *blocked by a constraint* (it read "PCI forbids that" as the team declining), so conflict-heavy meetings produced zero stories. The Parser prompt now distinguishes "declined" (skip) from "blocked" (keep). case_07 went from 0.33 / 0.00 to 1.00 / 0.90 (deterministic / LLM-judge).
+- **Epic Decomposer evidence example** corrected to the real attached shape, preventing the model from "normalizing" evidence and dropping fields.
+- Gap Detector now backstops sequential `G-NN` ids, consistent with the other agents.
+
+### Evaluation
+- Full golden re-run committed at `evaluation/results/20260601T061247Z/` — deterministic **0.88**, LLM-judge **0.72** across 10 cases (post-fix, V2 prompts). The earlier `20260528T154409Z/` run (0.80 / 0.53) is retained as the pre-fix baseline.
+- **Single-prompt baseline** — `evaluation/single_prompt_baseline.py` runs one mega-prompt over the same 10 golden cases for an honest A/B (committed: ~0.84 / 0.86). The honest read: comparable quality on small inputs; the multi-agent edge is structural + duplicate-detection.
+
+### Added — Jira write-back (closes the loop)
+- **`JiraTool.create_issue()` + `JiraTool.publish_synthesis()`** create the synthesized backlog in live Jira as **Epic → Story → Sub-task** (acceptance criteria, priority, conflict flags in each description). Progressive fallback (drops `parent`, then `labels`, then issue type) handles differing project configs; partial failures are recorded, not fatal.
+- **CLI:** `--publish-jira` / `--no-jira-subtasks` in `src/main.py`.
+- **UI:** a **⤴ Create in Jira** button + dialog showing the created issues as clickable links.
+- 6 new tests in `tests/test_jira_live.py` (create, fallback, publish, partial-failure). **Total now 128 tests.**
+
+### Added — resilience & vision
+- **Provider failover** — `Orchestrator.run(auto_switch=...)`: if a stage's provider fails after retries, it retries on the other provider (Claude↔Gemini). Surfaced as an amber **⚠ FAILOVER** live-log line + a `provider_failover` audit event.
+- **Vision auto-switch** — when an image is attached and the Parser is a Gemini model (whose wrapper can't carry images), the Parser is switched to `claude-sonnet-4-5` so the image is actually read.
+- Both are gated by a sidebar **"Auto-switch model"** toggle (default off → exact preset honoured; on → failover + vision-switch, every switch shown in the log/audit).
+- **Whiteboard vision sample** — `samples/whiteboard_sprint_planning.png` (generated by `scripts/make_whiteboard_sample.py`), selectable directly in the vision picker.
+
+### Added — UI/UX
+- **Multi-select sources** — the transcript / wiki / backlog pickers are `st.multiselect`; multiple bundled samples are combined into one source (transcripts/wikis concatenated, backlogs merged).
+- **Always-visible multi-file upload** — each picker has an "Upload your own" expander accepting multiple files; uploads + samples are merged.
+- **Top-right nav** — Home / History / Help (always) + Export / Create-in-Jira (after a run); a "How it works" dialog.
+- **Accumulating live log** — per-agent events now append (each agent's lines persist) instead of overwriting, with an end-of-run summary, a toast, and a persistent failover/failure banner.
+- **Accenture branding** — sidebar wordmark + a "demo on mock data · fictional client NorthStar Retail" footer; cyan primary colour; subtle multi-select chips.
+- **Tooling** — a `Makefile` (`make help/test/demo/ui/eval/…`) and captured UI screenshots under `docs/screenshots/` (referenced by the README Demo section).
 
 ### Documentation
 - `README.md` — new "Optional capabilities" section, evaluation usage, A/B compare instructions.
@@ -65,20 +95,21 @@ The format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ---
 
-## v1 — baseline single-agent (`versions/v1_baseline/`)
+## v1 — earlier multi-agent snapshot (`versions/v1_baseline/`)
 
-### Added
-- Single LLM call processes the entire input (transcript + wiki + backlog) into a synthesis
-- File-based input loader (txt, md, pdf, json)
-- Output formatter writing `synthesis.json` + `synthesis.md`
+This is a frozen earlier snapshot of the **same five-agent architecture** (Parser → Constraint Extractor → Story Writer → Epic Decomposer → Gap Detector, with `memory/` and `audit_log.py`). It is *not* a single-agent system — the name is historical. For a genuine single-mega-prompt comparison, see `evaluation/single_prompt_baseline.py` and Appendix D of `docs/TECHNICAL_DOCUMENT.md`.
+
+### Present in this snapshot
+- The full five-agent pipeline, shared `MemoryStore`, and append-only `AuditLog`
+- File-based input loader (txt, md, pdf, json); JSON + Markdown output formatter
 - Sample data: NorthStar Retail Q3 meeting transcript, architecture constraints wiki, 30-ticket Jira backlog
 - 4 golden cases with deterministic metrics
 
-### Limitations (closed in v2)
-- No memory between processing stages — the model re-derived everything from the prompt on every call
-- No audit log — only the final synthesis was inspectable
-- No tag canonicalisation — tags drifted between runs
-- No conflict detection between new stories and architecture constraints
+### What it lacks vs. the current build (added later)
+- Live Jira / Confluence integration, Confluence write-back, and one-token auth promotion
+- Vision input, compare-mode, persistent vector cache, strict PII redaction
+- Output guardrails, LLM-as-judge, regression dashboard, A/B prompt comparison, 6 extra golden cases
+- The V2 prompts (single-`id` schema, system-attached evidence, embeddings-only duplicates)
 
 ---
 

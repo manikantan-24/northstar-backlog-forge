@@ -1,0 +1,81 @@
+{
+  "case_id": "case_08",
+  "description": "Highly ambiguous customer panel transcript. The system must produce very few, well-grounded stories (ideally just mobile-checkout-perf) rather than over-extracting from vague hedges.",
+  "deterministic_average": 1.0,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 1 stories in [1, 3]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "1/1 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "1/1 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "0 forbidden topic violations of 2 checked"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 1.0,
+      "observations": [
+        "No expected duplicates"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 5,
+      "story_granularity": 5,
+      "tag_accuracy": 4,
+      "conflict_reasoning": 5
+    },
+    "reasons": {
+      "ac_quality": "The acceptance criteria are mostly concrete and testable with specific metrics (p95 < 1.5s, 1000+ sessions, 7 days), though the final criterion about closing or drafting follow-up work is slightly procedural rather than observable.",
+      "priority_justification": "The priority rationale explicitly addresses the tension between vague customer feedback and the critical nature of the checkout path, providing clear reasoning for Medium priority with specific references to constraint C-01 and absence of quantitative impact data.",
+      "story_granularity": "The story is appropriately scoped as a single investigation deliverable with clear boundaries: instrument, measure, analyze, and decide\u2014neither too broad nor split into micro-tasks.",
+      "tag_accuracy": "Tags are relevant and drawn from a consistent technical vocabulary (mobile-app, performance, analytics), though the guardrail correctly flags 'checkout' as non-canonical, suggesting minor vocabulary drift.",
+      "conflict_reasoning": "No conflicts are flagged and none should be\u2014the story aligns with C-01 (cart-load performance), references it correctly, and the investigation approach doesn't violate any constraints."
+    },
+    "overall_comment": "This is a well-crafted backlog synthesis that demonstrates excellent judgment in handling weak customer signals. The story appropriately frames an investigation rather than jumping to solutions, with clear acceptance criteria, thoughtful prioritization, and good constraint awareness, though minor tag vocabulary standardization would improve consistency.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 1.0,
+      "story_granularity": 1.0,
+      "tag_accuracy": 0.75,
+      "conflict_reasoning": 1.0
+    },
+    "average_normalized": 0.9
+  },
+  "synthesis_summary": {
+    "epic_count": 1,
+    "story_count": 1,
+    "duplicates": 0,
+    "conflicts": 0,
+    "gaps": 2
+  }
+}

@@ -1,0 +1,734 @@
+{
+  "summary": "Q3 strategy document defining five customer-experience initiatives across POS, pharmacy, mobile search, loyalty, and store hardware. Three P0 items must ship by end of Q3; two P1 items are stretch goals. Document requests engineering to synthesize into structured backlog, cross-check existing work, and surface gaps and conflicts.",
+  "topics": [
+    {
+      "id": "T-01",
+      "theme": "pos-offline-resilience",
+      "summary": "POS lanes become completely unavailable during WAN outages, blocking even cash transactions. Three Houston stores lost an estimated $42K in direct revenue during a 40-minute outage in March. Request is to keep cash sales, gift card redemption, and small returns functioning offline while keeping card sales online-only per PCI.",
+      "raw_quote": "When a store's WAN connection drops, the lane cannot process any transaction \u2014 not even cash. Three Houston-cluster stores were down for 40 minutes during a Saturday afternoon rush in March. Estimated direct revenue loss: $42K across the three stores.",
+      "speaker": "Priya Rao",
+      "sentiment": "request"
+    },
+    {
+      "id": "T-02",
+      "theme": "pharmacy-refill-unification",
+      "summary": "Mobile app and IVR refill requests write to separate systems with no real-time reconciliation, causing customers to arrive expecting prescriptions that aren't ready. The pharmacy help line spends 18% of its volume disambiguating status. Request is to unify both channels to write to Rx Hub with HIPAA-compliant status notifications.",
+      "raw_quote": "Customers can request a refill via the mobile app OR by calling the IVR phone line. These two intake channels write to different systems with no real-time reconciliation. Customers regularly arrive at the pharmacy expecting their prescription is ready when it isn't, or vice versa.",
+      "speaker": "Priya Rao",
+      "sentiment": "request"
+    },
+    {
+      "id": "T-03",
+      "theme": "mobile-search-local-inventory",
+      "summary": "Mobile app search does not factor local inventory, leading customers to drive to stores for items that are actually out of stock. NPS for affected customers is -30 versus +18 for unaffected customers. Request is to rerank results by home store availability and surface in-stock alternatives inline when top results are unavailable locally.",
+      "raw_quote": "Search ranking does not factor local inventory. Customers search at home, see in-stock results, drive to the store, find them missing, and leave frustrated. NPS for customers who hit this is -30; for customers who don't it's +18.",
+      "speaker": "Priya Rao",
+      "sentiment": "request"
+    },
+    {
+      "id": "T-04",
+      "theme": "loyalty-tier-progress-transparency",
+      "summary": "Customers do not understand loyalty tier earning and downgrade rules. Request is to add a tier progress view in mobile app showing current points, distance to next tier, and next evaluation date to reduce customer support contacts about downgrades.",
+      "raw_quote": "Customers don't understand the rules of tier earning and tier downgrade. We add a 'tier progress' view in the mobile app that shows current points, distance to next tier, and the date of the next evaluation.",
+      "speaker": "Priya Rao",
+      "sentiment": "request"
+    },
+    {
+      "id": "T-05",
+      "theme": "store-handheld-hardware-constraints",
+      "summary": "Existing 7-year-old store associate handhelds run Android 7, limiting new tooling capabilities. Hardware refresh approved for FY26 Q1. Request is to establish discipline requiring every new mobile-app story to declare its hardware floor and provide explicit fallbacks for legacy fleet.",
+      "raw_quote": "Our 7-year-old handheld scanners (Android 7) limit what we can build for store associates. Hardware refresh is approved for FY26 but won't ship until Q1. In Q3 we should ensure any new tooling we build is gated by hardware capability \u2014 Android 9+ for the consumer mobile app baseline, with explicit fallbacks for the legacy fleet.",
+      "speaker": "Priya Rao",
+      "sentiment": "observation"
+    },
+    {
+      "id": "T-06",
+      "theme": "offline-card-sales-blocked-by-pci",
+      "summary": "A question was raised about enabling card sales during offline mode alongside cash sales. This capability is explicitly blocked by PCI compliance requirements, which mandate card sales remain online-only. The constraint creates a gap between desired offline resilience and payment security requirements.",
+      "raw_quote": "Can we do CARD sales offline too?? \u2717 BLOCKED \u2014 PCI No card data stored locally (wiki s.4) ... Card sales remain online-only per PCI.",
+      "speaker": null,
+      "sentiment": "concern"
+    },
+    {
+      "id": "T-07",
+      "theme": "compliance-review-requirements",
+      "summary": "Cross-cutting expectation that Legal and InfoSec compliance review is mandatory for refill notifications (HIPAA), price personalization (advertising), and any new payment flow (PCI). Architecture Review Board sign-off required for deviations from engineering architecture wiki constraints.",
+      "raw_quote": "Compliance review (Legal + InfoSec) is mandatory for: refill notifications (HIPAA), price personalization (advertising), and any new payment flow (PCI). Architecture Review Board (ARB) sign-off required for any deviation from the constraints in the engineering architecture wiki.",
+      "speaker": "Priya Rao",
+      "sentiment": "observation"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "C-01",
+      "severity": "must",
+      "category": "offline",
+      "statement": "Cash sales must continue to function during WAN outages at every POS lane.",
+      "source_excerpt": "Cash sales, gift card redemption, and returns under $50 continue to function during a WAN outage at every lane.",
+      "applies_to": [
+        "pos"
+      ]
+    },
+    {
+      "id": "C-02",
+      "severity": "must",
+      "category": "offline",
+      "statement": "Gift card redemption must continue to function during WAN outages at every POS lane.",
+      "source_excerpt": "Cash sales, gift card redemption, and returns under $50 continue to function during a WAN outage at every lane.",
+      "applies_to": [
+        "pos"
+      ]
+    },
+    {
+      "id": "C-03",
+      "severity": "must",
+      "category": "offline",
+      "statement": "Returns under $50 must continue to function during WAN outages at every POS lane.",
+      "source_excerpt": "Cash sales, gift card redemption, and returns under $50 continue to function during a WAN outage at every lane.",
+      "applies_to": [
+        "pos"
+      ]
+    },
+    {
+      "id": "C-04",
+      "severity": "must",
+      "category": "security",
+      "statement": "Card sales must remain online-only per PCI requirements.",
+      "source_excerpt": "Card sales remain online-only per PCI.",
+      "applies_to": [
+        "pos"
+      ]
+    },
+    {
+      "id": "C-05",
+      "severity": "must",
+      "category": "integration",
+      "statement": "Both mobile app and IVR refill channels must write to Rx Hub as the system of record.",
+      "source_excerpt": "Both channels become writes to Rx Hub, the system of record.",
+      "applies_to": [
+        "pharmacy",
+        "mobile-app"
+      ]
+    },
+    {
+      "id": "C-06",
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Pharmacy refill notifications must be HIPAA-compliant with opt-in stored on the prescription.",
+      "source_excerpt": "HIPAA-compliant notifications only: opt-in stored on the prescription",
+      "applies_to": [
+        "pharmacy"
+      ]
+    },
+    {
+      "id": "C-07",
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Pharmacy refill notifications must be sent only to the patient's verified contact method, not household default.",
+      "source_excerpt": "sent to the patient's verified contact (not household default)",
+      "applies_to": [
+        "pharmacy"
+      ]
+    },
+    {
+      "id": "C-08",
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Pharmacy refill notification audit logs must be retained for 7 years.",
+      "source_excerpt": "audit log retained 7 years",
+      "applies_to": [
+        "pharmacy"
+      ]
+    },
+    {
+      "id": "C-09",
+      "severity": "forbidden",
+      "category": "compliance",
+      "statement": "Pricing must not be personalized based on inventory state without disclosure.",
+      "source_excerpt": "Pricing must not be personalized based on inventory state without disclosure (Legal).",
+      "applies_to": [
+        "mobile-app",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "C-10",
+      "severity": "must",
+      "category": "performance",
+      "statement": "Search operations must stay under the 800ms p95 latency budget.",
+      "source_excerpt": "Stay under the 800ms p95 search latency budget.",
+      "applies_to": [
+        "mobile-app",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "C-11",
+      "severity": "must",
+      "category": "platform",
+      "statement": "New mobile app features must declare their hardware floor and provide explicit fallbacks for the legacy Android 7 handheld fleet.",
+      "source_excerpt": "every new mobile-app-touching story must declare its hardware floor",
+      "applies_to": [
+        "mobile-app",
+        "store-associate"
+      ]
+    },
+    {
+      "id": "C-12",
+      "severity": "should",
+      "category": "platform",
+      "statement": "New mobile app tooling should target Android 9+ as the baseline.",
+      "source_excerpt": "Android 9+ for the consumer mobile app baseline, with explicit fallbacks for the legacy fleet",
+      "applies_to": [
+        "mobile-app"
+      ]
+    },
+    {
+      "id": "C-13",
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Compliance review by Legal and InfoSec is mandatory for refill notifications under HIPAA.",
+      "source_excerpt": "Compliance review (Legal + InfoSec) is mandatory for: refill notifications (HIPAA)",
+      "applies_to": [
+        "pharmacy"
+      ]
+    },
+    {
+      "id": "C-14",
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Compliance review by Legal and InfoSec is mandatory for price personalization.",
+      "source_excerpt": "Compliance review (Legal + InfoSec) is mandatory for: refill notifications (HIPAA), price personalization (advertising)",
+      "applies_to": [
+        "mobile-app",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "C-15",
+      "severity": "must",
+      "category": "compliance",
+      "statement": "Compliance review by Legal and InfoSec is mandatory for any new payment flow under PCI.",
+      "source_excerpt": "Compliance review (Legal + InfoSec) is mandatory for: refill notifications (HIPAA), price personalization (advertising), and any new payment flow (PCI).",
+      "applies_to": [
+        "pos",
+        "mobile-app",
+        "ecommerce"
+      ]
+    },
+    {
+      "id": "C-16",
+      "severity": "must",
+      "category": "other",
+      "statement": "Architecture Review Board sign-off is required for any deviation from constraints in the engineering architecture wiki.",
+      "source_excerpt": "Architecture Review Board (ARB) sign-off required for any deviation from the constraints in the engineering architecture wiki.",
+      "applies_to": [
+        "*"
+      ]
+    }
+  ],
+  "epics": [
+    {
+      "id": "EP-01",
+      "title": "Point-of-Sale Offline Resilience",
+      "description": "Enable POS lanes to handle critical transaction types during WAN outages, reducing revenue loss and customer friction while maintaining PCI compliance for payment card data.",
+      "stories": [
+        {
+          "id": "ST-01",
+          "title": "Enable offline cash sales, gift card redemption, and small returns at POS",
+          "description": "POS lanes become completely unavailable during WAN outages, blocking even cash transactions. Three Houston stores lost an estimated $42K in direct revenue during a 40-minute outage in March. This story enables cash sales, gift card redemption, and returns under $50 to function offline while keeping card sales online-only per PCI. Aligns with constraints C-01, C-02, C-03, and C-04.",
+          "user_story": "As a store associate, I want to process cash sales, gift card redemptions, and small returns during WAN outages, so that customers can complete transactions and we don't lose revenue during connectivity issues.",
+          "acceptance_criteria": [
+            "Given a WAN outage at a POS lane, when an associate attempts a cash sale, then the transaction completes successfully and is reconciled when connectivity returns.",
+            "Given a WAN outage at a POS lane, when an associate attempts a gift card redemption, then the transaction completes successfully and is reconciled when connectivity returns.",
+            "Given a WAN outage at a POS lane, when an associate attempts a return under $50, then the transaction completes successfully and is reconciled when connectivity returns.",
+            "Given a WAN outage at a POS lane, when an associate attempts a card sale, then the system displays a clear message that card sales require online connectivity per PCI requirements.",
+            "Given connectivity is restored, when offline transactions exist, then each is reconciled exactly once with full audit trail."
+          ],
+          "priority": "High",
+          "priority_rationale": "Three Houston stores lost $42K in direct revenue during a 40-minute outage, blocking customer transactions and creating operational risk during connectivity failures.",
+          "tags": [
+            "pos",
+            "offline-mode",
+            "payments",
+            "compliance"
+          ],
+          "source_topic_id": "T-01",
+          "potential_constraint_conflicts": [],
+          "evidence": [
+            {
+              "topic_id": "T-01",
+              "theme": "pos-offline-resilience",
+              "raw_quote": "When a store's WAN connection drops, the lane cannot process any transaction \u2014 not even cash. Three Houston-cluster stores were down for 40 minutes during a Saturday afternoon rush in March. Estimated direct revenue loss: $42K across the three stores.",
+              "speaker": "Priya Rao",
+              "sentiment": "request"
+            }
+          ],
+          "tasks": [
+            {
+              "title": "Implement local transaction queue with persistence for cash, gift card, and return transactions during offline mode",
+              "type": "backend",
+              "id": "ST-01-TK-01"
+            },
+            {
+              "title": "Build reconciliation service to process queued offline transactions when connectivity is restored with idempotency guarantees",
+              "type": "backend",
+              "id": "ST-01-TK-02"
+            },
+            {
+              "title": "Add POS client logic to detect WAN outage state and route eligible transaction types to offline queue",
+              "type": "frontend",
+              "id": "ST-01-TK-03"
+            },
+            {
+              "title": "Create audit trail schema and persistence layer for offline transactions with full lifecycle tracking",
+              "type": "data",
+              "id": "ST-01-TK-04"
+            },
+            {
+              "title": "Implement UI messaging to inform associates when card sales are blocked during offline mode with clear PCI rationale",
+              "type": "frontend",
+              "id": "ST-01-TK-05"
+            },
+            {
+              "title": "Build automated integration tests covering offline transaction creation, queue persistence, and post-restoration reconciliation",
+              "type": "qa",
+              "id": "ST-01-TK-06"
+            }
+          ]
+        },
+        {
+          "id": "ST-06",
+          "title": "Enable offline card sales at POS during WAN outages",
+          "description": "A question was raised about enabling card sales during offline mode alongside cash sales. This capability is explicitly blocked by C-04 (PCI compliance requires card sales remain online-only). This story is drafted to surface the requested capability and the conflict for review, as the constraint creates a gap between desired offline resilience and payment security requirements. Would require Architecture Review Board sign-off per C-16 and Legal + InfoSec compliance review per C-15 if pursued.",
+          "user_story": "As a store associate, I want to process card sales during WAN outages, so that we don't lose revenue when connectivity drops.",
+          "acceptance_criteria": [
+            "Given a WAN outage at a POS lane, when an associate attempts a card sale, then the transaction is either completed within PCI requirements or clearly rejected with an explanation.",
+            "Given card transactions are queued offline, when connectivity is restored, then each transaction is reconciled exactly once with full PCI-compliant audit trail.",
+            "Given offline card sales are enabled, when compliance review is completed, then Legal and InfoSec have approved the implementation under PCI requirements."
+          ],
+          "priority": "Low",
+          "priority_rationale": "Explicitly blocked by PCI constraint C-04 which mandates card sales remain online-only; included for visibility but not currently feasible without Architecture Review Board exception and significant compliance rework.",
+          "tags": [
+            "pos",
+            "offline-mode",
+            "payments",
+            "compliance"
+          ],
+          "source_topic_id": "T-06",
+          "potential_constraint_conflicts": [
+            "C-04"
+          ],
+          "evidence": [
+            {
+              "topic_id": "T-06",
+              "theme": "offline-card-sales-blocked-by-pci",
+              "raw_quote": "Can we do CARD sales offline too?? \u2717 BLOCKED \u2014 PCI No card data stored locally (wiki s.4) ... Card sales remain online-only per PCI.",
+              "speaker": null,
+              "sentiment": "concern"
+            }
+          ],
+          "tasks": [
+            {
+              "title": "Conduct spike to identify PCI-compliant offline card payment architectures used by other large retailers",
+              "type": "spike",
+              "id": "ST-06-TK-01"
+            },
+            {
+              "title": "Document technical requirements and compliance boundaries for offline card tokenization or store-and-forward patterns",
+              "type": "spike",
+              "id": "ST-06-TK-02"
+            },
+            {
+              "title": "Prepare Architecture Review Board proposal with compliance impact assessment and risk mitigation plan",
+              "type": "infra",
+              "id": "ST-06-TK-03"
+            },
+            {
+              "title": "Engage Legal and InfoSec for preliminary feasibility review of offline card processing under current PCI certification",
+              "type": "infra",
+              "id": "ST-06-TK-04"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EP-02",
+      "title": "Pharmacy Experience Unification",
+      "description": "Consolidate fragmented pharmacy refill channels into a single system of record to eliminate customer confusion, reduce help line load, and ensure HIPAA-compliant notifications.",
+      "stories": [
+        {
+          "id": "ST-02",
+          "title": "Unify mobile app and IVR refill requests to write to Rx Hub",
+          "description": "Mobile app and IVR refill requests currently write to separate systems with no real-time reconciliation, causing customers to arrive expecting prescriptions that aren't ready. The pharmacy help line spends 18% of its volume disambiguating status. This story unifies both channels to write to Rx Hub as the system of record with HIPAA-compliant status notifications. Must comply with C-05, C-06, C-07, C-08, C-13, and requires Legal + InfoSec compliance review before implementation.",
+          "user_story": "As a pharmacy customer, I want my refill requests from mobile app or phone to be processed in a single system, so that I receive accurate status updates and my prescription is ready when I arrive.",
+          "acceptance_criteria": [
+            "Given a customer requests a refill via mobile app, when the request is submitted, then it writes to Rx Hub as the system of record.",
+            "Given a customer requests a refill via IVR phone line, when the request is submitted, then it writes to Rx Hub as the system of record.",
+            "Given a refill request is received, when the prescription status changes, then a HIPAA-compliant notification is sent only to the patient's verified contact method (not household default) if opt-in is stored on the prescription.",
+            "Given a refill notification is sent, when the audit log is created, then it is retained for 7 years per HIPAA requirements.",
+            "Given both channels are writing to Rx Hub, when the pharmacy help line receives a status inquiry, then accurate real-time status is available from a single source."
+          ],
+          "priority": "High",
+          "priority_rationale": "The pharmacy help line spends 18% of its volume disambiguating status due to system fragmentation, creating customer frustration and operational inefficiency; requires HIPAA compliance review.",
+          "tags": [
+            "pharmacy",
+            "mobile-app",
+            "compliance"
+          ],
+          "source_topic_id": "T-02",
+          "potential_constraint_conflicts": [],
+          "evidence": [
+            {
+              "topic_id": "T-02",
+              "theme": "pharmacy-refill-unification",
+              "raw_quote": "Customers can request a refill via the mobile app OR by calling the IVR phone line. These two intake channels write to different systems with no real-time reconciliation. Customers regularly arrive at the pharmacy expecting their prescription is ready when it isn't, or vice versa.",
+              "speaker": "Priya Rao",
+              "sentiment": "request"
+            }
+          ],
+          "tasks": [
+            {
+              "title": "Refactor mobile app refill submission to write directly to Rx Hub API instead of legacy system",
+              "type": "backend",
+              "id": "ST-02-TK-01"
+            },
+            {
+              "title": "Refactor IVR refill submission to write directly to Rx Hub API instead of legacy system",
+              "type": "backend",
+              "id": "ST-02-TK-02"
+            },
+            {
+              "title": "Implement HIPAA-compliant notification service that sends status updates only to patient-verified contact methods with explicit opt-in",
+              "type": "backend",
+              "id": "ST-02-TK-03"
+            },
+            {
+              "title": "Create audit log schema with 7-year retention policy for all refill notifications and status changes",
+              "type": "data",
+              "id": "ST-02-TK-04"
+            },
+            {
+              "title": "Update pharmacy help line tools to query unified Rx Hub status endpoint for real-time prescription data",
+              "type": "frontend",
+              "id": "ST-02-TK-05"
+            },
+            {
+              "title": "Configure audit log retention policy and encryption controls to meet HIPAA 7-year requirement",
+              "type": "infra",
+              "id": "ST-02-TK-06"
+            },
+            {
+              "title": "Build regression test suite covering mobile app, IVR, and notification flows with HIPAA compliance validation",
+              "type": "qa",
+              "id": "ST-02-TK-07"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EP-03",
+      "title": "Mobile App Inventory Intelligence",
+      "description": "Enhance mobile app search and product discovery by integrating real-time local inventory data to reduce customer frustration and improve conversion rates.",
+      "stories": [
+        {
+          "id": "ST-03",
+          "title": "Rerank mobile search results by home store availability",
+          "description": "Mobile app search does not factor local inventory, leading customers to drive to stores for items that are out of stock. NPS for affected customers is -30 versus +18 for unaffected customers. This story reranks search results by home store availability and surfaces in-stock alternatives inline when top results are unavailable locally. Must stay under the 800ms p95 search latency budget (C-10). Must not personalize pricing based on inventory state without disclosure per C-09 and C-14.",
+          "user_story": "As a mobile app customer, I want search results ranked by my home store's availability, so that I don't drive to the store for items that are out of stock.",
+          "acceptance_criteria": [
+            "Given a customer has set a home store, when they search for a product, then results are reranked with in-stock items at their home store appearing higher than out-of-stock items.",
+            "Given a customer searches for a product, when the top results are out of stock at their home store, then in-stock alternatives are surfaced inline.",
+            "Given the search reranking is implemented, when search operations execute, then p95 latency remains under 800ms.",
+            "Given results are reranked by inventory, when pricing is displayed, then prices are not personalized based on inventory state without explicit disclosure.",
+            "Given a customer views search results, when inventory status is shown, then it reflects real-time or near-real-time data for their selected home store."
+          ],
+          "priority": "High",
+          "priority_rationale": "NPS for customers affected by out-of-stock items after searching is -30 versus +18 for unaffected customers, representing a 48-point NPS swing and direct revenue loss from store visits without conversion.",
+          "tags": [
+            "mobile-app",
+            "inventory",
+            "performance"
+          ],
+          "source_topic_id": "T-03",
+          "potential_constraint_conflicts": [],
+          "evidence": [
+            {
+              "topic_id": "T-03",
+              "theme": "mobile-search-local-inventory",
+              "raw_quote": "Search ranking does not factor local inventory. Customers search at home, see in-stock results, drive to the store, find them missing, and leave frustrated. NPS for customers who hit this is -30; for customers who don't it's +18.",
+              "speaker": "Priya Rao",
+              "sentiment": "request"
+            }
+          ],
+          "tasks": [
+            {
+              "title": "Build inventory lookup service that retrieves real-time stock levels by store and product with caching for performance",
+              "type": "backend",
+              "id": "ST-03-TK-01"
+            },
+            {
+              "title": "Implement search result reranking algorithm that boosts in-stock items at customer's home store while maintaining relevance",
+              "type": "backend",
+              "id": "ST-03-TK-02"
+            },
+            {
+              "title": "Add inline alternative product suggestion logic when top results are out of stock locally",
+              "type": "backend",
+              "id": "ST-03-TK-03"
+            },
+            {
+              "title": "Update mobile app search UI to display inventory status and alternative suggestions inline with search results",
+              "type": "frontend",
+              "id": "ST-03-TK-04"
+            },
+            {
+              "title": "Implement performance monitoring and alerting to ensure p95 search latency stays under 800ms threshold",
+              "type": "infra",
+              "id": "ST-03-TK-05"
+            },
+            {
+              "title": "Add validation checks to prevent pricing personalization based on inventory state without explicit disclosure",
+              "type": "qa",
+              "id": "ST-03-TK-06"
+            },
+            {
+              "title": "Build load tests simulating search traffic with inventory lookups to validate latency budget under production conditions",
+              "type": "qa",
+              "id": "ST-03-TK-07"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EP-04",
+      "title": "Loyalty Program Transparency and Engagement",
+      "description": "Improve customer understanding and engagement with the loyalty program by surfacing tier progress and evaluation timelines directly in the mobile app.",
+      "stories": [
+        {
+          "id": "ST-04",
+          "title": "Add loyalty tier progress view in mobile app",
+          "description": "Customers do not understand loyalty tier earning and downgrade rules, leading to support contacts. This story adds a tier progress view in the mobile app showing current points, distance to next tier, and next evaluation date. Must declare hardware floor and provide explicit fallbacks for legacy Android 7 handheld fleet per C-11, and should target Android 9+ baseline per C-12.",
+          "user_story": "As a loyalty program member, I want to see my tier progress in the mobile app, so that I understand how close I am to the next tier and when my tier will be re-evaluated.",
+          "acceptance_criteria": [
+            "Given a customer opens the loyalty section in the mobile app, when they view tier progress, then current points, distance to next tier, and next evaluation date are clearly displayed.",
+            "Given a customer is approaching a tier downgrade, when they view tier progress, then the next evaluation date and risk of downgrade are clearly communicated.",
+            "Given the feature is deployed, when the hardware floor is documented, then it explicitly states Android 9+ baseline with defined fallbacks for Android 7 legacy fleet.",
+            "Given a customer on Android 7 hardware accesses the app, when tier progress is unavailable, then a clear message explains the hardware limitation and provides alternative access methods."
+          ],
+          "priority": "Medium",
+          "priority_rationale": "Reduces customer support contacts about tier downgrades and improves loyalty program transparency, but does not block transactions or operations.",
+          "tags": [
+            "loyalty",
+            "mobile-app"
+          ],
+          "source_topic_id": "T-04",
+          "potential_constraint_conflicts": [],
+          "evidence": [
+            {
+              "topic_id": "T-04",
+              "theme": "loyalty-tier-progress-transparency",
+              "raw_quote": "Customers don't understand the rules of tier earning and tier downgrade. We add a 'tier progress' view in the mobile app that shows current points, distance to next tier, and the date of the next evaluation.",
+              "speaker": "Priya Rao",
+              "sentiment": "request"
+            }
+          ],
+          "tasks": [
+            {
+              "title": "Build loyalty tier progress API endpoint that calculates current points, next tier threshold, and evaluation date",
+              "type": "backend",
+              "id": "ST-04-TK-01"
+            },
+            {
+              "title": "Implement mobile app tier progress UI screen with progress visualization and evaluation timeline for Android 9+",
+              "type": "frontend",
+              "id": "ST-04-TK-02"
+            },
+            {
+              "title": "Add downgrade warning messaging when customer is at risk based on evaluation date and point trajectory",
+              "type": "frontend",
+              "id": "ST-04-TK-03"
+            },
+            {
+              "title": "Create graceful degradation fallback for Android 7 devices with clear messaging and alternative access instructions",
+              "type": "frontend",
+              "id": "ST-04-TK-04"
+            },
+            {
+              "title": "Document hardware floor requirements (Android 9+ baseline, Android 7 fallback) in feature specification and deployment guide",
+              "type": "infra",
+              "id": "ST-04-TK-05"
+            },
+            {
+              "title": "Build automated tests covering tier progress calculation accuracy and UI rendering on multiple Android versions",
+              "type": "qa",
+              "id": "ST-04-TK-06"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EP-05",
+      "title": "Mobile Platform Standards and Governance",
+      "description": "Establish engineering discipline and process controls to manage hardware constraints and ensure consistent mobile app delivery across diverse device fleets.",
+      "stories": [
+        {
+          "id": "ST-05",
+          "title": "Establish hardware floor declaration discipline for mobile app stories",
+          "description": "Existing 7-year-old store associate handhelds run Android 7, limiting new tooling capabilities. Hardware refresh is approved for FY26 Q1 but not yet deployed. This story establishes a discipline requiring every new mobile-app story to declare its hardware floor and provide explicit fallbacks for the legacy Android 7 fleet, per C-11 and C-12. This is a process/discipline story rather than a feature delivery.",
+          "user_story": "As an agile delivery lead, I want every new mobile-app story to declare its hardware floor and legacy fallbacks, so that we avoid deploying features that break on the legacy Android 7 handheld fleet.",
+          "acceptance_criteria": [
+            "Given a new mobile-app story is drafted, when it enters the backlog, then it includes an explicit hardware floor declaration (e.g., Android 9+).",
+            "Given a story declares a hardware floor above Android 7, when it enters the backlog, then it includes documented fallbacks or graceful degradation for the Android 7 legacy fleet.",
+            "Given the discipline is established, when story templates are updated, then they include a mandatory hardware floor field.",
+            "Given a story is reviewed in refinement, when the hardware floor is missing or incomplete, then the story is returned for revision before acceptance."
+          ],
+          "priority": "Medium",
+          "priority_rationale": "Prevents deployment of features that break on legacy Android 7 handhelds until FY26 Q1 hardware refresh, reducing operational risk and support burden.",
+          "tags": [
+            "mobile-app",
+            "store-associate",
+            "platform"
+          ],
+          "source_topic_id": "T-05",
+          "potential_constraint_conflicts": [],
+          "evidence": [
+            {
+              "topic_id": "T-05",
+              "theme": "store-handheld-hardware-constraints",
+              "raw_quote": "Our 7-year-old handheld scanners (Android 7) limit what we can build for store associates. Hardware refresh is approved for FY26 but won't ship until Q1. In Q3 we should ensure any new tooling we build is gated by hardware capability \u2014 Android 9+ for the consumer mobile app baseline, with explicit fallbacks for the legacy fleet.",
+              "speaker": "Priya Rao",
+              "sentiment": "observation"
+            }
+          ],
+          "tasks": [
+            {
+              "title": "Create story template update that adds mandatory hardware floor declaration field with validation rules",
+              "type": "infra",
+              "id": "ST-05-TK-01"
+            },
+            {
+              "title": "Document hardware floor policy in engineering playbook with examples and fallback pattern guidance",
+              "type": "infra",
+              "id": "ST-05-TK-02"
+            },
+            {
+              "title": "Update backlog refinement checklist to include hardware floor completeness validation as acceptance gate",
+              "type": "infra",
+              "id": "ST-05-TK-03"
+            },
+            {
+              "title": "Conduct team training session on hardware floor requirements and Android version compatibility considerations",
+              "type": "infra",
+              "id": "ST-05-TK-04"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "id": "G-01",
+      "title": "Offline transaction reconciliation and sync after WAN recovery",
+      "description": "ST-01 enables offline cash sales, gift card redemption, and small returns during WAN outages, but no story or existing ticket addresses how these queued transactions reconcile and sync back to central systems once connectivity returns, which matters for inventory accuracy, financial reporting, and audit compliance.",
+      "related_ids": [
+        "ST-01",
+        "NS-36"
+      ],
+      "evidence": "ST-01 description states 'enables cash sales, gift card redemption, and returns under $50 to function offline' during outages, but does not describe the reconciliation mechanism after WAN recovery."
+    },
+    {
+      "id": "G-02",
+      "title": "IVR refill request patient identity verification under HIPAA",
+      "description": "ST-02 unifies mobile app and IVR refill requests to write to Rx Hub with HIPAA-compliant notifications, but neither this story nor existing pharmacy tickets explicitly address how IVR callers are authenticated to ensure refill requests meet the C-07 requirement that notifications go only to the patient's verified contact method.",
+      "related_ids": [
+        "ST-02",
+        "NS-11",
+        "NS-53"
+      ],
+      "evidence": "C-07 states notifications must be 'sent to the patient's verified contact (not household default)', but ST-02 does not describe IVR caller verification mechanisms to ensure HIPAA compliance for automated phone requests."
+    },
+    {
+      "id": "G-03",
+      "title": "Mobile search result reranking fallback when inventory service is unavailable",
+      "description": "ST-03 reranks mobile search results by home store availability to reduce customer disappointment, but does not address the fallback behavior when the inventory service is unavailable or slow, which matters for meeting the C-10 800ms p95 latency budget and maintaining search functionality during degraded conditions.",
+      "related_ids": [
+        "ST-03",
+        "NS-5",
+        "NS-47"
+      ],
+      "evidence": "ST-03 states search results will be reranked by home store availability and must stay under 800ms p95 latency per C-10, but does not specify what happens when inventory data is unavailable or times out."
+    }
+  ],
+  "conflicts": [
+    {
+      "story_id": "ST-06",
+      "with": "C-04",
+      "severity": "high",
+      "reason": "The story proposes enabling offline card sales during WAN outages, which directly contradicts the constraint that card sales must remain online-only per PCI requirements."
+    }
+  ],
+  "duplicates": [
+    {
+      "story_id": "ST-02",
+      "existing_id": "NS-11",
+      "confidence": "low",
+      "reason": "Local-embedding cosine similarity 0.66 \u2014 new story title/description overlaps existing ticket \"Pharmacy refill: SMS reminder when rx is due\".",
+      "similarity": 0.655
+    },
+    {
+      "story_id": "ST-02",
+      "existing_id": "NS-53",
+      "confidence": "low",
+      "reason": "Local-embedding cosine similarity 0.65 \u2014 new story title/description overlaps existing ticket \"Pharmacy refill: SMS reminder when rx is due\".",
+      "similarity": 0.645
+    }
+  ],
+  "token_usage": {
+    "parser": {
+      "input": 4388,
+      "output": 1371
+    },
+    "constraint_extractor": {
+      "input": 2659,
+      "output": 1574
+    },
+    "story_writer": {
+      "input": 5344,
+      "output": 2697
+    },
+    "epic_decomposer": {
+      "input": 5246,
+      "output": 5301
+    },
+    "gap_detector": {
+      "input": 6454,
+      "output": 644
+    },
+    "total": {
+      "input": 24091,
+      "output": 11587
+    }
+  },
+  "model": "claude-sonnet-4-5",
+  "models": {
+    "parser": "claude-sonnet-4-5",
+    "constraint": "claude-sonnet-4-5",
+    "story_writer": "claude-sonnet-4-5",
+    "epic_decomposer": "claude-sonnet-4-5",
+    "gap_detector": "claude-sonnet-4-5"
+  },
+  "guardrail_findings": [
+    {
+      "code": "non_canonical_tag",
+      "severity": "info",
+      "message": "Tags outside the canonical set: ['platform']. Either add them to the vocabulary or normalise.",
+      "story_id": "ST-05"
+    }
+  ]
+}

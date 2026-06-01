@@ -10,6 +10,25 @@ The bundled sample data is themed around **NorthStar Retail**, a fictional natio
 
 ---
 
+## Demo
+
+> Capture instructions for these images are in [docs/screenshots/](docs/screenshots/) — run `make ui`, synthesize the bundled sample, and save the frames. They render here automatically once added.
+
+<!-- Optional: a 30–60s screen recording. Drop docs/screenshots/demo.gif in place and uncomment:
+![Backlog Synthesizer demo](docs/screenshots/demo.gif)
+-->
+
+| | |
+|---|---|
+| ![Pipeline running](docs/screenshots/02_pipeline.png) | ![Epics → stories → tasks](docs/screenshots/03_epics.png) |
+| The five-agent pipeline, live | Structured output with traceable evidence |
+| ![Gaps / conflicts / duplicates](docs/screenshots/04_findings.png) | ![Audit trail](docs/screenshots/05_audit.png) |
+| Gap, conflict & duplicate detection | Full per-agent audit trail |
+
+Or run it yourself in one command: `make demo` (CLI) or `make ui` (web).
+
+---
+
 ## What it does
 
 Feed it any combination of these:
@@ -128,13 +147,12 @@ spending API credit.
 pytest tests/ -v
 ```
 
-Two test files:
-- `tests/test_agents.py` — per-agent unit tests (Parser, Constraint Extractor,
-  Story Writer, Epic Decomposer, Gap Detector), plus tests for `MemoryStore`
-  and `AuditLog`. Each agent test mocks the Claude tool so the suite runs
-  in well under a second and uses zero API credit.
-- `tests/test_orchestrator.py` — end-to-end mock-Claude test covering the
-  five-agent handoff and the output formatter.
+**128 tests across 9 files**, all mocked end-to-end (zero API credit, ~1s):
+- `test_agents.py` — per-agent unit tests + `MemoryStore` / `AuditLog`
+- `test_orchestrator.py` — five-agent handoff + output formatter
+- `test_redactor.py`, `test_guardrails.py`, `test_compare_mode.py`
+- `test_jira_live.py` — live JQL **and Jira write-back** (`create_issue` / `publish_synthesis`)
+- `test_confluence_live.py`, `test_vision.py`, `test_evaluation_runner.py`
 
 ### Run the evaluation harness
 
@@ -185,7 +203,7 @@ under `evaluation/results/ab/`.
 - **Persistent vector memory** — set `MEMORY_PERSISTENT=1` to cache embeddings under `.cache/memory/` between runs. Re-runs on the same backlog skip the embed step.
 - **Strict PII redaction** — pass `strict_redact=True` to `Orchestrator.run` (alongside `redact_pii=True`) to halt the run if any PII pattern slips past the redactor at a tool boundary. Audit-logged.
 - **Cost panel** — every UI run shows per-stage tokens, per-agent cost at the active stage's model rate, and a recent-cost-trend chart across the last 10 saved runs.
-- **Story evidence** — each story carries the parser-extracted customer quote that motivated it (`story.evidence[0].raw_quote`), surfaced inline on the Epics tab.
+- **Story evidence** — each story carries the customer quote that motivated it (`story.evidence[0].raw_quote`), surfaced inline on the Epics tab. Evidence is attached deterministically by the system from the topic the story cites (`source_topic_id`), not produced by the model — so it can't be hallucinated.
 
 ---
 

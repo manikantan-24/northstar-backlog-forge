@@ -99,6 +99,202 @@ class JiraTool(Tool):
         # Live search
         return self._search_live(query)
 
+    # ----------------------------------------------------- write (live)
+
+    def create_issue(
+        self,
+        *,
+        summary: str,
+        description_adf: dict,
+        issue_type: str = "Task",
+        labels: list[str] | None = None,
+        parent_key: str | None = None,
+        project_key: str | None = None,
+    ) -> dict:
+        """Create a single Jira issue and return {key, url, type, summary}.
+
+        Defensive, because Jira project configs differ wildly. We try the
+        ideal shape first, then progressively drop the parts a project is
+        most likely to reject — the `parent` link, then `labels`, then the
+        requested `issuetype` (falling back to `Task`). Auth failures are
+        raised immediately; they can't be retried away.
+        """
+        self._require_live_credentials()
+        try:
+            import requests
+        except ImportError as e:  # pragma: no cover
+            raise ToolError("'requests' package is required to create Jira issues") from e
+
+        project = project_key or self._project_key
+        if not project:
+            raise ToolError("Creating Jira issues requires JIRA_PROJECT_KEY (or project_key=).")
+
+        url = f"{self._base_url}/rest/api/3/issue"
+        auth = (self._email, self._api_token)
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        clean_labels = [_safe_label(x) for x in (labels or []) if x]
+
+        def _attempt(itype: str, with_parent: bool, with_labels: bool):
+            fields: dict = {
+                "project": {"key": project},
+                "summary": (summary or "(no title)")[:250],
+                "description": description_adf,
+                "issuetype": {"name": itype},
+            }
+            if with_parent and parent_key:
+                fields["parent"] = {"key": parent_key}
+            if with_labels and clean_labels:
+                fields["labels"] = clean_labels
+            return requests.post(url, json={"fields": fields}, auth=auth, headers=headers, timeout=30)
+
+        # Progressive fallback: most-complete shape first.
+        plans = [
+            (issue_type, True, True),
+            (issue_type, True, False),
+            (issue_type, False, True),
+            (issue_type, False, False),
+            ("Task", False, False),
+        ]
+        last = None
+        for itype, wp, wl in plans:
+            resp = _attempt(itype, wp, wl)
+            if resp.status_code in (401, 403):
+                raise ToolError(
+                    f"Jira auth failed ({resp.status_code}). Check JIRA_EMAIL / JIRA_API_TOKEN."
+                )
+            if resp.status_code < 400:
+                key = resp.json().get("key", "")
+                return {
+                    "key": key,
+                    "url": f"{self._base_url}/browse/{key}",
+                    "type": itype,
+                    "summary": summary,
+                }
+            last = resp
+        raise ToolError(
+            f"Jira create issue failed ({last.status_code if last else '?'}): "
+            f"{last.text[:300] if last else 'no response'}"
+        )
+
+    def publish_synthesis(
+        self,
+        result: dict,
+        *,
+        project_key: str | None = None,
+        create_subtasks: bool = True,
+        label: str = "backlog-synth",
+        max_issues: int = 300,
+        progress=None,
+    ) -> dict:
+        """Create the synthesized backlog in live Jira as Epic → Story → Sub-task.
+
+        - Each epic  → a `Epic` issue.
+        - Each story → a `Story` issue, linked to its epic via `parent`, with
+          the user story, acceptance criteria, priority rationale, conflict
+          flags, and task list rendered into the description (so nothing is
+          lost even if sub-task creation isn't permitted).
+        - Each task  → a `Sub-task` under its story (best-effort; skipped for a
+          story if the project rejects sub-tasks).
+
+        Returns: {created: [...], errors: [...], counts: {...}, base_url, project}.
+        Failures on one item are recorded and the rest continue — a partial
+        publish is more useful in a live demo than an all-or-nothing abort.
+        """
+        self._require_live_credentials()
+        project = project_key or self._project_key
+        if not project:
+            raise ToolError("Publishing to Jira requires JIRA_PROJECT_KEY (or project_key=).")
+
+        def _emit(msg: str):
+            if progress:
+                try:
+                    progress(msg)
+                except Exception:  # noqa: BLE001 — a UI hook must never break the publish
+                    pass
+
+        created: list[dict] = []
+        errors: list[str] = []
+        count = 0
+
+        for epic in result.get("epics") or []:
+            if count >= max_issues:
+                break
+            epic_key = None
+            try:
+                e = self.create_issue(
+                    summary=epic.get("title") or "Untitled epic",
+                    description_adf=_text_adf(epic.get("description", "")),
+                    issue_type="Epic",
+                    labels=[label],
+                    project_key=project,
+                )
+                created.append({**e, "level": "epic"})
+                epic_key = e["key"]
+                count += 1
+                _emit(f"Epic {e['key']} — {e['summary'][:60]}")
+            except ToolError as ex:
+                errors.append(f"epic '{epic.get('title')}': {ex}")
+
+            for story in epic.get("stories") or []:
+                if count >= max_issues:
+                    break
+                story_key = None
+                try:
+                    s = self.create_issue(
+                        summary=story.get("title") or "Untitled story",
+                        description_adf=_story_adf(story),
+                        issue_type="Story",
+                        labels=[label, *(story.get("tags") or [])],
+                        parent_key=epic_key,
+                        project_key=project,
+                    )
+                    created.append({**s, "level": "story"})
+                    story_key = s["key"]
+                    count += 1
+                    _emit(f"  Story {s['key']} — {s['summary'][:60]}")
+                except ToolError as ex:
+                    errors.append(f"story '{story.get('title')}': {ex}")
+                    continue
+
+                if create_subtasks and story_key:
+                    made = 0
+                    for task in story.get("tasks") or []:
+                        if count >= max_issues:
+                            break
+                        try:
+                            st = self.create_issue(
+                                summary=task.get("title") or "Task",
+                                description_adf=_text_adf(f"Type: {task.get('type', 'task')}"),
+                                issue_type="Sub-task",
+                                parent_key=story_key,
+                                labels=[label],
+                                project_key=project,
+                            )
+                            created.append({**st, "level": "subtask"})
+                            made += 1
+                            count += 1
+                        except ToolError:
+                            # Sub-tasks are config-sensitive; stop trying for this
+                            # story. The tasks are still in the story description.
+                            break
+                    if made == 0 and (story.get("tasks")):
+                        errors.append(
+                            f"sub-tasks for {story_key}: project disallows sub-task "
+                            f"creation — tasks remain listed in the story description."
+                        )
+
+        return {
+            "created": created,
+            "errors": errors,
+            "counts": {
+                "epics": sum(1 for c in created if c["level"] == "epic"),
+                "stories": sum(1 for c in created if c["level"] == "story"),
+                "subtasks": sum(1 for c in created if c["level"] == "subtask"),
+            },
+            "project": project,
+            "base_url": self._base_url,
+        }
+
     # ----------------------------------------------------- mock
 
     def _load_fixture(self) -> list[dict]:
@@ -217,6 +413,85 @@ class JiraTool(Tool):
 
         logger.info("Jira live fetch returned %d issue(s)", len(all_issues))
         return all_issues
+
+
+# ----------------------------------------------------- write helpers
+
+def _safe_label(value: str) -> str:
+    """Jira labels can't contain spaces. Normalise to a hyphenated token."""
+    return "-".join(str(value).split())[:255]
+
+
+def _adf_text(text: str) -> dict:
+    return {"type": "text", "text": str(text)}
+
+
+def _adf_paragraph(text: str) -> dict:
+    return {"type": "paragraph", "content": [_adf_text(text)] if text else []}
+
+
+def _adf_heading(text: str, level: int = 3) -> dict:
+    return {"type": "heading", "attrs": {"level": level}, "content": [_adf_text(text)]}
+
+
+def _adf_bullets(items: list[str]) -> dict:
+    return {
+        "type": "bulletList",
+        "content": [
+            {"type": "listItem", "content": [_adf_paragraph(str(it))]}
+            for it in items if str(it).strip()
+        ] or [{"type": "listItem", "content": [_adf_paragraph("—")]}],
+    }
+
+
+def _text_adf(text: str) -> dict:
+    """Minimal ADF doc from plain text; one paragraph per non-empty line."""
+    paras = [_adf_paragraph(line.strip()) for line in (text or "").split("\n") if line.strip()]
+    return {"version": 1, "type": "doc", "content": paras or [_adf_paragraph("")]}
+
+
+def _story_adf(story: dict) -> dict:
+    """Render a full story (user story, AC, priority, conflicts, tasks, tags)
+    into an ADF document for the Jira issue description. Tasks are always
+    listed here so they survive even when sub-task creation isn't permitted."""
+    content: list[dict] = []
+
+    if story.get("description"):
+        content.append(_adf_paragraph(story["description"]))
+    if story.get("user_story"):
+        content.append(_adf_paragraph(story["user_story"]))
+
+    ac = story.get("acceptance_criteria") or []
+    if ac:
+        content.append(_adf_heading("Acceptance criteria"))
+        content.append(_adf_bullets(ac))
+
+    pr = story.get("priority")
+    if pr:
+        rationale = story.get("priority_rationale") or ""
+        content.append(_adf_paragraph(f"Priority: {pr}{(' — ' + rationale) if rationale else ''}"))
+
+    conflicts = story.get("potential_constraint_conflicts") or []
+    if conflicts:
+        content.append(_adf_paragraph("⚠ Potential constraint conflicts: " + ", ".join(map(str, conflicts))))
+
+    tasks = story.get("tasks") or []
+    if tasks:
+        content.append(_adf_heading("Tasks"))
+        content.append(_adf_bullets([
+            f"{t.get('title', 'Task')}" + (f"  [{t.get('type')}]" if t.get("type") else "")
+            for t in tasks
+        ]))
+
+    meta_bits = []
+    if story.get("source_topic_id"):
+        meta_bits.append(f"source topic {story['source_topic_id']}")
+    if story.get("tags"):
+        meta_bits.append("tags: " + ", ".join(story["tags"]))
+    meta_bits.append("drafted by Backlog Synthesizer (multi-agent)")
+    content.append(_adf_paragraph(" · ".join(meta_bits)))
+
+    return {"version": 1, "type": "doc", "content": content or [_adf_paragraph("")]}
 
 
 # ----------------------------------------------------- adapter

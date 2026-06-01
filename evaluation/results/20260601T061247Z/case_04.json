@@ -1,0 +1,82 @@
+{
+  "case_id": "case_04",
+  "description": "Negative / minimal case. A short customer-support note that mentions ONE real product issue surrounded by polite small-talk. Tests hallucination resistance \u2014 the system must NOT invent stories from social pleasantries, and must produce at most a few well-grounded stories.",
+  "deterministic_average": 0.8333333333333334,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 1 stories in [1, 3]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "1/1 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 0.0,
+      "observations": [
+        "0/1 required topics found",
+        "Missing topic for keywords: ['order confirmation', 'email', 'deliverability']"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "0 forbidden topic violations of 2 checked"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 1.0,
+      "observations": [
+        "No expected duplicates"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "No expected conflicts"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 4,
+      "story_granularity": 5,
+      "tag_accuracy": 4,
+      "conflict_reasoning": 5
+    },
+    "reasons": {
+      "ac_quality": "The acceptance criteria are concrete, measurable, and mostly in Given/When/Then form with specific numeric thresholds (60s, 98% inbox rate, 0.1% spam rate, 80% reduction), though the last criterion measuring support tickets is slightly less direct than technical metrics.",
+      "priority_justification": "The rationale clearly connects the High priority to business impact (customer panic, duplicate orders, CS volume spike) with quantified evidence (three incidents in two days), though it could slightly better articulate revenue or brand-reputation risk magnitude.",
+      "story_granularity": "The story is perfectly scoped to a single deliverable behaviour\u2014fixing DKIM alignment for one specific email path\u2014with clear boundaries (not attempting to solve broader deliverability monitoring or all email paths) and reasonable implementation size.",
+      "tag_accuracy": "Tags are mostly appropriate and consistent (mobile-app, ecommerce, compliance are all relevant), though 'email-deliverability' is flagged as non-canonical and 'compliance' is arguably a stretch since the issue is operational/technical rather than regulatory.",
+      "conflict_reasoning": "No conflicts are flagged and correctly so\u2014the story touches mobile-app but doesn't violate any performance constraints (C-01, C-03, C-20), doesn't involve payment/identity/PII systems, and DKIM fixes are infrastructure/config changes that don't trigger constraint violations."
+    },
+    "overall_comment": "This is a well-crafted backlog synthesis with a tightly scoped story, measurable acceptance criteria, and strong evidence linking customer pain to the proposed solution. The priority justification is solid though could quantify business impact more precisely, and the non-canonical tag should either be added to the vocabulary or normalized to an existing term.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.75,
+      "story_granularity": 1.0,
+      "tag_accuracy": 0.75,
+      "conflict_reasoning": 1.0
+    },
+    "average_normalized": 0.85
+  },
+  "synthesis_summary": {
+    "epic_count": 1,
+    "story_count": 1,
+    "duplicates": 0,
+    "conflicts": 0,
+    "gaps": 2
+  }
+}

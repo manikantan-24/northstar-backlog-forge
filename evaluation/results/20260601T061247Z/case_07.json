@@ -1,0 +1,81 @@
+{
+  "case_id": "case_07",
+  "description": "Multiple requested capabilities all conflict with the PCI / offline-mode constraints in the architecture wiki. The Gap Detector must flag at least one constraint conflict, ideally multiple.",
+  "deterministic_average": 1.0,
+  "deterministic_metrics": [
+    {
+      "name": "story_count_in_range",
+      "score": 1.0,
+      "observations": [
+        "OK: 3 stories in [2, 5]"
+      ]
+    },
+    {
+      "name": "acceptance_criteria_well_formed",
+      "score": 1.0,
+      "observations": [
+        "3/3 stories have AC count in range"
+      ]
+    },
+    {
+      "name": "required_topics_present",
+      "score": 1.0,
+      "observations": [
+        "2/2 required topics found"
+      ]
+    },
+    {
+      "name": "forbidden_topics_absent",
+      "score": 1.0,
+      "observations": [
+        "No forbidden topics specified"
+      ]
+    },
+    {
+      "name": "expected_duplicates_found",
+      "score": 1.0,
+      "observations": [
+        "No expected duplicates"
+      ]
+    },
+    {
+      "name": "expected_constraint_conflicts_found",
+      "score": 1.0,
+      "observations": [
+        "1/1 expected conflicts flagged"
+      ]
+    }
+  ],
+  "llm_judge": {
+    "scores": {
+      "ac_quality": 4,
+      "priority_justification": 4,
+      "story_granularity": 5,
+      "tag_accuracy": 5,
+      "conflict_reasoning": 5
+    },
+    "reasons": {
+      "ac_quality": "Most acceptance criteria are concrete and testable with clear Given/When/Then structure, though a few could be more measurable (e.g., 'within 5 minutes' is good, but 'alerts the store manager' lacks observable success criteria for the alert delivery mechanism).",
+      "priority_justification": "Priority rationales consistently tie back to specific business impact (revenue blocking, customer experience degradation, operational friction) with clear stakeholder attribution, though ST-03's 'smaller revenue share' claim would benefit from quantification.",
+      "story_granularity": "Each story represents a single, coherent deliverable behavior (queue-and-post card transactions, scan-and-queue returns, print-and-reconcile gift cards) with appropriate scope that isn't overly broad or micro-level.",
+      "tag_accuracy": "Tags are drawn from a consistent vocabulary (pos, offline-mode, payments, compliance) and accurately reflect each story's domain, technical characteristics, and cross-cutting concerns.",
+      "conflict_reasoning": "Every conflict citation correctly names the specific constraint ID and explains the precise contradiction (e.g., C-15 forbids offline card sales vs. story requesting offline queueing), with appropriate severity distinctions between definite violations and ambiguous gift-card scope."
+    },
+    "overall_comment": "This is a high-quality backlog synthesis that demonstrates strong understanding of the domain constraints and produces well-structured, testable stories. The conflict detection is particularly strong, correctly identifying all PCI/offline authorization contradictions with precise constraint references, and the gap analysis surfaces legitimate architectural and procedural holes that would surface during implementation.",
+    "normalized": {
+      "ac_quality": 0.75,
+      "priority_justification": 0.75,
+      "story_granularity": 1.0,
+      "tag_accuracy": 1.0,
+      "conflict_reasoning": 1.0
+    },
+    "average_normalized": 0.9
+  },
+  "synthesis_summary": {
+    "epic_count": 1,
+    "story_count": 3,
+    "duplicates": 0,
+    "conflicts": 6,
+    "gaps": 4
+  }
+}

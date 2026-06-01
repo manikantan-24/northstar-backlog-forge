@@ -6,22 +6,25 @@ Reads from memory:
   - `existing_tickets` (loaded by orchestrator from --backlog)
 
 Writes to memory:
-  - `duplicates` — list of {story_id, existing_id, confidence, reason, similarity?}
+  - `duplicates` — list of {story_id, existing_id, confidence, reason, _similarity?}
   - `conflicts` — list of {story_id, with, severity, reason}
-  - `gaps` — list of {title, description, evidence}
+  - `gaps` — list of {id, title, description, related_ids, evidence}
 
 Tools used:
-  - LLM tool (`self.claude`) — final judgment for conflicts + gaps
+  - LLM tool (`self.claude`) — judgment for conflicts + gaps
   - `jira_tool` / `github_tool` — search existing tickets (called via
     memory.search_similar)
-  - `EmbeddingTool` — optional local sentence-transformers duplicate detection
-    (no LLM call for the duplicate sub-step when enabled)
+  - `EmbeddingTool` — local sentence-transformers duplicate detection
+    (no LLM call for the duplicate sub-step)
 
-Two duplicate-detection modes:
-  - `use_embeddings_for_duplicates=True` (default) — local embeddings find
-    duplicates; the LLM only judges conflicts + gaps. Cheaper and faster.
-  - `use_embeddings_for_duplicates=False` — original behaviour: the LLM
-    judges everything (duplicates + conflicts + gaps) in one call.
+Duplicate detection:
+  In normal operation (`use_embeddings_for_duplicates=True`, the default and
+  the only mode the orchestrator uses) duplicates are found by local
+  embedding similarity and the LLM prompt is scoped to conflicts + gaps only
+  — the V2 gap_detector_prompt.md deliberately does not ask the model for
+  duplicates. The `use_embeddings_for_duplicates=False` flag is a test/seam
+  that instead reads a `duplicates` array from the LLM response; it relies on
+  a duplicates-capable prompt or a mocked tool, and is not used in production.
 """
 
 from __future__ import annotations
@@ -178,6 +181,13 @@ class GapDetectorAgent(Agent):
             duplicates = parsed.get("duplicates", [])
         conflicts = parsed.get("conflicts", [])
         gaps = parsed.get("gaps", [])
+
+        # Backstop sequential ids on gaps so every artifact carries a stable
+        # `id` even if the model omits it — consistent with the parser,
+        # constraint, and epic agents.
+        for i, g in enumerate(gaps):
+            if isinstance(g, dict):
+                g.setdefault("id", f"G-{i + 1:02d}")
 
         self.memory.put("duplicates", duplicates)
         self.memory.put("conflicts", conflicts)

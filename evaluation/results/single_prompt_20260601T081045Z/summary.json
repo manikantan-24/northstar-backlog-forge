@@ -1,0 +1,380 @@
+{
+  "timestamp_utc": "20260601T081045Z",
+  "variant": "single_prompt_baseline",
+  "use_llm_judge": true,
+  "case_count": 10,
+  "deterministic_average_across_cases": 0.8417,
+  "llm_judge_average_across_cases": 0.86,
+  "cases": [
+    {
+      "case_id": "case_01",
+      "deterministic_average": 0.8333333333333334,
+      "llm_judge_average": 0.9,
+      "synthesis_summary": {
+        "epic_count": 4,
+        "story_count": 11,
+        "duplicates": 2,
+        "conflicts": 4,
+        "gaps": 5
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 5,
+          "priority_justification": 4,
+          "story_granularity": 5,
+          "tag_accuracy": 5,
+          "conflict_reasoning": 4
+        },
+        "reasons": {
+          "ac_quality": "All acceptance criteria are concrete, testable, and written in proper Given/When/Then format with observable outcomes like time bounds, specific UI text, and measurable accuracy thresholds.",
+          "priority_justification": "Most priority rationales cite specific evidence (NPS scores, named stakeholders, revenue impact) but ST-03 and ST-07 use weaker relative reasoning ('lower impact than,' 'less urgent than') instead of direct business justification.",
+          "story_granularity": "Each story represents a single, coherent deliverable behaviour with clear scope boundaries\u2014none are overly broad epics or atomic micro-tasks.",
+          "tag_accuracy": "Tags are consistently drawn from a stable vocabulary (pos, mobile-app, pharmacy, compliance, etc.) and accurately reflect each story's technical and functional domain.",
+          "conflict_reasoning": "The four flagged conflicts correctly cite the specific constraint IDs and explain why the story risks violating them, though ST-01 and ST-03's conflicts with C-13 feel slightly over-cautious since the stories already exclude card payments and gift cards are arguably out-of-scope for PCI card-auth rules."
+        },
+        "overall_comment": "This is a high-quality synthesis with excellent acceptance criteria, well-scoped stories, and thoughtful constraint mapping. The minor weaknesses are hand-wavy priority reasoning on two medium-priority stories and arguably over-cautious conflict flagging where the story text already mitigates the risk.",
+        "normalized": {
+          "ac_quality": 1.0,
+          "priority_justification": 0.75,
+          "story_granularity": 1.0,
+          "tag_accuracy": 1.0,
+          "conflict_reasoning": 0.75
+        },
+        "average_normalized": 0.9
+      }
+    },
+    {
+      "case_id": "case_02",
+      "deterministic_average": 0.6666666666666666,
+      "llm_judge_average": 0.75,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 3,
+        "duplicates": 1,
+        "conflicts": 1,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 4,
+          "priority_justification": 3,
+          "story_granularity": 4,
+          "tag_accuracy": 4,
+          "conflict_reasoning": 5
+        },
+        "reasons": {
+          "ac_quality": "The acceptance criteria are mostly concrete and testable with clear Given/When/Then structure, though a few could be more specific about measurement (e.g., 'within 60 seconds' is good, but some criteria like 'generic text' could specify exact format).",
+          "priority_justification": "ST-01 and ST-03 provide solid business justifications (revenue loss, HIPAA complaints), but ST-02's rationale is vague ('improve customer experience after the generic notification is stable') without quantifying value or urgency.",
+          "story_granularity": "Stories are well-scoped as single deliverable behaviors (generic push, medication-name variant, patient-scoped delivery) with clear boundaries, though ST-02 could potentially be split into opt-in capture vs. notification delivery.",
+          "tag_accuracy": "Tags are appropriate and consistent across stories (pharmacy, mobile-app, compliance, security), though 'compliance' appears on ST-01 despite explicitly avoiding HIPAA requirements, which is slightly inaccurate.",
+          "conflict_reasoning": "The conflict correctly identifies that ST-02 must comply with C-08's three specific requirements (opt-in, verified delivery, 7-year audit), and accurately notes the story acknowledges but must implement these controls."
+        },
+        "overall_comment": "This is a strong backlog synthesis with well-structured stories, testable acceptance criteria, and accurate constraint mapping. The main weaknesses are the hand-wavy priority justification for ST-02 and a minor tag inconsistency on ST-01's compliance label.",
+        "normalized": {
+          "ac_quality": 0.75,
+          "priority_justification": 0.5,
+          "story_granularity": 0.75,
+          "tag_accuracy": 0.75,
+          "conflict_reasoning": 1.0
+        },
+        "average_normalized": 0.75
+      }
+    },
+    {
+      "case_id": "case_03",
+      "deterministic_average": 0.9166666666666666,
+      "llm_judge_average": 0.65,
+      "synthesis_summary": {
+        "epic_count": 3,
+        "story_count": 5,
+        "duplicates": 3,
+        "conflicts": 0,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 4,
+          "priority_justification": 4,
+          "story_granularity": 3,
+          "tag_accuracy": 5,
+          "conflict_reasoning": 2
+        },
+        "reasons": {
+          "ac_quality": "Most acceptance criteria are concrete and testable with clear Given/When/Then structure, though a few could be more specific about measurable outcomes (e.g., 'prominently near the order total' in ST-05 is subjective).",
+          "priority_justification": "Priority rationales generally cite specific evidence like the 4% abandonment increase and Q3 executive request, though ST-04's Medium rating could better explain why a +12% relevance lift doesn't warrant High priority.",
+          "story_granularity": "ST-03 combines both mobile app and POS implementations in a single story when these likely require different teams and delivery timelines, making it too broad; other stories are appropriately scoped.",
+          "tag_accuracy": "Tags are consistently drawn from a clear domain vocabulary (mobile-app, pos, payments, performance, loyalty, etc.) and accurately reflect each story's technical scope and cross-cutting concerns.",
+          "conflict_reasoning": "The synthesis fails to flag any conflicts despite C-14 (card sales forbidden when WAN down) creating a genuine conflict with ST-01 and ST-03 for POS wallet payments during network outages, which are card-based transactions."
+        },
+        "overall_comment": "This is a solid backlog synthesis with well-structured acceptance criteria and clear traceability to conversation topics. The main weaknesses are missing a critical offline-mode conflict for wallet payments at POS and combining mobile+POS Google Pay into one story that should be split.",
+        "normalized": {
+          "ac_quality": 0.75,
+          "priority_justification": 0.75,
+          "story_granularity": 0.5,
+          "tag_accuracy": 1.0,
+          "conflict_reasoning": 0.25
+        },
+        "average_normalized": 0.65
+      }
+    },
+    {
+      "case_id": "case_04",
+      "deterministic_average": 1.0,
+      "llm_judge_average": 0.9,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 2,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 5,
+          "priority_justification": 4,
+          "story_granularity": 5,
+          "tag_accuracy": 4,
+          "conflict_reasoning": 5
+        },
+        "reasons": {
+          "ac_quality": "All acceptance criteria are concrete, testable, and follow Given/When/Then structure with observable outcomes like DKIM alignment checks, inbox folder placement, and alert triggering.",
+          "priority_justification": "ST-01's High priority is well-justified with customer impact and trust erosion, though ST-02's Medium priority could more explicitly quantify the prevention value versus urgency trade-off.",
+          "story_granularity": "Both stories are well-scoped single deliverables\u2014ST-01 targets the configuration fix, ST-02 covers the monitoring solution\u2014neither too broad nor unnecessarily fragmented.",
+          "tag_accuracy": "Tags are mostly appropriate (mobile-app, ecommerce fit the checkout context), though 'analytics' on ST-02 is questionable since this is operational monitoring, not analytics; otherwise consistent vocabulary is used.",
+          "conflict_reasoning": "No conflicts are flagged and correctly so\u2014the work involves email configuration and monitoring without touching any of the constrained domains (payments, POS, pharmacy, performance budgets, data residency, etc.)."
+        },
+        "overall_comment": "This is a strong backlog synthesis with testable acceptance criteria, well-sized stories, and appropriate constraint analysis. The minor weakness is the 'analytics' tag on the monitoring story and slightly generic priority rationale for ST-02, but overall this is production-ready work.",
+        "normalized": {
+          "ac_quality": 1.0,
+          "priority_justification": 0.75,
+          "story_granularity": 1.0,
+          "tag_accuracy": 0.75,
+          "conflict_reasoning": 1.0
+        },
+        "average_normalized": 0.9
+      }
+    },
+    {
+      "case_id": "case_05",
+      "deterministic_average": 0.8333333333333334,
+      "llm_judge_average": 1.0,
+      "synthesis_summary": {
+        "epic_count": 0,
+        "story_count": 0,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 5,
+          "priority_justification": 5,
+          "story_granularity": 5,
+          "tag_accuracy": 5,
+          "conflict_reasoning": 5
+        },
+        "reasons": {
+          "ac_quality": "No stories were created, so there are no acceptance criteria to evaluate; this is the correct output for a cancelled meeting with no content.",
+          "priority_justification": "No priorities were assigned because no stories exist, which is appropriate given the meeting cancellation.",
+          "story_granularity": "No stories were generated, which correctly reflects that there was no source material to synthesize into user stories.",
+          "tag_accuracy": "No tags were applied because no stories exist, and the empty arrays are consistent with the null input scenario.",
+          "conflict_reasoning": "No conflicts were flagged, which is correct since no new requirements or stories were introduced that could conflict with existing constraints."
+        },
+        "overall_comment": "This synthesis correctly handles the edge case of a cancelled meeting with zero input by producing empty arrays and a clear explanatory summary. The AI appropriately recognized that no actionable backlog work can be derived from non-existent meeting content.",
+        "normalized": {
+          "ac_quality": 1.0,
+          "priority_justification": 1.0,
+          "story_granularity": 1.0,
+          "tag_accuracy": 1.0,
+          "conflict_reasoning": 1.0
+        },
+        "average_normalized": 1.0
+      }
+    },
+    {
+      "case_id": "case_06",
+      "deterministic_average": 0.3333333333333333,
+      "llm_judge_average": 1.0,
+      "synthesis_summary": {
+        "epic_count": 0,
+        "story_count": 0,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 5,
+          "priority_justification": 5,
+          "story_granularity": 5,
+          "tag_accuracy": 5,
+          "conflict_reasoning": 5
+        },
+        "reasons": {
+          "ac_quality": "No stories are present in the synthesis, so no acceptance criteria exist to evaluate; scoring N/A as 5 (no defects present).",
+          "priority_justification": "No stories are present in the synthesis, so no priority rationales exist to evaluate; scoring N/A as 5 (no defects present).",
+          "story_granularity": "No stories are present in the synthesis, so granularity cannot be assessed; scoring N/A as 5 (no defects present).",
+          "tag_accuracy": "No stories are present in the synthesis, so no tags exist to evaluate; scoring N/A as 5 (no defects present).",
+          "conflict_reasoning": "No conflicts are flagged and none should be flagged given that no stories were synthesized, which is the correct outcome."
+        },
+        "overall_comment": "This synthesis correctly recognized that the transcript was a prioritization discussion about existing backlog items rather than new feature work, and appropriately generated no new stories, topics, epics, or conflicts. The constraint extraction is comprehensive, well-structured, and appropriately categorized with clear enforcement statements that will be valuable for evaluating future stories.",
+        "normalized": {
+          "ac_quality": 1.0,
+          "priority_justification": 1.0,
+          "story_granularity": 1.0,
+          "tag_accuracy": 1.0,
+          "conflict_reasoning": 1.0
+        },
+        "average_normalized": 1.0
+      }
+    },
+    {
+      "case_id": "case_07",
+      "deterministic_average": 1.0,
+      "llm_judge_average": 0.65,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 3,
+        "duplicates": 0,
+        "conflicts": 5,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 3,
+          "priority_justification": 4,
+          "story_granularity": 4,
+          "tag_accuracy": 5,
+          "conflict_reasoning": 2
+        },
+        "reasons": {
+          "ac_quality": "The acceptance criteria are mostly testable with clear Given/When/Then structure, but several are vague about observability (e.g., 'alerts the store manager' lacks specifics about alert mechanism, timing, or content).",
+          "priority_justification": "The rationales directly connect to measurable business impact (weekly revenue loss, customer trust) and differentiate Medium vs High based on risk and alternatives, though ST-03's reasoning could be slightly stronger.",
+          "story_granularity": "Each story represents a single, coherent offline capability with clear boundaries (card queue, returns queue, gift-card queue), appropriately sized for delivery as blocked features.",
+          "tag_accuracy": "Tags are consistent, relevant, and drawn from a clear vocabulary (pos, offline-mode, payments, compliance, loyalty) that matches both story content and constraint categories.",
+          "conflict_reasoning": "ST-01 and ST-02 conflicts with C-13 are incorrectly reasoned\u2014C-13 forbids card sales offline but does not explicitly address returns or queueing mechanisms; ST-03's conflict with C-13 references Diego's statement but C-13's text does not cover gift cards, creating a mismatch between cited constraint and actual text."
+        },
+        "overall_comment": "This is a well-structured backlog synthesis with clear stories, strong tagging, and good priority reasoning that ties to business impact. However, the conflict reasoning conflates multiple constraints and misapplies C-13 (which explicitly addresses card sales only) to returns and gift cards without textual support, requiring the grader to infer Diego's verbal extension rather than reading it in the constraint itself.",
+        "normalized": {
+          "ac_quality": 0.5,
+          "priority_justification": 0.75,
+          "story_granularity": 0.75,
+          "tag_accuracy": 1.0,
+          "conflict_reasoning": 0.25
+        },
+        "average_normalized": 0.65
+      }
+    },
+    {
+      "case_id": "case_08",
+      "deterministic_average": 1.0,
+      "llm_judge_average": 1.0,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 1,
+        "duplicates": 0,
+        "conflicts": 0,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 5,
+          "priority_justification": 5,
+          "story_granularity": 5,
+          "tag_accuracy": 5,
+          "conflict_reasoning": 5
+        },
+        "reasons": {
+          "ac_quality": "All acceptance criteria are in proper Given/When/Then format with concrete, measurable outcomes (specific metrics like 10,000 sessions, p95/p99 latency, 2-second thresholds, and observable outputs like dashboard flags and trace metadata).",
+          "priority_justification": "The priority rationale explicitly explains why Medium is appropriate by contrasting the vague, non-reproducible nature of the concern against the absence of regulatory deadlines or confirmed customer-impacting defects, demonstrating sound reasoning rather than hand-waving.",
+          "story_granularity": "The single story delivers one coherent, deployable capability (instrumentation of the checkout flow) that is neither too broad (it doesn't include remediation) nor too granular (it covers the full instrumentation scope needed for investigation).",
+          "tag_accuracy": "The tags 'mobile-app' and 'performance' are directly relevant to the story content, consistent with the constraint vocabulary, and appropriately scoped.",
+          "conflict_reasoning": "No conflicts are flagged, and correctly so\u2014the story adds observability without modifying checkout behavior, so it does not violate C-01 (cart-load p95) or any other constraint, making the absence of conflict flags appropriate."
+        },
+        "overall_comment": "This is an exemplary backlog synthesis that demonstrates mature agile delivery practice. The AI correctly recognized weak signal from a customer panel, scoped an appropriate investigatory story with excellent acceptance criteria, and applied sound priority reasoning rather than over-reacting to vague feedback.",
+        "normalized": {
+          "ac_quality": 1.0,
+          "priority_justification": 1.0,
+          "story_granularity": 1.0,
+          "tag_accuracy": 1.0,
+          "conflict_reasoning": 1.0
+        },
+        "average_normalized": 1.0
+      }
+    },
+    {
+      "case_id": "case_09",
+      "deterministic_average": 0.8333333333333334,
+      "llm_judge_average": 0.95,
+      "synthesis_summary": {
+        "epic_count": 4,
+        "story_count": 4,
+        "duplicates": 1,
+        "conflicts": 1,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 5,
+          "priority_justification": 5,
+          "story_granularity": 4,
+          "tag_accuracy": 5,
+          "conflict_reasoning": 5
+        },
+        "reasons": {
+          "ac_quality": "All acceptance criteria are concrete, measurable, and testable with clear Given/When/Then structure, including specific metrics (250ms p95, 95% success rate, 7-day periods) and observable outcomes.",
+          "priority_justification": "Each priority rationale directly ties to measurable business impact (32x budget exceedance, CTR degradation, compliance risk, platform health) with clear reasoning for High vs Medium distinctions.",
+          "story_granularity": "Stories are appropriately scoped to single deliverable behaviors (investigate and fix latency, fix deep-link routing, eliminate duplicates, assess upgrade), though ST-01 could potentially split investigation from remediation.",
+          "tag_accuracy": "Tags are consistently drawn from a clear domain vocabulary (pos, mobile-app, pharmacy, android, ios, performance, compliance) and accurately reflect each story's scope and technical domain.",
+          "conflict_reasoning": "The flagged conflict correctly identifies that ST-03 must comply with C-08's specific HIPAA requirements (opt-in, verified contact, 7-year audit) and accurately notes the duplicate bug may indicate incomplete audit logging or opt-in enforcement."
+        },
+        "overall_comment": "This is an excellent backlog synthesis with strong technical rigor and attention to compliance constraints. The acceptance criteria are particularly well-crafted with concrete metrics, and the priority reasoning clearly connects issues to business impact and architectural constraints.",
+        "normalized": {
+          "ac_quality": 1.0,
+          "priority_justification": 1.0,
+          "story_granularity": 0.75,
+          "tag_accuracy": 1.0,
+          "conflict_reasoning": 1.0
+        },
+        "average_normalized": 0.95
+      }
+    },
+    {
+      "case_id": "case_10",
+      "deterministic_average": 1.0,
+      "llm_judge_average": 0.8,
+      "synthesis_summary": {
+        "epic_count": 1,
+        "story_count": 3,
+        "duplicates": 2,
+        "conflicts": 1,
+        "gaps": 0
+      },
+      "llm_judge": {
+        "scores": {
+          "ac_quality": 5,
+          "priority_justification": 5,
+          "story_granularity": 5,
+          "tag_accuracy": 4,
+          "conflict_reasoning": 2
+        },
+        "reasons": {
+          "ac_quality": "All acceptance criteria are concrete, testable, and written in proper Given/When/Then format with observable outcomes that can be verified during testing.",
+          "priority_justification": "Each High priority is backed by specific regulatory deadlines (90-day HIPAA), legal requirements (GDPR Article 6), or certification risks (PCI DSS), providing clear business justification.",
+          "story_granularity": "Each story delivers a single, well-scoped behavioral change (email template rewrite, consent flow, receipt field removal) that is appropriately sized for implementation.",
+          "tag_accuracy": "Tags are relevant and consistent (compliance, security, pharmacy, loyalty, pos, payments) though 'security' on ST-03 is slightly redundant with 'compliance' for a PCI issue.",
+          "conflict_reasoning": "The flagged conflict with C-10 is not actually a conflict\u2014ST-01 implements compliance with C-10 rather than conflicting with it, indicating a fundamental misunderstanding of what constitutes a constraint violation."
+        },
+        "overall_comment": "This is high-quality backlog synthesis with excellent acceptance criteria, clear prioritization, and well-sized stories. The major flaw is the conflict analysis: the system flagged ST-01 as conflicting with C-10 when the story actually satisfies that constraint, suggesting the conflict detection logic needs refinement to distinguish violations from implementations of compliance requirements.",
+        "normalized": {
+          "ac_quality": 1.0,
+          "priority_justification": 1.0,
+          "story_granularity": 1.0,
+          "tag_accuracy": 0.75,
+          "conflict_reasoning": 0.25
+        },
+        "average_normalized": 0.8
+      }
+    }
+  ]
+}

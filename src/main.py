@@ -98,6 +98,21 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--publish-jira",
+        action="store_true",
+        help=(
+            "After synthesis, CREATE the epics/stories/tasks as issues in live "
+            "Jira (Epic → Story → Sub-task) in project JIRA_PROJECT_KEY. "
+            "Requires JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN. Use with care — "
+            "this writes real issues."
+        ),
+    )
+    parser.add_argument(
+        "--no-jira-subtasks",
+        action="store_true",
+        help="With --publish-jira, create epics + stories only (skip sub-tasks).",
+    )
+    parser.add_argument(
         "--vision-image",
         action="append",
         default=None,
@@ -219,6 +234,33 @@ def main() -> int:
     print(f"  Synthesis  : {md_path}")
     print(f"  Audit trail: {audit_path}")
     print("=" * 70)
+
+    # ---- Optional: publish the synthesis into live Jira ----
+    if args.publish_jira:
+        try:
+            from tools.jira_tool import JiraTool
+            jira = JiraTool(mode="live")
+            print("\n→ Publishing to live Jira (Epic → Story → Sub-task)...")
+            pub = jira.publish_synthesis(
+                result,
+                create_subtasks=not args.no_jira_subtasks,
+                progress=lambda m: print(f"    {m}"),
+            )
+            c = pub["counts"]
+            print(
+                f"\n  Created in Jira: {c['epics']} epic(s), {c['stories']} story(ies), "
+                f"{c['subtasks']} sub-task(s) in project {pub['project']}."
+            )
+            for item in pub["created"]:
+                if item["level"] in ("epic", "story"):
+                    print(f"    {item['level']:5s} {item['key']}  {item['url']}")
+            if pub["errors"]:
+                print(f"  {len(pub['errors'])} issue(s) had problems:")
+                for e in pub["errors"][:10]:
+                    print(f"    - {e}")
+        except Exception as e:  # noqa: BLE001 — publishing must not crash the run
+            logger.error("Jira publish failed: %s", e)
+            print(f"\n  [publish-jira] failed: {e}")
 
     return 0
 

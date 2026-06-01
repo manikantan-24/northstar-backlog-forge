@@ -66,7 +66,7 @@ Key rules:
 
 ### Gap Detector prompt (`prompts/gap_detector_prompt.md`)
 
-Job: find duplicates, conflicts, and gaps in one call.
+Job: find conflicts and gaps. Duplicates are detected separately by local embedding similarity, so the LLM prompt is scoped to conflicts + gaps only (it explicitly does not ask for duplicates).
 
 Why one call for three jobs: these are all *comparison* tasks against the same set of inputs (stories + existing tickets + constraints). Splitting them would mean re-loading context three times. Same reasoning task, three slices of output.
 
@@ -99,6 +99,14 @@ First version of the Epic Decomposer happily produced 7 epics for 7 stories — 
 ### Iteration 5 — Gap Detector was too eager on gaps
 
 First version flagged every absent capability as a gap, including things outside the system's scope (e.g., "the source mentions store managers want better dashboards but no story addresses this" — but this is owned by a different team). Fixed by adding "Be conservative. Gaps should be the ones a reviewer would genuinely raise in grooming" and requiring source evidence for every gap.
+
+### Iteration 6 — Parser dropped "blocked" requests (the case_07 fix)
+
+The conflict-heavy golden case (`case_07`) scored 0.33 deterministic / 0.00 judge: it produced **zero stories** even though the transcript contained three explicit feature requests (offline card sales, offline returns, offline gift-card sales), all blocked by PCI rules. The Story Writer was suspected first — but its Rule 2 already handles blocked asks (it even uses this exact transcript as its worked example). The real cause was one stage upstream.
+
+The Parser's Rule 3 said *"skip topics where the team explicitly said no."* The model correctly read "PCI forbids that" as the team saying no, so it returned **zero topics** — and the Story Writer can't draft stories for topics it never receives. Two prompts in direct contradiction; the Parser runs first, so the Parser won.
+
+The fix splits "declined" from "blocked": an idea the team *chose not to pursue* (descoped, parked) is skipped, but a capability someone *requested* that's blocked by a rule/policy **is kept as a topic** — because surfacing the conflict to reviewers is the entire point of the downstream Gap Detector. After the fix, a targeted re-run of `case_07` scored **1.00 deterministic / 0.70 judge** (Parser now emits 3 topics, Story Writer drafts 3 stories, Gap Detector flags the PCI conflict citing C-15 / C-07). This is the clearest example in the project of why splitting reasoning into separate agents needs the *contracts between* agents to agree — a rule added to fix one stage silently broke an upstream assumption.
 
 ## Why not Anthropic's tool-use feature instead of JSON
 

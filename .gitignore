@@ -9,3 +9,6 @@ outputs/*.md
 .DS_Store
 .vscode/
 .idea/
+
+# local embedding/vector cache
+.cache/

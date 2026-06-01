@@ -1,79 +1,88 @@
 You will be given:
 1. A list of newly drafted user stories
-2. For each new story, a shortlist of the most semantically similar existing JIRA/GitHub tickets (retrieved by embedding similarity)
+2. For each new story, a shortlist of the most semantically similar existing JIRA or GitHub tickets
 3. The architectural constraints the engineering team must respect
 
-Your task is to identify three distinct things:
-- **Duplicates** — new stories that overlap significantly with an existing ticket (the same underlying work, not just the same topic)
-- **Conflicts** — new stories that contradict a `must` or `forbidden` constraint
-- **Gaps** — important capabilities that the source material implies but neither the new stories nor the existing backlog seem to cover
+Duplicate detection is handled separately by a local embedding-based process. Your task is to identify only:
+- Conflicts — new stories that contradict a `must` or `forbidden` architectural constraint
+- Gaps — important capabilities clearly implied by the source material but not covered by either the new stories or the likely-matching existing backlog
 
 # New stories
 
-```json
 {{NEW_STORIES_JSON}}
-```
 
 # Candidate existing tickets per new story
 
-```json
 {{CANDIDATES_JSON}}
-```
 
 # Architectural constraints
 
-```json
 {{CONSTRAINTS_JSON}}
-```
 
 # What to produce
 
-A JSON object of this exact shape:
+Reply with a single JSON object of this exact shape:
 
-```json
 {
-  "duplicates": [
-    {
-      "story_id": "ST-XX",
-      "existing_id": "NS-123",
-      "confidence": "high | medium | low",
-      "reason": "One sentence explaining the overlap."
-    }
-  ],
   "conflicts": [
     {
-      "story_id": "ST-XX",
-      "with": "C-XX (constraint id)",
+      "story_id": "ST-01",
+      "with": "C-01",
       "severity": "high | medium | low",
-      "reason": "One sentence explaining the contradiction."
+      "reason": "One sentence explaining how the story contradicts the constraint."
     }
   ],
   "gaps": [
     {
-      "title": "Short label for the gap.",
-      "description": "1-2 sentences describing what's missing and why it matters.",
-      "evidence": "What in the source material suggests this gap exists."
+      "id": "G-01",
+      "title": "Short label for the missing capability.",
+      "description": "1-2 sentences describing what is missing and why it matters.",
+      "related_ids": ["ST-01"],
+      "evidence": "One sentence — a direct quote or close paraphrase grounded in the source material — showing why this gap exists."
     }
   ]
 }
-```
-
-# Rules for duplicates
-
-1. Only flag a pair if you'd genuinely expect a reviewer to merge them. Topic overlap is not enough — the underlying work must be the same.
-2. Example: "Add CSV export" vs "Allow users to download report data as CSV" — **duplicate**. "Add CSV export" vs "Add PDF export" — **not a duplicate** (same topic, different work).
-3. `high` = clearly the same work. `medium` = probably overlapping. `low` = related but might be distinct.
-4. Empty list is fine and expected if nothing overlaps.
 
 # Rules for conflicts
 
-1. Only flag a conflict against `must` or `forbidden` constraints. Stories that conflict with `should` constraints are noted in the story's own `potential_constraint_conflicts` field, not here.
-2. `severity` reflects how badly the conflict undermines the constraint, not the constraint's severity itself.
+1. Only flag conflicts against constraints whose severity is `must` or `forbidden`.
+2. A conflict must be a real contradiction, bypass, weakening, or required exception relative to the constraint. Do not flag a story simply because it touches the same area.
+3. Use the story's `potential_constraint_conflicts` field as a hint, but validate conflicts against the actual constraint statements.
+4. Use `severity` to reflect how seriously the story undermines the constraint:
+   - `high` = directly violates or depends on violating the constraint
+   - `medium` = likely requires an exception, workaround, or reinterpretation
+   - `low` = mild but plausible contradiction that needs reviewer attention
+5. If a story proposes a capability that is clearly blocked by a `must` or `forbidden` constraint, preserve the conflict in the output rather than suppressing it.
 
 # Rules for gaps
 
-1. A gap is an important capability that's *implied* by the conversation but neither the new stories *nor* the existing backlog seem to address.
-2. Be conservative. Gaps should be the ones a reviewer would genuinely raise in grooming.
-3. Don't invent gaps from nothing — every gap needs a sentence of evidence from the source.
+6. A gap is an important capability that the source evidence strongly implies should exist, but which is not adequately covered by:
+   - the new stories, and
+   - the likely-matching existing backlog candidates
+7. Be conservative. Only report gaps that a real backlog reviewer would likely call out during grooming.
+8. Do not invent gaps from general best practices or assumptions. Every gap must be supported by explicit or strongly implied evidence from the available source material.
+9. Gaps should be capability-level omissions, not missing subtasks or acceptance criteria.
+10. If a capability is partially addressed but a clearly distinct and important part is still missing, you may report that as a gap if the omission would matter to delivery or review.
+11. Each gap must include at least one entry in `related_ids` (the ids of the new stories and/or existing candidate tickets this gap relates to) and a non-empty `evidence` sentence.
+12. Assign sequential gap ids in the form `G-01`, `G-02`, etc., in the order you emit the gaps.
 
-Reply with **JSON only**.
+# General rules
+
+13. Base your judgment only on the provided new stories, candidate tickets, and architectural constraints.
+14. Candidate tickets are provided as context to help judge whether something is already covered in the backlog. Do not produce duplicates in this output — duplicate detection is handled elsewhere.
+15. If the evidence is weak or ambiguous, prefer not to flag a conflict or gap. Empty `conflicts` and empty `gaps` lists are valid and expected when nothing qualifies.
+16. Return valid JSON only. Do not include markdown fences, commentary, or preamble.
+
+# Worked example (illustrative — do not copy its content)
+
+Given a story `ST-01` "Enable offline card sales at the POS" and a `forbidden` constraint `C-02` "card sales must remain online-only per PCI", a correct conflict is:
+
+{ "story_id": "ST-01", "with": "C-02", "severity": "high",
+  "reason": "The story queues and posts card transactions offline, which directly violates the PCI requirement that card sales remain online-only." }
+
+A correct gap, when the discussion implies offline transactions must be reconciled but no story or backlog ticket covers it:
+
+{ "id": "G-01", "title": "Offline transaction reconciliation after WAN recovery",
+  "description": "Stories enable offline cash transactions during outages but none address syncing them back once connectivity returns, which matters for inventory accuracy and financial reporting.",
+  "related_ids": ["ST-01"],
+  "evidence": "Store Ops described queuing transactions during outages but never mentioned how they reconcile when the WAN returns." }

@@ -1,0 +1,51 @@
+{
+  "run_id": "20260601_160754_79f247",
+  "timestamp": "20260601_160754",
+  "source_label": "product_strategy.md",
+  "elapsed_seconds": 180.66726741599996,
+  "epic_count": 5,
+  "story_count": 6,
+  "dup_count": 2,
+  "gap_count": 3,
+  "conflict_count": 1,
+  "model": "claude-sonnet-4-5",
+  "models": {
+    "parser": "claude-sonnet-4-5",
+    "constraint": "claude-sonnet-4-5",
+    "story_writer": "claude-sonnet-4-5",
+    "epic_decomposer": "claude-sonnet-4-5",
+    "gap_detector": "claude-sonnet-4-5"
+  },
+  "token_usage": {
+    "parser": {
+      "input": 4388,
+      "output": 1371
+    },
+    "constraint_extractor": {
+      "input": 2659,
+      "output": 1574
+    },
+    "story_writer": {
+      "input": 5344,
+      "output": 2697
+    },
+    "epic_decomposer": {
+      "input": 5246,
+      "output": 5301
+    },
+    "gap_detector": {
+      "input": 6454,
+      "output": 644
+    },
+    "total": {
+      "input": 24091,
+      "output": 11587
+    }
+  },
+  "cost_usd": 0.214491,
+  "outputs": {
+    "synthesis_json": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260601_160754/synthesis.json",
+    "synthesis_md": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260601_160754/synthesis.md",
+    "audit_md": "/Users/mani.kantan.arun/Downloads/backlog-synthesizer/outputs/20260601_160754/audit_trail.md"
+  }
+}

@@ -39,6 +39,7 @@ _TOKENS_CSS = """
     --accent-glow: rgba(34, 211, 238, 0.16);
     --violet: #a78bfa;
     --violet-glow: rgba(167, 139, 250, 0.14);
+    --accenture: #a100ff;   /* Accenture brand purple */
     --green: #34d399;
     --green-glow: rgba(52, 211, 153, 0.14);
     --amber: #fbbf24;
@@ -83,21 +84,36 @@ header[data-testid="stHeader"],
     background: transparent !important;
     height: 0 !important;
     min-height: 0 !important;
+    overflow: visible !important;   /* don't clip the floated expand control */
 }
-header[data-testid="stHeader"] > *:not([data-testid="stSidebarCollapseButton"]):not([data-testid="collapsedControl"]):not([data-testid="stSidebarCollapsedControl"]) {
+header[data-testid="stHeader"] > *:not([data-testid="stSidebarCollapseButton"]):not([data-testid="collapsedControl"]):not([data-testid="stSidebarCollapsedControl"]):not([data-testid="stExpandSidebarButton"]) {
     display: none !important;
 }
 
-/* The collapse / expand chevron itself — make sure it floats above
-   our content with a visible hit target, regardless of theme. */
+/* The sidebar is PERMANENTLY visible — the collapse / expand toggle is
+   removed entirely so the navigation can never be hidden (and can't get
+   stuck collapsed). Cover every testid Streamlit has used across versions
+   plus an aria-label fallback. */
 [data-testid="stSidebarCollapseButton"],
 [data-testid="collapsedControl"],
-[data-testid="stSidebarCollapsedControl"] {
-    display: block !important;
-    visibility: visible !important;
-    z-index: 9999 !important;
-    opacity: 1 !important;
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stExpandSidebarButton"],
+button[aria-label*="sidebar" i] {
+    display: none !important;
 }
+
+/* Force the sidebar open at its natural width even if a previous browser
+   session left it collapsed (Streamlit persists collapse state client-side). */
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"][aria-expanded="false"] {
+    transform: none !important;
+    visibility: visible !important;
+    width: 256px !important;
+    min-width: 256px !important;
+    max-width: 256px !important;
+    margin-left: 0 !important;
+}
+section[data-testid="stSidebar"] > div { visibility: visible !important; }
 [data-testid="stAppViewContainer"] > .main,
 [data-testid="stMain"] {
     padding-top: 0 !important;
@@ -140,6 +156,72 @@ _HEADER_CSS = """
 }
 .app-tagline {
     font-size: 0.84rem; color: var(--text-muted); margin-top: 0.2rem;
+}
+
+/* Accenture brand strip — styled wordmark, brand purple + chevron mark. */
+.acc-brand {
+    display: flex; flex-direction: column; gap: 0.2rem;
+    padding: 0.3rem 0 1.05rem 0;
+}
+.acc-wordmark {
+    font-size: 1.7rem; font-weight: 600; letter-spacing: -0.02em;
+    color: var(--text); line-height: 1.05;
+}
+.acc-wordmark .acc-mark {
+    color: var(--accenture); font-weight: 800; margin-left: 1px; font-size: 1.85rem;
+}
+.acc-eyebrow {
+    font-size: 0.64rem; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-faint);
+}
+.acc-footer {
+    margin-top: 1.6rem; padding-top: 0.9rem; border-top: 1px solid var(--border);
+    font-size: 0.68rem; color: var(--text-faint); letter-spacing: 0.03em; line-height: 1.5;
+}
+.acc-footer .acc-mark { color: var(--accenture); font-weight: 800; }
+
+/* Accumulating live run-log — every agent's lines stay visible (newest at
+   the bottom) instead of being overwritten when the next stage starts. */
+.progress-log {
+    display: flex; flex-direction: column; gap: 4px;
+    max-height: 340px; overflow-y: auto;
+    padding: 10px 14px; margin-top: 8px;
+    background: var(--bg-elev-1); border: 1px solid var(--border);
+    border-radius: 10px; font-size: 0.86rem;
+}
+.log-line { color: var(--text-muted); line-height: 1.55; }
+.log-line strong { color: var(--text); }
+.log-icon { display: inline-block; width: 1.2em; color: var(--text-faint); }
+.log-evt { color: var(--text-faint); text-transform: uppercase;
+           font-size: 0.7rem; letter-spacing: 0.06em; }
+.log-started .log-icon   { color: var(--accent); }
+.log-completed .log-icon,
+.log-done .log-icon      { color: var(--green); }
+.log-failed .log-icon    { color: var(--rose); }
+.log-failed strong       { color: var(--rose); }
+.log-skipped .log-icon   { color: var(--amber); }
+.log-failover            { color: var(--amber); }
+.log-failover .log-icon  { color: var(--amber); }
+.log-failover strong     { color: var(--amber); }
+.log-failover .log-evt   { color: var(--amber); }
+
+/* Multi-select chips — subtle dark pills that match the dashboard, instead
+   of the bright primary-colour fill baseweb applies by default. */
+[data-testid="stMultiSelect"] [data-baseweb="tag"] {
+    background-color: var(--bg-elev-2) !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: 7px !important;
+    color: var(--text) !important;
+}
+[data-testid="stMultiSelect"] [data-baseweb="tag"] span { color: var(--text) !important; }
+[data-testid="stMultiSelect"] [data-baseweb="tag"] svg {
+    color: var(--text-muted) !important; fill: var(--text-muted) !important;
+}
+[data-testid="stMultiSelect"] [data-baseweb="tag"]:hover {
+    border-color: var(--accent) !important;
+}
+[data-testid="stMultiSelect"] [data-baseweb="tag"]:hover svg {
+    color: var(--accent) !important; fill: var(--accent) !important;
 }
 """
 
