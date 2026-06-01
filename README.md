@@ -14,9 +14,9 @@ The bundled sample data is themed around **NorthStar Retail**, a fictional natio
 
 > Capture instructions for these images are in [docs/screenshots/](docs/screenshots/) — run `make ui`, synthesize the bundled sample, and save the frames. They render here automatically once added.
 
-<!-- Optional: a 30–60s screen recording. Drop docs/screenshots/demo.gif in place and uncomment:
 ![Backlog Synthesizer demo](docs/screenshots/demo.gif)
--->
+
+*Home → five-agent pipeline → epics/stories/tasks → gaps & conflicts → audit trail.*
 
 | | |
 |---|---|

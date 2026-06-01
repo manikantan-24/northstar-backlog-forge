@@ -140,14 +140,44 @@ Autonomous agent loops (where the model decides what tool to call next) are powe
 | `src/agents/story_writer_agent.py` | User stories + acceptance criteria |
 | `src/agents/epic_decomposer_agent.py` | Epic grouping + task breakdown |
 | `src/agents/gap_detector_agent.py` | Duplicates / conflicts / gaps detection |
-| `src/tools/claude_tool.py` | Wrapped Claude API client with retry |
-| `src/tools/jira_tool.py` | Mocked JIRA ticket fetch (reads `samples/jira_backlog.json`) |
-| `src/tools/confluence_tool.py` | Mocked Confluence page fetch |
-| `src/tools/github_tool.py` | Mocked GitHub Issues fetch |
-| `src/memory/store.py` | Vector + KV shared memory |
+| `src/tools/claude_tool.py` | Wrapped Claude API client with retry + JSON extraction + vision payloads |
+| `src/tools/gemini_tool.py` | Google Gemini client (`google-genai`), same `call_for_json` interface |
+| `src/tools/embedding_tool.py` | Local `sentence-transformers` duplicate detection (no LLM call) |
+| `src/tools/jira_tool.py` | JIRA read (mock + live JQL) **and write-back** (`create_issue` / `publish_synthesis`) |
+| `src/tools/confluence_tool.py` | Confluence read (mock + live) + markdown→storage write (`seed_confluence.py`) |
+| `src/tools/github_tool.py` | GitHub Issues fetch (mock) |
+| `src/memory/store.py` | Vector + KV shared memory, content-addressed vector cache |
 | `src/memory/audit_log.py` | Append-only trace event log |
+| `src/guardrails.py` | Six post-synthesis deterministic checks (non-blocking) |
+| `src/redactor.py` | Opt-in PII redaction + strict-redact trust boundary |
+| `src/pricing.py` | Per-model token→USD rates for the cost panel |
 | `src/input_loader.py` | Reads txt / md / pdf / json |
 | `src/output_formatter.py` | Renders epic → story → task hierarchy to JSON + Markdown |
+| `app.py` | Streamlit UI (multi-select inputs, live log, top-nav, Create-in-Jira, compare-mode) |
+| `evaluation/` | Golden suite, metrics, LLM-as-judge, regression dashboard, A/B, single-prompt baseline |
+
+## Multi-provider, presets, and resilience
+
+The LLM provider is chosen **per stage**, not globally. `_build_tool_for_model` builds a `ClaudeTool` or `GeminiTool` from the model id prefix, and no agent code knows which is behind it. Three presets ship:
+
+- **Free** — Gemini Flash for all five stages.
+- **Balanced** (default) — Gemini Flash for the four mechanical stages, Claude Sonnet for the Story Writer (the hardest reasoning).
+- **Premium** — Claude Sonnet for all five.
+
+Two opt-in behaviours sit behind an **"Auto-switch model"** toggle (default off, so the exact preset is honoured and easy to verify):
+
+- **Provider failover** — if a stage fails after its tenacity retries (rate limit / 5xx / timeout), the orchestrator retries that one stage on the *other* provider (`_fallback_model`: Claude↔Gemini). Surfaced as an amber **⚠ FAILOVER** live-log line + a `provider_failover` audit event. This keeps a live demo — or compare-mode's all-Gemini "Free" leg — alive through a transient outage.
+- **Vision auto-switch** — the Gemini wrapper can't carry image parts, so when a vision attachment is present and the Parser is on Gemini, the Parser is switched to a vision-capable Claude model.
+
+So "exactly one LLM call per agent" is the steady-state; a failover adds at most one retry call on the other provider, and it's always logged.
+
+## Beyond synthesis: live data, write-back, safety
+
+- **Live Atlassian (read).** `JiraTool`/`ConfluenceTool` have a `mode="live"` path: Jira via paginated `/rest/api/3/search/jql`, Confluence via `/wiki/api/v2/pages/{id}`. One API token covers both products.
+- **Jira write-back.** `JiraTool.publish_synthesis()` creates the synthesis in live Jira as **Epic → Story → Sub-task** (CLI `--publish-jira`; UI "Create in Jira"). Defensive fallbacks handle differing project configs; partial failures are recorded, not fatal.
+- **Vision input.** Vision-capable models accept whiteboard photos / screenshots alongside the transcript (a bundled `samples/whiteboard_sprint_planning.png` is selectable directly).
+- **Output guardrails.** Six deterministic post-synthesis checks (AC count/grammar, unique titles, canonical tags, story grounding, priority-rationale rigor) annotate the result without blocking it.
+- **PII redaction.** Opt-in regex redaction at the orchestrator boundary, with a strict-redact halt-on-violation trust boundary; the synthesis is un-redacted on the way out while the audit trail stays redacted.
 
 ## Error handling and retries
 
@@ -162,11 +192,12 @@ This means partial results are still useful — a Gap Detector failure still pro
 
 ## Where AI is used
 
-The Claude API is called exactly once per agent per run — five calls total for the standard pipeline. Outside those calls, everything is deterministic Python:
+An LLM (Claude or Gemini, per the active preset) is called once per agent per run — five calls total for the standard pipeline (a failover adds at most one retry on the other provider). Outside those calls, everything is deterministic Python:
 
 - File I/O
-- Vector similarity (numpy)
-- Audit log writes
-- Output formatting
+- Vector similarity + duplicate detection (sentence-transformers + numpy — no LLM call)
+- ID assignment, guardrails, PII redaction
+- Audit log writes, token/cost tallying
+- Output formatting and Jira issue creation
 
-The boundary is intentional. The model handles judgment (story shape, conflict detection); the framework handles plumbing.
+The boundary is intentional. The model handles judgment (story shape, conflict/gap detection); the framework handles plumbing — and the deterministic layers are exactly why 128 mocked tests can cover the system without spending API credit.

@@ -62,15 +62,23 @@ Each agent has a single responsibility. Here's the contract.
 
 ### Epic Decomposer Agent
 - **Input:** `stories` from memory
-- **Output (to memory):** `epics` — tree of `epic → stories → tasks`
+- **Output (to memory):** `epics` — tree of `epic → stories → tasks`, every story field preserved verbatim with a `tasks[]` array added (`{id, title, type}`)
 - **Tools used:** `claude_tool`
-- **Failure mode:** if decomposition fails, the orchestrator wraps stories in a single fallback "Uncategorized" epic so the output isn't empty. Audit log captures the failure.
+- **Failure mode:** if decomposition fails permanently, the failure is recorded in the audit log and the run returns whatever earlier stages produced (topics, constraints, stories) — the downstream Gap Detector is skipped because it reads `stories` that were never grouped.
 
 ### Gap Detector Agent
 - **Input:** `stories`, `constraints`, `existing_tickets`
-- **Output (to memory):** `duplicates`, `conflicts`, `gaps`
-- **Tools used:** `claude_tool`, vector index via `memory.store`, and (in real integrations) `jira_tool` / `github_tool`
-- **Failure mode:** if it fails, the user still gets epics+stories+tasks but no duplicate/conflict/gap analysis. The audit log captures the failure.
+- **Output (to memory):**
+  - `duplicates` — `{story_id, existing_id, confidence, reason, _similarity?}`, found by **local embeddings** (`sentence-transformers`, no LLM call)
+  - `conflicts` — `{story_id, with, severity, reason}`, judged by the LLM against `must`/`forbidden` constraints
+  - `gaps` — `{id (G-NN), title, description, related_ids, evidence}`, judged by the LLM
+- **Tools used:** `claude_tool` (conflicts + gaps), `embedding_tool` (duplicates), top-K retrieval via `memory.store`, `jira_tool` / `github_tool` (live candidate search)
+- **Hybrid by design:** duplicate detection is a similarity problem (embeddings, ~$0, deterministic); conflict/gap detection is a reasoning problem (LLM). Each sub-task uses the right tool.
+- **Failure mode:** if the LLM call fails, the user still gets epics+stories+tasks (and embeddings-based duplicates) but no conflict/gap analysis. The audit log captures it.
+
+### Cross-cutting: resilience & evidence
+- **Provider failover** (opt-in via the `auto_switch` toggle): if any agent's provider fails after retries, the orchestrator retries that stage on the other provider (Claude↔Gemini), logged as a `provider_failover` audit event + an amber ⚠ live-log line.
+- **Story evidence is system-attached**, not model-produced — the Story Writer agent copies the cited topic's `raw_quote`/`speaker`/`sentiment` into each story's `evidence` block, so it can't be hallucinated.
 
 ## Memory handoff contract
 
@@ -99,9 +107,16 @@ A reasonable alternative would be a single prompt that does everything but asks 
 
 The multi-agent pipeline solves all four problems for the cost of one extra round-trip per stage.
 
-## Where this design could go next
+## Where this design has gone — and could go next
 
-- **Parallel agent execution** where dependencies allow — Parser and Constraint Extractor are independent and could run in parallel. We chose sequential for now because runtime savings are negligible (~3s) and the audit log is cleaner.
-- **Loops for refinement** — the Story Writer could re-run on stories the Gap Detector flagged as having weak AC. This adds non-determinism, so it's deferred.
-- **Tool-use API** instead of prompt-only — Anthropic's tool-use feature could replace the JSON-fence parsing with structured outputs. Reduces the `_extract_json_block` risk surface.
-- **Different models per agent** — Parser and Constraint Extractor could use Haiku (cheaper, faster); Story Writer and Gap Detector need Sonnet's reasoning. Easy to wire because each agent owns its own `ClaudeTool` instance.
+**Shipped since the original design:**
+- **Per-stage model selection** — done. Free / Balanced / Premium presets + a per-stage override pick Claude or Gemini per agent (`_build_tool_for_model`); Balanced spends Claude only on the Story Writer.
+- **Provider failover** — done. A failed stage retries on the other provider (opt-in `auto_switch`).
+- **Multimodal input** — done. Vision-capable models read whiteboard photos/screenshots; the Parser auto-switches to Claude when an image is attached.
+- **Jira write-back** — done. `publish_synthesis()` creates Epic→Story→Sub-task in live Jira.
+
+**Still ahead:**
+- **Parallel agent execution** where dependencies allow — Parser and Constraint Extractor are independent and could run concurrently. Kept sequential for a cleaner audit trail (and the orchestrator/audit log aren't thread-safe yet).
+- **Loops for refinement** — the Story Writer could re-run on stories the Gap Detector flagged with weak AC. Adds non-determinism, so deferred.
+- **Tool-use / structured outputs** instead of prompt-only — would replace the JSON-fence parsing (`_extract_json_block`) with guaranteed-schema outputs.
+- **Two-way Jira sync** — write-back currently creates issues; it doesn't reconcile later edits or update on re-run.
