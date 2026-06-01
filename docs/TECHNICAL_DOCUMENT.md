@@ -34,6 +34,10 @@ A multi-agent AI system that turns customer meeting transcripts, architecture wi
 - [**Appendix H — Security & Privacy Posture**](#appendix-h--security--privacy-posture) — what redaction catches and misses
 - [**Appendix I — Latency Breakdown**](#appendix-i--latency-breakdown) — where the ~50 seconds go
 - [**Appendix J — Code Map**](#appendix-j--code-map) — one line per file
+- [**Appendix K — Scoping & Approach**](#appendix-k--scoping--approach-why-this-why-not-the-others) — why this approach, why not the alternatives
+- [**Appendix L — Why these LLMs**](#appendix-l--why-these-llms-and-not-others) — model choices and the rejected options
+- [**Appendix M — Adding a new model / provider**](#appendix-m--adding-a-new-model--provider-exact-changes) — the exact files to change
+- [**Appendix N — Code-review walkthrough**](#appendix-n--code-review-walkthrough-interview-prep) — every module explained, for interview prep
 
 ---
 
@@ -1600,6 +1604,109 @@ One line per file — the "where would I find X?" cheat sheet.
 - `src/ui/styling.py` — the ~1,000-line dark-dashboard CSS
 
 **Prompts** (`prompts/`) — `system_prompt.md` + one per agent
-**Evaluation** (`evaluation/`) — `run_evaluation.py`, `metrics.py`, `llm_as_judge.py`, `ab_compare.py`, `dashboard.py`, `golden_dataset/` (10 cases)
+**Evaluation** (`evaluation/`) — `run_evaluation.py`, `metrics.py`, `llm_as_judge.py`, `ab_compare.py`, `dashboard.py`, `single_prompt_baseline.py`, `golden_dataset/` (10 cases)
 **Tests** (`tests/`) — 9 files, 128 tests, all mocked
-**Baseline** — `versions/v1_baseline/` — the single-mega-prompt "before" (Appendix D)
+**Baseline** — `versions/v1_baseline/` — an earlier multi-agent snapshot; the genuine single-prompt comparison is `evaluation/single_prompt_baseline.py` (Appendix D)
+
+---
+
+## Appendix K — Scoping & Approach (why this, why not the others)
+
+### How we scoped the problem
+
+The brief: turn unstructured engineering inputs (meeting transcripts, an architecture wiki, an existing backlog) into a **structured, audited** set of backlog items, with duplicate / conflict / gap detection. We scoped it as:
+
+**In scope (and built):** ingest txt/md/pdf transcripts + a wiki + JIRA/GitHub tickets; produce epics → stories (Given/When/Then AC, priority + rationale, tags) → tasks; detect duplicates (vs. the backlog), conflicts (vs. architectural constraints), and gaps; a full audit trail; CLI **and** Streamlit UI; mock **and** live Atlassian; Jira write-back; an evaluation harness.
+
+**Deliberately out of scope:** two-way Jira sync, auth / multi-tenant isolation, autonomous re-planning loops, OCR for scanned PDFs, and model fine-tuning. Each is noted in `PRODUCTION_READINESS.md` rather than hidden.
+
+**Hard constraints we held to:** reproducibility, testability with zero API spend, cost-bounded execution (a fixed number of LLM calls), and auditability (the brief explicitly requires "audit logs must show how conclusions were reached").
+
+### Why bounded multi-agent — and why not the alternatives
+
+| Approach considered | Why rejected (or chosen) |
+|---|---|
+| **Single mega-prompt** | We *built and measured* it (Appendix D): comparable quality on small inputs, but no intermediate artifacts to audit, no partial-failure recovery, and duplicate-detection collapses once the backlog won't fit a context window. |
+| **Autonomous agent loop** (ReAct / "let the model decide what to call next") | Unbounded cost and call count, hard to budget, hard to test, and the audit trail becomes a graph instead of a linear trace. We wanted bounded + reproducible. |
+| **Two agents (Extract + Synthesize)** | The synthesizer ends up juggling constraints + backlog matching + prioritization + decomposition in one prompt — the same focus problem as one mega-prompt. |
+| **No-code / SaaS** (Zapier, n8n + one LLM call) | Can't do the constraint-vs-story conflict reasoning or produce a defensible audit chain; and it wouldn't demonstrate engineering. |
+| **Fine-tuning a custom model** | Data-hungry, slow to iterate, and opaque. Prompt engineering + RAG reached the goal faster and stays explainable. |
+| **Bounded multi-agent (chosen)** | One reasoning task per agent, shared audited memory, deterministic ordering → reproducible, testable, cost-bounded, auditable. |
+
+**Honest self-assessment of the scoping:** we matched scope to a demo timeline — broad enough to show agentic orchestration + RAG + audit + live integrations + write-back, bounded enough to stay testable and honest. The committed single-prompt baseline (Appendix D) is the evidence that we *measured* the core architecture decision rather than just asserting it.
+
+---
+
+## Appendix L — Why these LLMs (and not others)
+
+The provider is chosen **per stage** (Free / Balanced / Premium presets + per-stage override), so this is a cost-vs-quality dial, not a single bet.
+
+**Claude Sonnet 4.5** — primary for the hardest reasoning (the Story Writer) and all of Premium. Why: the most reliable instruction-following + JSON-only output in our testing, strong long-context handling, and it's vision-capable (whiteboard photos). The nuanced "same topic vs. same work" dedup and the priority rubric behaved most consistently here.
+
+**Gemini 2.5 Flash** — the Free preset and the four mechanical stages in Balanced. Why: fast and cheap for the more mechanical extraction/decomposition work, with a generous free tier so a reviewer without a Claude key can still run it.
+
+**Why not the others:**
+- **GPT-4o / OpenAI** — would work; we standardized on Anthropic for the strongest structured-JSON instruction-following in our testing and to avoid a third SDK + key. The architecture is provider-agnostic, so it's a small add (Appendix M).
+- **Claude Opus** — best reasoning, but ~5× Sonnet's cost; this is structured extraction, not deep open-ended reasoning, so Opus is overkill.
+- **Claude Haiku** — cheap and fast, but the quality drop on the priority rubric and dedup-vs-same-topic wasn't worth it on the *reasoning* stages. It's a perfectly good per-stage choice for the Parser/Constraint Extractor if cost matters — and the per-stage picker makes that a one-click change.
+- **Local / open models (Llama, etc.)** — no key, private, but weaker JSON reliability and real ops burden. We *did* go local exactly where local is the right call: the **embedding model** (`all-MiniLM-L6-v2`) for duplicate detection — free at runtime, offline, ~80 MB, and plenty accurate for "find similar tickets."
+
+---
+
+## Appendix M — Adding a new model / provider (exact changes)
+
+The tool abstraction means a new provider is a contained change. To add, e.g., OpenAI GPT-4o:
+
+1. **New tool** — `src/tools/openai_tool.py`, mirroring `ClaudeTool`: implement `call_for_json(user_message, max_tokens, images=…) -> (dict, usage)`, reuse the same JSON-extraction + `tenacity` retry pattern, lazy-import the SDK, and raise `ToolError` on a missing key / API error.
+2. **Dispatch** — `src/orchestrator.py::_build_tool_for_model`: add `elif mid.startswith("gpt"): return OpenAITool(model=model_id)`.
+3. **Failover partner** — `src/orchestrator.py::_fallback_model`: decide what it fails over to (e.g. `gpt-* → claude-sonnet-4-5`).
+4. **Pricing** — `src/pricing.py`: add the model's input/output $/1M rates so the cost panel stays accurate.
+5. **Presets / picker** — `app.py`: add it to `MODEL_PRESETS` and the per-stage `MODEL_OPTIONS` selectbox; optionally `DEFAULT_STAGE_MODELS` in the orchestrator.
+6. **Vision** — if it's vision-capable, give its `call_for_json` an `images=` parameter (the Parser forwards images only to tools whose signature includes `images`). If not, the existing vision auto-switch already routes images to Claude.
+7. **Env** — read the key in the tool's `__init__`; add it to `.env.example`.
+8. **Tests** — add a tool-level test mocking the SDK. The agents and orchestrator are provider-agnostic (they inject fakes), so they need no changes.
+
+**What you do NOT touch:** the five agents, memory, audit log, guardrails, redactor, output formatter. They only ever see `call_for_json` — that's the payoff of the abstraction, and a strong thing to point to in a code review.
+
+---
+
+## Appendix N — Code-review walkthrough (interview prep)
+
+A module-by-module guide for "they'll review the code." For each: **what it does**, the **design decisions** worth defending, and **likely questions**. Cross-cutting themes to lead with: *the LLM does judgment, deterministic Python does everything else; tools are injectable so the suite is fully mocked; errors degrade gracefully; every decision is audited.*
+
+### `src/main.py` — CLI entry
+Loads `.env`, promotes `JIRA_*` → `CONFLUENCE_*` (one Atlassian token), parses args, loads inputs via `input_loader`, runs `Orchestrator().run(...)`, writes `synthesis.json/.md` + `audit_trail.md`, and (with `--publish-jira`) publishes to Jira. Exit codes: 0 ok, 2 input error, 3 orchestrator error.
+*Likely Q:* "How does a PDF transcript get handled?" → `load_text` lazy-imports `pypdf`, joins pages, raises `InputError` with an OCR hint on image-only PDFs.
+
+### `src/orchestrator.py` — the coordinator (read this one closely)
+Constructs a fresh `MemoryStore` + `AuditLog` per run (no cross-run state), resolves **per-stage models**, applies the **vision auto-switch** and optional **PII redaction** + live fetches, then runs the five stages in fixed order. Each stage: `_emit("started")` → build the tool (`_tool_for`) → `agent.run()` → `_emit("completed")`; on `AgentError` it calls `_attempt_failover` (retry on the other provider, gated by `auto_switch`). Ends by aggregating token usage, assembling the result dict, un-redacting the output, and running guardrails. Key helpers: `_build_tool_for_model` (prefix dispatch), `_fallback_model`, `_attempt_failover`, `run_compare` (two providers, sequential).
+*Likely Q:* "Why is it a fixed pipeline, not autonomous?" (reproducibility/cost/audit) · "What happens if stage 3 fails?" (recorded, downstream skipped, partial result returned — or failover if enabled).
+
+### `src/agents/base.py` + the five agents
+`Agent` base: `name`, `memory`, `audit`, `load_prompt()`, `emit()`. Every agent follows the same shape: **substitute the prompt → `call_for_json` → assign deterministic IDs → write to memory → `record_tool_call`**. Specifics: the **Parser** forwards images when the tool supports them; the **Story Writer** post-attaches the `evidence` block from the cited topic (so it can't be hallucinated); the **Gap Detector** is hybrid — embeddings for duplicates (no LLM), LLM for conflicts + gaps, with a `G-NN` id backstop.
+*Likely Q:* "Why assign IDs in Python, not let the model?" (determinism, no hallucinated/duplicate ids) · "Why a separate Parser?" (single responsibility + reusable topic anchors for traceability).
+
+### `src/tools/` — provider + integration wrappers
+`base.py`: `Tool`, `ToolError`, `VisionAttachment` (`from_path`/`from_bytes`). `claude_tool.py`: Anthropic client, shared `system` prompt, `_call_with_retry` (tenacity, retries only transient errors), multimodal content array, and `_extract_json_block` (tries a fenced block, then the first `{…}` span). `gemini_tool.py`: same `call_for_json` contract over `google-genai`. `embedding_tool.py`: lazy `all-MiniLM-L6-v2`, `find_duplicates` via normalized-vector cosine ≥ 0.6 (no LLM). `jira_tool.py`: mock (fixture) vs live (paginated JQL + ADF→text) **and write-back** (`create_issue` with progressive fallback, `publish_synthesis` building Epic→Story→Sub-task).
+*Likely Q:* "Why the regex JSON extraction instead of tool-use?" (small, well-tested; tool-use is the documented next step) · "Why local embeddings?" (free, offline, deterministic; dedup is similarity, not reasoning).
+
+### `src/memory/` — store + audit
+`store.py`: KV (`get`/`put`) for agent handoff + a vector layer (`index_tickets` only embeds at ≥ 20 tickets; `search_similar` returns top-K with `_similarity`); optional content-addressed `.npz` cache keyed by a SHA-256 of model + corpus (self-invalidating). `audit_log.py`: append-only `AuditEvent`s (`record`, `record_tool_call`, `record_failure`), rendered to Markdown with collapsible `<details>` prompt/response blocks.
+*Likely Q:* "How do agents share state?" (a dict + a numpy index — never references to each other; the orchestrator owns sequencing).
+
+### `src/guardrails.py`, `src/redactor.py`, `src/pricing.py`
+Guardrails: six deterministic post-synthesis checks (AC count/grammar, unique titles, canonical tags, story grounding, priority-rationale rigor) → non-blocking findings, the two `error`-level ones are the deterministic hallucination catch. Redactor: regex PII (email/phone/SSN/card + conservative names) with stable placeholders + a strict-redact trust boundary. Pricing: per-model $/1M rates for the cost panel.
+*Likely Q:* "How do you catch hallucination deterministically?" (the `ungrounded_story` / `dangling_topic_ref` guardrails).
+
+### `src/input_loader.py`, `src/output_formatter.py`
+Loader: txt/md (UTF-8 + latin-1 fallback), pdf (pypdf), json tickets (list or `{items:[…]}`), normalized shape. Formatter: renders the result to `synthesis.json` + a hierarchical `synthesis.md` (epics → stories → tasks, then gaps/conflicts/duplicates).
+
+### `app.py` — Streamlit UI
+State in `st.session_state` (Streamlit re-runs the whole script per interaction). Sidebar = multi-select sources + always-visible uploaders + presets; the run handler defines a `progress_callback` that **accumulates** the live log and lights the pipeline; results render as KPI cards + tabs + downloads + Create-in-Jira; the top nav and dialogs reuse the same engine. The UI is a thin presentation layer — it calls the same `Orchestrator.run` the CLI does.
+*Likely Q:* "Why Streamlit?" (Python-native, fast, server-rendered — no separate frontend) · "Is the UI tested?" (the engine is; UI is a presentation wrapper over the tested orchestrator).
+
+### `evaluation/`
+`metrics.py` (6 deterministic 0–1 scores), `llm_as_judge.py` (5 qualitative dims, normalized), `run_evaluation.py` (per-case runner, mockable orchestrator), `single_prompt_baseline.py` (the honest A/B), `dashboard.py` (regression detection), `ab_compare.py` (prompt experiments).
+*Likely Q:* "Why both deterministic and LLM-judge?" (objective-but-shallow vs. subjective-but-deep; reporting both + explaining where they diverge is more honest — Appendix C).
+
+**Code-review tips:** lead with the deterministic-vs-AI boundary; when asked "where would X change?", point at the single owning module (e.g., a new provider → `_build_tool_for_model` + a new tool, Appendix M); and be ready to name one thing you'd improve (tool-use for guaranteed JSON; two-way Jira sync; parallelizing the two independent stages).
