@@ -133,7 +133,9 @@ section[data-testid="stSidebar"] .stMarkdown h3 {
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    margin-top: 1rem;
+    margin-top: 1.2rem;
+    padding-left: 0.55rem;
+    border-left: 2px solid var(--accent);
 }
 """
 
@@ -200,6 +202,12 @@ _HEADER_CSS = """
 .log-failed .log-icon    { color: var(--rose); }
 .log-failed strong       { color: var(--rose); }
 .log-skipped .log-icon   { color: var(--amber); }
+
+/* Responsive guard — the 5-column pipeline grid doesn't fit narrower
+   viewports. Stack the cards vertically below 900px. */
+@media (max-width: 900px) {
+    .pipeline { grid-template-columns: 1fr 1fr; }
+}
 .log-failover            { color: var(--amber); }
 .log-failover .log-icon  { color: var(--amber); }
 .log-failover strong     { color: var(--amber); }
@@ -365,27 +373,28 @@ _PIPELINE_CSS = """
     margin-bottom: 0.25rem;
 }
 .stage-name {
-    font-size: 0.92rem; font-weight: 600; color: var(--text);
+    font-size: 1rem; font-weight: 700; color: var(--text);
     line-height: 1.25;
 }
 .stage-sub {
-    font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem;
-    line-height: 1.35;
+    font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem;
+    line-height: 1.4;
 }
 .stage-model {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     margin-top: 0.55rem;
-    padding: 0.2rem 0.5rem;
-    background: rgba(110, 168, 254, 0.08);
-    border: 1px solid rgba(110, 168, 254, 0.25);
+    padding: 0.22rem 0.55rem;
+    background: rgba(34, 211, 238, 0.12);
+    border: 1px solid rgba(34, 211, 238, 0.35);
     border-radius: 999px;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.62rem;
+    font-size: 0.65rem;
     color: var(--accent);
     letter-spacing: 0.02em;
     width: fit-content;
+    font-weight: 600;
 }
 .stage-model-dot {
     width: 5px; height: 5px;
@@ -606,13 +615,14 @@ _EMPTY_CSS = """
     background: linear-gradient(135deg, var(--accent) 0%, #4f8fff 100%) !important;
     color: #0a0e1a !important;
     border: 1px solid var(--accent) !important;
-    font-weight: 700 !important;
-    font-size: 1.05rem !important;
-    letter-spacing: 0.06em !important;
-    padding: 1rem 2rem !important;
-    border-radius: 12px !important;
-    box-shadow: 0 8px 30px var(--accent-glow), 0 0 0 1px var(--accent) !important;
+    font-weight: 800 !important;
+    font-size: 1.2rem !important;
+    letter-spacing: 0.08em !important;
+    padding: 1.2rem 2rem !important;
+    border-radius: 14px !important;
+    box-shadow: 0 8px 32px var(--accent-glow), 0 0 0 1px var(--accent) !important;
     transition: all 0.18s ease !important;
+    min-height: 3.4rem !important;
 }
 .main-cta-wrap .stButton button:hover:not(:disabled) {
     transform: translateY(-1px) !important;

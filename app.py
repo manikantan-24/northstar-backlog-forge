@@ -1360,27 +1360,27 @@ SAMPLES_DIR = ROOT / "samples"
 GOLDEN_TRANSCRIPTS_DIR = ROOT / "evaluation" / "golden_dataset" / "transcripts"
 
 TRANSCRIPT_OPTIONS = {
-    "Meeting notes — NorthStar Q3 planning":
+    "Q3 Planning — Meeting notes":
         SAMPLES_DIR / "meeting_notes.txt",
-    "Strategy doc — NorthStar Q3":
+    "Q3 Strategy doc":
         SAMPLES_DIR / "product_strategy.md",
-    "Pharmacy refill escalation (eval case 02)":
+    "Pharmacy refill escalation":
         GOLDEN_TRANSCRIPTS_DIR / "case_02_pharmacy_escalation.txt",
-    "Mobile team Slack standup (eval case 03)":
+    "Mobile Slack standup":
         GOLDEN_TRANSCRIPTS_DIR / "case_03_mobile_standup.txt",
-    "Customer support note (eval case 04 — negative)":
+    "Customer support note (negative)":
         GOLDEN_TRANSCRIPTS_DIR / "case_04_support_note.txt",
 }
 CONSTRAINTS_OPTIONS = {
-    "Architecture constraints (recommended)":
+    "Architecture constraints":
         SAMPLES_DIR / "architecture_constraints.md",
     "Product strategy doc":
         SAMPLES_DIR / "product_strategy.md",
 }
 BACKLOG_OPTIONS = {
-    "JIRA backlog — 30 tickets (recommended)":
+    "JIRA backlog (30 tickets)":
         SAMPLES_DIR / "jira_backlog.json",
-    "GitHub issues — 6 tickets":
+    "GitHub issues (6 tickets)":
         SAMPLES_DIR / "github_issues.json",
 }
 
@@ -1416,7 +1416,7 @@ with st.sidebar:
         key="transcript_choice",
         help="Pick one or more bundled transcripts / docs — combined into a single source for the Parser. You can also drop your own files below; samples + uploads are merged.",
     )
-    with st.expander("⤓  Upload your own (txt / md / pdf)", expanded=False):
+    with st.expander("↑  Upload your own (txt / md / pdf)", expanded=False):
         transcript_upload = st.file_uploader(
             "transcript upload", type=["txt", "md", "pdf"],
             accept_multiple_files=True,
@@ -1457,7 +1457,7 @@ with st.sidebar:
         key="constraints_choice",
         help="Pick one or more bundled wiki / architecture pages (combined), or leave empty to skip the Constraint Extractor. You can also drop your own files below.",
     )
-    with st.expander("⤓  Upload your own (md / txt)", expanded=False):
+    with st.expander("↑  Upload your own (md / txt)", expanded=False):
         constraints_upload = st.file_uploader(
             "constraints upload", type=["md", "txt"],
             accept_multiple_files=True,
@@ -1474,7 +1474,7 @@ with st.sidebar:
         key="backlog_choice",
         help="Pick one or more bundled JIRA / GitHub exports — all tickets merged for duplicate detection. Leave empty to skip. You can also drop your own files below.",
     )
-    with st.expander("⤓  Upload your own (JSON)", expanded=False):
+    with st.expander("↑  Upload your own (JSON)", expanded=False):
         backlog_upload = st.file_uploader(
             "backlog upload", type=["json"],
             accept_multiple_files=True,
@@ -1659,25 +1659,25 @@ with st.sidebar:
     # with a secondary preset chosen here — and show a side-by-side
     # summary in the results. Useful for evaluating whether the cheaper
     # Free preset is producing similar output to the Premium preset.
-    st.markdown("### Compare providers")
-    compare_enabled = st.toggle(
-        "Run a second pass with a different preset",
-        value=False,
-        key="compare_enabled",
-        help=(
-            "Runs the pipeline twice (sequentially). Doubles wall time and "
-            "API spend; surfaces a side-by-side metrics summary so you can "
-            "see which preset produced more / better output."
-        ),
-    )
-    compare_with_preset = "free"
-    if compare_enabled:
-        compare_with_preset = st.selectbox(
-            "Compare against preset",
-            options=list(MODEL_PRESETS.keys()),
-            index=list(MODEL_PRESETS.keys()).index("free"),
-            key="compare_with_preset",
+    with st.expander("⚖  Compare providers", expanded=False):
+        compare_enabled = st.toggle(
+            "Run a second pass with a different preset",
+            value=False,
+            key="compare_enabled",
+            help=(
+                "Runs the pipeline twice (sequentially). Doubles wall time and "
+                "API spend; surfaces a side-by-side metrics summary so you can "
+                "see which preset produced more / better output."
+            ),
         )
+        compare_with_preset = "free"
+        if compare_enabled:
+            compare_with_preset = st.selectbox(
+                "Compare against preset",
+                options=list(MODEL_PRESETS.keys()),
+                index=list(MODEL_PRESETS.keys()).index("free"),
+                key="compare_with_preset",
+            )
 
     _vision_present = bool(vision_samples) or bool(vision_uploads)
     _transcript_ready = (
@@ -1711,10 +1711,10 @@ with st.sidebar:
         )
         st.markdown(
             "<div style='padding:0.55rem 0.8rem;background:var(--bg-elev-1);"
-            "border:1px solid var(--border);border-radius:8px;font-size:0.8rem;"
-            "margin-bottom:0.55rem;'>"
-            "<span style='font-size:0.62rem;font-weight:700;letter-spacing:0.12em;"
-            "text-transform:uppercase;color:var(--text-faint);display:block;"
+            "border:1px solid var(--border);border-left:3px solid var(--accent);"
+            "border-radius:8px;font-size:0.82rem;margin-bottom:0.6rem;'>"
+            "<span style='font-size:0.65rem;font-weight:700;letter-spacing:0.12em;"
+            "text-transform:uppercase;color:var(--accent);display:block;"
             "margin-bottom:0.25rem;'>Estimated run cost</span>"
             f"{cost_line}</div>",
             unsafe_allow_html=True,
@@ -1849,9 +1849,14 @@ with _hdr_right:
         _navs += [("export", "↓ Export"), ("jira", "⤴ Jira")]
     _nav_cols = st.columns(len(_navs))
     _nav_clicked: dict[str, bool] = {}
+    _primary_nav = {"jira", "export"}
     for _col, (_key, _label) in zip(_nav_cols, _navs):
         with _col:
-            _nav_clicked[_key] = st.button(_label, key=f"nav_{_key}", use_container_width=True)
+            _nav_clicked[_key] = st.button(
+                _label, key=f"nav_{_key}",
+                use_container_width=True,
+                type="primary" if _key in _primary_nav else "secondary",
+            )
 
 if _nav_clicked.get("home"):
     for _k in ("result", "run_dir", "dry_run_result", "jira_publish_result"):
@@ -2415,6 +2420,24 @@ elif result is None:
     # Primary action on the main canvas — large, centered, mirrors the
     # sidebar's Synthesize button. Sets `main_run_clicked` and reruns;
     # the run handler at the top of the script picks either source.
+    with st.expander("▸  How the five-agent pipeline works", expanded=False):
+        st.markdown(
+            "**Parser** reads the transcript and extracts distinct topics.\n\n"
+            "**Constraint Extractor** reads the wiki for architecture rules.\n\n"
+            "**Story Writer** drafts user stories with Given/When/Then "
+            "acceptance criteria for each topic, respecting constraints.\n\n"
+            "**Epic Decomposer** groups stories into epics and breaks each "
+            "story into 3-7 concrete tasks.\n\n"
+            "**Gap Detector** compares new stories against the existing "
+            "backlog and constraints to find duplicates, conflicts, and gaps.\n\n"
+            "Every agent decision is captured in `audit_trail.md` — a "
+            "chronological trace a reviewer can read top-to-bottom."
+        )
+
+    # Primary action on the main canvas — large, centered, mirrors the
+    # sidebar's Synthesize button. Placed below the explainer so it's
+    # the last thing the eye lands on before clicking.
+    st.markdown("<div style='height:0.8rem'/>", unsafe_allow_html=True)
     _, _main_cta_col, _ = st.columns([1, 2, 1])
     with _main_cta_col:
         st.markdown('<div class="main-cta-wrap">', unsafe_allow_html=True)
@@ -2431,19 +2454,6 @@ elif result is None:
         st.session_state["_pending_run"] = True
         st.rerun()
 
-    with st.expander("How the five-agent pipeline works", expanded=False):
-        st.markdown(
-            "**Parser** reads the transcript and extracts distinct topics.\n\n"
-            "**Constraint Extractor** reads the wiki for architecture rules.\n\n"
-            "**Story Writer** drafts user stories with Given/When/Then "
-            "acceptance criteria for each topic, respecting constraints.\n\n"
-            "**Epic Decomposer** groups stories into epics and breaks each "
-            "story into 3-7 concrete tasks.\n\n"
-            "**Gap Detector** compares new stories against the existing "
-            "backlog and constraints to find duplicates, conflicts, and gaps.\n\n"
-            "Every agent decision is captured in `audit_trail.md` — a "
-            "chronological trace a reviewer can read top-to-bottom."
-        )
 else:
     # ---- Run-meta strip ----
     elapsed = st.session_state.elapsed or 0
@@ -2759,61 +2769,5 @@ else:
         except ValueError:
             pass
 
-    # ---- Create in Jira (live write-back) — closes the loop end-to-end ----
-    st.markdown("### Create in Jira")
-    _jira_ready = bool(
-        os.environ.get("JIRA_BASE_URL") and os.environ.get("JIRA_EMAIL")
-        and os.environ.get("JIRA_API_TOKEN") and os.environ.get("JIRA_PROJECT_KEY")
-    )
-    if not _jira_ready:
-        st.caption(
-            "Set `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` / `JIRA_PROJECT_KEY` in "
-            "`.env` to push this synthesis into a live Jira project as Epic → Story → Sub-task."
-        )
-    else:
-        _proj = os.environ.get("JIRA_PROJECT_KEY")
-        _c1, _c2 = st.columns([1, 1])
-        with _c1:
-            _subtasks = st.checkbox("Also create sub-tasks", value=True, key="jira_subtasks")
-        with _c2:
-            _go = st.button(
-                f"⤴  Create in Jira ({_proj})",
-                type="primary", use_container_width=True, key="jira_publish_btn",
-            )
-        st.caption(
-            "Writes real issues to your live Jira project — Epics → Stories → Sub-tasks, with "
-            "acceptance criteria, priority, and conflict flags in each description."
-        )
-        if _go:
-            with st.spinner(f"Creating issues in {_proj}…"):
-                try:
-                    from tools.jira_tool import JiraTool
-                    st.session_state["jira_publish_result"] = JiraTool(mode="live").publish_synthesis(
-                        result, create_subtasks=_subtasks,
-                    )
-                except Exception as e:  # noqa: BLE001 — surface, never crash the page
-                    st.session_state["jira_publish_result"] = {"error": str(e)}
-
-        _pub = st.session_state.get("jira_publish_result")
-        if _pub:
-            if _pub.get("error"):
-                st.error(f"Jira publish failed: {_pub['error']}")
-            else:
-                _cnt = _pub["counts"]
-                st.success(
-                    f"Created {_cnt['epics']} epic(s), {_cnt['stories']} story(ies), "
-                    f"{_cnt['subtasks']} sub-task(s) in project {_pub['project']}."
-                )
-                _links = []
-                for _it in _pub["created"]:
-                    if _it["level"] in ("epic", "story"):
-                        _pad = "" if _it["level"] == "epic" else "&nbsp;&nbsp;&nbsp;&nbsp;↳ "
-                        _links.append(
-                            f'{_pad}<a href="{_it["url"]}" target="_blank">{_it["key"]}</a> — {_it["summary"]}'
-                        )
-                if _links:
-                    st.markdown("<br>".join(_links), unsafe_allow_html=True)
-                if _pub.get("errors"):
-                    with st.expander(f"{len(_pub['errors'])} item(s) needed a fallback / were skipped"):
-                        for _e in _pub["errors"]:
-                            st.write("• " + _e)
+    # Jira write-back is available via the "⤴ Jira" top-nav button.
+    # No duplicate inline section — keeps the Downloads area clean.

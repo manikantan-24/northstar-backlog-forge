@@ -12,3 +12,6 @@ outputs/*.md
 
 # local embedding/vector cache
 .cache/
+
+# Word lock files
+~$*

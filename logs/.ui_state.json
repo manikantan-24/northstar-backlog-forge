@@ -1,12 +1,12 @@
 {
   "transcript_choice": [
-    "Meeting notes \u2014 NorthStar Q3 planning"
+    "Q3 Planning \u2014 Meeting notes"
   ],
   "constraints_choice": [
-    "Architecture constraints (recommended)"
+    "Architecture constraints"
   ],
   "backlog_choice": [
-    "JIRA backlog \u2014 30 tickets (recommended)"
+    "JIRA backlog (30 tickets)"
   ],
   "active_preset": "balanced",
   "models": {
