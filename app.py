@@ -1240,6 +1240,16 @@ if "dry_run_result" not in st.session_state:
 # Preset definitions are deliberately small and explicit — the spec lists
 # these exact mappings. "Balanced" is the default new-session value.
 MODEL_PRESETS: dict[str, dict[str, str]] = {
+    "local": {
+        # Free local models (Ollama) for the mechanical stages;
+        # Claude for the two reasoning-heavy stages.
+        # Requires: ollama serve + ollama pull llama3.1
+        "parser":          "ollama/llama3.1",
+        "constraint":      "ollama/llama3.1",
+        "story_writer":    "claude-sonnet-4-5",
+        "epic_decomposer": "ollama/llama3.1",
+        "gap_detector":    "claude-sonnet-4-5",
+    },
     "free": {
         "parser":          "gemini-2.5-flash",
         "constraint":      "gemini-2.5-flash",
@@ -1265,7 +1275,8 @@ MODEL_PRESETS: dict[str, dict[str, str]] = {
 # Cost-per-run band shown below the preset chips. Rough heuristics from
 # the spec — the real number lives in the post-run cost panel.
 PRESET_COST_BAND = {
-    "free":     "Free tier · ~$0",
+    "local":    "Local (Ollama) · ~$0  —  needs ollama serve",
+    "free":     "Free tier (Gemini) · ~$0",
     "balanced": "~$0.005 per run",
     "premium":  "~$0.03 per run",
     "custom":   "custom mix",
@@ -1277,6 +1288,10 @@ MODEL_OPTIONS = [
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-2.5-pro",
+    "ollama/llama3.1",
+    "ollama/mistral",
+    "ollama/phi3",
+    "ollama/gemma2",
 ]
 STAGE_KEYS = ("parser", "constraint", "story_writer", "epic_decomposer", "gap_detector")
 
@@ -1570,8 +1585,8 @@ with st.sidebar:
     # regardless of how the user got there.
     st.markdown("### Models")
 
-    _preset_labels = ["Free", "Balanced", "Premium"]
-    _label_to_key = {"Free": "free", "Balanced": "balanced", "Premium": "premium"}
+    _preset_labels = ["Local", "Free", "Balanced", "Premium"]
+    _label_to_key = {"Local": "local", "Free": "free", "Balanced": "balanced", "Premium": "premium"}
     _key_to_label = {v: k for k, v in _label_to_key.items()}
 
     # If the active preset is "custom", default the radio to whichever

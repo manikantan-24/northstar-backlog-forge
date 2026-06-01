@@ -25,6 +25,11 @@ from __future__ import annotations
 
 # Per-million-token list prices (USD). input = prompt, output = completion.
 MODEL_PRICES: dict[str, dict[str, float]] = {
+    # ---- Ollama (local — always $0.00) ----
+    # The "ollama" prefix catches any "ollama/<model>" id via longest-prefix
+    # match. Local generation costs nothing so we use 0.0.
+    "ollama":                {"input": 0.0, "output": 0.0},
+
     # ---- Anthropic Claude ----
     # Claude Sonnet 4 / 4.5 — workhorse model
     "claude-sonnet-4-5": {"input": 3.0, "output": 15.0},
@@ -60,6 +65,7 @@ FREE_TIER_MODELS: set[str] = {
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
+    "ollama",   # all local Ollama models are free
 }
 
 

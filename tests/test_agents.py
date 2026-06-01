@@ -376,3 +376,93 @@ def test_audit_log_renders_markdown(audit):
     assert "started" in md
     assert "completed" in md
     assert "Extracted 3 topics" in md
+
+
+# ----------------------------------------------------------------- Ollama tool tests
+
+class FakeOllamaResponse:
+    def __init__(self, payload: dict, status: int = 200):
+        self.status_code = status
+        self._payload = payload
+        self.text = str(payload)
+    def json(self): return self._payload
+
+
+def _patch_requests(monkeypatch, get_resp=None, post_resp=None):
+    import requests
+    if get_resp is not None:
+        monkeypatch.setattr(requests, "get", lambda *a, **kw: get_resp)
+    if post_resp is not None:
+        monkeypatch.setattr(requests, "post", lambda *a, **kw: post_resp)
+
+
+def test_ollama_tool_call_for_json_success(monkeypatch):
+    """OllamaTool.call_for_json parses the message content as JSON."""
+    import sys, json
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    from tools.ollama_tool import OllamaTool
+
+    health = FakeOllamaResponse({"models": []})
+    generation = FakeOllamaResponse({
+        "message": {"content": json.dumps({"summary": "ok", "topics": []})},
+        "prompt_eval_count": 50, "eval_count": 20,
+    })
+    _patch_requests(monkeypatch, get_resp=health, post_resp=generation)
+
+    tool = OllamaTool(model="llama3.1", base_url="http://localhost:11434")
+    parsed, usage = tool.call_for_json("test prompt")
+    assert parsed["summary"] == "ok"
+    assert usage["input_tokens"] == 50
+    assert usage["output_tokens"] == 20
+
+
+def test_ollama_tool_strips_ollama_prefix(monkeypatch):
+    """The 'ollama/' prefix is stripped before the API call."""
+    import sys, json, requests as _r
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    from tools.ollama_tool import OllamaTool
+
+    captured = {}
+    def fake_post(url, json=None, **kw):
+        captured["model"] = (json or {}).get("model")
+        return FakeOllamaResponse({
+            "message": {"content": "{}"},
+            "prompt_eval_count": 1, "eval_count": 1,
+        })
+    monkeypatch.setattr(_r, "get", lambda *a, **kw: FakeOllamaResponse({"models": []}))
+    monkeypatch.setattr(_r, "post", fake_post)
+
+    OllamaTool(model="ollama/llama3.1").call("hi")
+    assert captured["model"] == "llama3.1"
+
+
+def test_ollama_tool_raises_when_server_unreachable(monkeypatch):
+    """ToolError is raised immediately when Ollama isn't running."""
+    import sys, requests as _r
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    from tools.ollama_tool import OllamaTool
+    from tools.base import ToolError
+
+    def raise_connection(*a, **kw):
+        raise _r.exceptions.ConnectionError("refused")
+    monkeypatch.setattr(_r, "get", raise_connection)
+
+    with pytest.raises(ToolError, match="Cannot reach Ollama"):
+        OllamaTool(model="llama3.1")
+
+
+def test_ollama_tool_handles_fenced_json(monkeypatch):
+    """_extract_json_block is used when the model wraps output in ```json."""
+    import sys, json, requests as _r
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    from tools.ollama_tool import OllamaTool
+
+    fenced = '```json\n{"stories": []}\n```'
+    monkeypatch.setattr(_r, "get", lambda *a, **kw: FakeOllamaResponse({"models": []}))
+    monkeypatch.setattr(_r, "post", lambda *a, **kw: FakeOllamaResponse({
+        "message": {"content": fenced},
+        "prompt_eval_count": 5, "eval_count": 5,
+    }))
+
+    parsed, _ = OllamaTool(model="llama3.1").call_for_json("test")
+    assert parsed == {"stories": []}

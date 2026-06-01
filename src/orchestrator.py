@@ -32,6 +32,7 @@ from memory.audit_log import AuditLog
 from tools.base import Tool, ToolError
 from tools.claude_tool import ClaudeTool
 from tools.gemini_tool import GeminiTool
+from tools.ollama_tool import OllamaTool
 from tools.jira_tool import JiraTool
 from tools.confluence_tool import ConfluenceTool
 from tools.github_tool import GithubTool
@@ -92,22 +93,46 @@ def _build_tool_for_model(model_id: str, *, claude_fallback: Tool | None = None)
         return ClaudeTool(model=model_id)
     if mid.startswith("gemini"):
         return GeminiTool(model=model_id)
+    if mid.startswith("ollama"):
+        return OllamaTool(model=model_id)
     # Unknown prefix and no injected fallback — raise.
     raise ToolError(
-        f"Unknown model id '{model_id}'. Expected prefix 'claude-' or 'gemini-'."
+        f"Unknown model id '{model_id}'. Expected prefix 'claude-', 'gemini-', or 'ollama/'."
     )
 
 
-def _fallback_model(model_id: str) -> str | None:
-    """The 'other provider' to retry a failed stage on.
+def _ollama_available() -> bool:
+    """Quick health-check: is an Ollama server reachable right now?"""
+    import os
+    base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+    try:
+        import requests as _r
+        return _r.get(f"{base}/api/tags", timeout=2).status_code < 400
+    except Exception:  # noqa: BLE001
+        return False
 
-    Claude → Gemini and vice-versa, so a provider outage (rate limit, 5xx,
-    timeout) on one vendor doesn't sink the whole run.
+
+def _fallback_model(model_id: str) -> str | None:
+    """The failover provider to retry a failed stage on.
+
+    Cascade:
+      • Claude  → Gemini Flash (cloud, fast)
+      • Gemini  → Ollama (if running, free/local) → Claude Sonnet (last resort)
+      • Ollama  → Claude Sonnet (cloud fallback when local fails)
+
+    Gemini → Ollama first so rate-limit hits on the Free preset fall back
+    to a free local model before spending Claude credit.
     """
     mid = (model_id or "").lower()
     if mid.startswith("claude"):
         return "gemini-2.5-flash"
     if mid.startswith("gemini"):
+        # Prefer Ollama when it's running — avoids Claude spend on transient
+        # Gemini 503s/quota errors.
+        if _ollama_available():
+            return "ollama/llama3.1"
+        return "claude-sonnet-4-5"
+    if mid.startswith("ollama"):
         return "claude-sonnet-4-5"
     return None
 
