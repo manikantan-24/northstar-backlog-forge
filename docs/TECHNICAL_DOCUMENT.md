@@ -38,6 +38,7 @@ A multi-agent AI system that turns customer meeting transcripts, architecture wi
 - [**Appendix L — Why these LLMs**](#appendix-l--why-these-llms-and-not-others) — model choices and the rejected options
 - [**Appendix M — Adding a new model / provider**](#appendix-m--adding-a-new-model--provider-exact-changes) — the exact files to change
 - [**Appendix N — Code-review walkthrough**](#appendix-n--code-review-walkthrough-interview-prep) — every module explained, for interview prep
+- [**Appendix O — How we validated Claude-generated code**](#appendix-o--how-we-validated-the-code-claude-generated) — the 7-layer validation stack + real defects it caught
 
 ---
 
@@ -1710,3 +1711,44 @@ State in `st.session_state` (Streamlit re-runs the whole script per interaction)
 *Likely Q:* "Why both deterministic and LLM-judge?" (objective-but-shallow vs. subjective-but-deep; reporting both + explaining where they diverge is more honest — Appendix C).
 
 **Code-review tips:** lead with the deterministic-vs-AI boundary; when asked "where would X change?", point at the single owning module (e.g., a new provider → `_build_tool_for_model` + a new tool, Appendix M); and be ready to name one thing you'd improve (tool-use for guaranteed JSON; two-way Jira sync; parallelizing the two independent stages).
+
+---
+
+## Appendix O — How we validated the code Claude generated
+
+Claude was the pair-programmer for most of this codebase (see §13). The guiding rule was **"trust nothing, verify everything"**: AI-generated code is treated like a pull request from a fast, capable junior — it doesn't merge until it's *proven* correct. Two structural choices make that verification cheap and rigorous:
+
+1. **The deterministic-vs-AI boundary.** The LLM only produces structured JSON for five well-defined tasks; *everything around it* — orchestration, ID assignment, retrieval math, guardrails, redaction, formatting, cost — is plain Python. That deterministic majority is exhaustively testable, and its behaviour is identical in test and in production.
+2. **Dependency injection on every tool.** Agents take a `tool` and orchestrators take `claude=/jira=/confluence=` — so the whole pipeline runs against fakes with zero network and zero API spend. The mocked suite is therefore a *faithful* test of the real code paths, not a toy.
+
+### The validation stack (seven layers)
+
+| Layer | What it is | What it catches |
+|---|---|---|
+| **1. Static** | `python -m py_compile` on every module; `ruff` (pyflakes + E9) in CI | syntax errors, undefined names, broken imports |
+| **2. Unit tests** | **128 mocked tests** across 9 files (agents, orchestrator, tools, guardrails, redactor, live Jira/Confluence incl. write-back, vision, eval runner) | per-component contract regressions; runs in ~1s, offline, $0 |
+| **3. Integration / end-to-end** | real CLI + UI runs against the live API; targeted single-case re-runs | wiring bugs the mocks can't see; "does it actually run?" |
+| **4. Behavioural evaluation** | 10-case golden suite + deterministic metrics + LLM-as-judge + the single-prompt baseline | *quality/behaviour* regressions a unit test would pass through (vague AC, missed conflicts, the case_07 zero-stories bug) |
+| **5. Runtime guardrails** | six deterministic post-synthesis checks (`src/guardrails.py`) | hallucination patterns at run time — e.g. a story with no resolvable `source_topic_id` |
+| **6. Human review + "verify against reality"** | every AI-drafted change read before commit; AI *claims* checked against the code, the served DOM, and committed data | over-confident or stale AI assertions (the most dangerous failure mode of AI coding) |
+| **7. Provenance / auditability** | every story → `source_topic_id` → verbatim transcript quote; full prompt+response in the audit trail | lets a reviewer independently re-verify *any* individual output |
+
+### Why behavioural eval matters beyond unit tests
+
+Unit tests use **canned** LLM responses, so they validate the deterministic plumbing but say nothing about whether the *prompts* produce good output. That gap is exactly where the golden eval earns its place. The clearest example: every unit test passed while **case_07 (conflict-heavy) silently produced zero stories** — only the eval's 0.33 deterministic / 0.00 judge score exposed it. We root-caused it to the Parser (not the Story Writer, the obvious suspect), fixed the prompt, and **re-ran to confirm 1.00 / 0.90**. Unit tests can't catch a prompt that's "syntactically fine but behaviourally wrong"; the eval can.
+
+### "Verify against reality, not assertions" — real defects this caught
+
+The highest-value validation was refusing to take AI (or prior docs) at their word. Concrete catches during this project:
+
+- **Vision silently ignored on Gemini.** Rather than trust "vision works," we read `GeminiTool.call_for_json`'s signature — it has no `images` param, so the Parser was dropping the image on the Free/Balanced presets. Fixed with the vision auto-switch.
+- **`v1_baseline` mislabeled.** The docs called it a "single-agent baseline"; inspecting `versions/v1_baseline/src/agents/` showed five agents + memory + audit. We corrected the docs and built a *genuine* single-prompt baseline to make the comparison honest.
+- **"Premium still hit a Gemini limit."** Traced — not assumed — to compare-mode's *secondary* leg defaulting to the all-Gemini Free preset; the presets themselves were correct.
+- **Multi-file "not working."** Verified the *served DOM* (`input[type=file]` had `multiple=true`) → diagnosed a stale browser tab, not a code bug.
+- **Prompt V2 broke the mocked tests** (the fakes match on prompt substrings) — caught immediately by running the suite, fixed by re-anchoring the fixtures.
+- **Doc-currency audit** caught a stale test count (`122 → 128`) and a now-false "not write-back-as-tickets" claim.
+- **Committed-data cross-check** — eval numbers in the docs are verified to match the committed `summary.json` (0.88 / 0.72), not just pasted.
+
+### What this does — and doesn't — guarantee
+
+The deterministic layers are *proven* by tests; the only non-determinism is the LLM's wording, which is **bounded** by the strict per-prompt JSON schema, the `_extract_json_block` parser (malformed JSON → `ToolError`, surfaced, not silently mis-parsed), and the runtime guardrails. What remains is residual hallucination risk on an adversarial input — mitigated by the guardrails + the provenance chain, and ultimately by the product's premise: the output is a **reviewable draft for a human**, not an auto-applied spec. That human-in-the-loop is the final validation layer, and it's by design.
