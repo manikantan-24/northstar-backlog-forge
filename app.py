@@ -81,14 +81,19 @@ except RuntimeError as _startup_err:
 # Start Ollama in the background if any stage uses a local model and the
 # server isn't already running. Runs once per session — idempotent.
 if "ollama_started" not in st.session_state:
-    try:
-        from ollama_manager import ensure_running as _ensure_ollama
-        _ok, _msg = _ensure_ollama(timeout=30)
-        st.session_state.ollama_started = _ok
-        st.session_state.ollama_msg = _msg
-    except Exception:  # noqa: BLE001
+    import shutil as _shutil_startup
+    if _shutil_startup.which("ollama"):
+        try:
+            from ollama_manager import ensure_running as _ensure_ollama
+            _ok, _msg = _ensure_ollama(timeout=30)
+            st.session_state.ollama_started = _ok
+            st.session_state.ollama_msg = _msg
+        except Exception:  # noqa: BLE001
+            st.session_state.ollama_started = False
+            st.session_state.ollama_msg = "Ollama manager unavailable."
+    else:
         st.session_state.ollama_started = False
-        st.session_state.ollama_msg = "Ollama manager unavailable."
+        st.session_state.ollama_msg = "Ollama not installed."
 
 st.set_page_config(
     page_title="Backlog Synthesizer · Accenture",
@@ -2055,9 +2060,13 @@ with st.sidebar:
         _key_to_label = {v: k for k, v in _label_to_key.items()}
         # Allowed presets come from feature_flags for contributor; admin always gets all four.
         _allowed_preset_keys = _ff.allowed_presets(_current_role)
+        # Hide "Local" preset when Ollama binary is not installed (e.g. on Azure).
+        import shutil as _shutil
+        _ollama_installed = bool(_shutil.which("ollama"))
         _preset_labels = [
             lbl for lbl, key in _label_to_key.items()
             if key in _allowed_preset_keys
+            and (key != "local" or _ollama_installed)
         ] or ["Free", "Balanced"]
 
         _active = st.session_state.active_preset
