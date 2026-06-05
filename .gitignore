@@ -22,7 +22,8 @@ infra/terraform/terraform.tfstate
 infra/terraform/terraform.tfstate.backup
 infra/terraform/terraform.tfstate.*.backup
 infra/terraform/.terraform.lock.hcl
-infra/terraform/terraform.tfvars       # contains API keys — use tfvars.example as template
+# terraform.tfvars contains real API keys — use terraform.tfvars.example as template
+infra/terraform/terraform.tfvars
 infra/terraform/tfplan
 
 # SQLite audit log chain (runtime artifact, not source)

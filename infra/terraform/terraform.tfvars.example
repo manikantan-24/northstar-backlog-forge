@@ -1,33 +1,33 @@
-# Copy to terraform.tfvars and fill in values.
+# Copy to terraform.tfvars and fill in your values.
 # terraform.tfvars is gitignored — never commit real secrets.
+# Values below match the structure from .env
 
-# ── Infrastructure ────────────────────────────────────────────────────────────
+# ── Infrastructure ─────────────────────────────────────────────────────────
 location             = "eastus"
 environment          = "staging"
 resource_group_name  = "rg-backlog-synthesizer"
-acr_name             = "backlogsynth"        # must be globally unique, lowercase
-keyvault_name        = "kv-backlog-synth"    # must be globally unique, 3-24 chars
-storage_account_name = "stbacklogsynth"      # must be globally unique, lowercase
+acr_name             = "backlogsynth"
+keyvault_name        = "kv-backlog-synth"
+storage_account_name = "stbacklogsynth"
 
-# ── Non-secret config (safe to commit if needed) ──────────────────────────────
-jira_base_url        = "https://your-tenant.atlassian.net"
-jira_email           = "you@company.com"
-jira_project_key     = "PROJ"
-github_owner         = "your-org"
-github_repo          = "your-repo"
-entra_tenant_id      = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-entra_client_id      = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-entra_tenant_domain  = "yourcompany.onmicrosoft.com"
+# ── Non-secret configuration (from .env) ───────────────────────────────────
+jira_base_url        = "https://mani-rdedemo.atlassian.net"
+jira_email           = "mani_kantan@live.com"
+jira_project_key     = "NS"
+github_owner         = "manikantan-24"
+github_repo          = "northstar-retail-backlog"
+entra_tenant_id      = "c9d7f542-549c-4f1e-915f-2c563e40e14b"
+entra_client_id      = "18056440-d6ce-46b3-9261-52167231606d"
+entra_tenant_domain  = "northstarretailcorp.onmicrosoft.com"
 otel_endpoint        = "https://otlp-gateway-prod-ap-south-1.grafana.net/otlp"
 
-# ── Secrets → stored in Key Vault, never in Terraform state as plaintext ──────
-# These are written to Key Vault once at `terraform apply`.
-# The Container App reads them at runtime via Managed Identity — values never
-# appear in GitHub Actions logs, Terraform plan output, or Container App config.
+# ── Secrets → stored in Key Vault, never in Terraform state as plaintext ───
+# Paste real values here when running terraform apply locally.
+# These get written to Azure Key Vault and never appear in logs or state.
 
-anthropic_api_key    = "sk-ant-..."
-google_api_key       = "AIza..."
-jira_api_token       = "ATATT3x..."
-github_token         = "ghp_..."
-entra_client_secret  = "xxxx~..."
-otel_headers         = "Authorization=Basic ..."
+anthropic_api_key    = "sk-ant-..."           # from ANTHROPIC_API_KEY in .env
+google_api_key       = "AIza..."              # from GOOGLE_API_KEY in .env
+jira_api_token       = "ATATT3x..."           # from JIRA_API_TOKEN in .env
+github_token         = "ghp_..."              # from GITHUB_TOKEN in .env
+entra_client_secret  = "QWC8Q~..."            # from ENTRA_CLIENT_SECRET in .env
+otel_headers         = "Authorization=Basic MTY3..."  # from OTEL_EXPORTER_OTLP_HEADERS in .env
