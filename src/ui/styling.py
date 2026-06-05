@@ -62,18 +62,113 @@ _SHELL_CSS = """
     font-family: 'Inter', sans-serif;
 }
 
-/* Hide Streamlit chrome — reclaim the vertical space too. */
+/* Hide ALL Streamlit chrome — deploy button, toolbar, hamburger, footer */
 #MainMenu,
 footer,
 [data-testid="stDeployButton"],
 [data-testid="stToolbar"],
 [data-testid="stToolbarActions"],
 [data-testid="stStatusWidget"],
-[data-testid="stAppDeployButton"] {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
+[data-testid="stAppDeployButton"],
+[data-testid="stMainBlockContainer"] > div > div > div > div > [data-testid="stVerticalBlock"] > div:last-child > [data-testid="stStatusWidget"],
+button[title="View app in Streamlit Community Cloud"],
+button[aria-label="Open app in Streamlit Community Cloud"],
+.stDeployButton { display: none !important; visibility: hidden !important; height: 0 !important; }
+
+/* ── Enterprise login page ─────────────────────────────────────── */
+.login-wrap {
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; min-height:100vh; width:100%;
+    /* Background handled by .stApp override injected on login page */
+    padding:2rem 1rem;
 }
+
+/* Top brand bar */
+.login-acc-bar {
+    font-size:0.78rem; font-weight:700; letter-spacing:0.18em;
+    text-transform:uppercase; color:#5e6a8a;
+    margin-bottom:2.5rem; display:flex; align-items:center; gap:8px;
+}
+.login-acc-bar .acc-purple { color:#a100ff; font-size:1rem; }
+
+/* Main card */
+.login-card {
+    background:rgba(17,22,42,0.96);
+    border:1px solid rgba(255,255,255,0.07);
+    border-top:1px solid rgba(161,0,255,0.35);
+    border-radius:16px; padding:3rem 3.5rem 2.5rem;
+    max-width:460px; width:100%;
+    box-shadow:
+        0 1px 0 0 rgba(161,0,255,0.4) inset,
+        0 24px 64px rgba(0,0,0,0.55),
+        0 4px 16px rgba(161,0,255,0.08);
+    text-align:center;
+}
+
+/* Client name */
+.login-client {
+    font-size:0.7rem; font-weight:700; letter-spacing:0.2em;
+    text-transform:uppercase; color:#a100ff;
+    margin-bottom:1rem;
+}
+
+/* Product mark */
+.login-product-mark {
+    display:flex; align-items:center; justify-content:center;
+    gap:10px; margin-bottom:0.6rem;
+}
+.login-product-diamond {
+    width:28px; height:28px; background:#a100ff;
+    transform:rotate(45deg); border-radius:4px;
+    flex-shrink:0;
+    box-shadow:0 0 16px rgba(161,0,255,0.5);
+}
+.login-product-name {
+    font-size:1.65rem; font-weight:800; color:#e6ebf5;
+    letter-spacing:-0.03em; line-height:1;
+}
+
+/* Tagline pills */
+.login-pills {
+    display:flex; align-items:center; justify-content:center;
+    gap:6px; flex-wrap:wrap; margin:1.4rem 0 2rem;
+}
+.login-pill {
+    font-size:0.68rem; font-weight:600; letter-spacing:0.06em;
+    color:#64748b; border:1px solid rgba(255,255,255,0.07);
+    border-radius:20px; padding:3px 10px; background:rgba(255,255,255,0.03);
+}
+.login-pill-dot {
+    width:4px; height:4px; border-radius:50%;
+    background:rgba(161,0,255,0.4); display:inline-block;
+}
+
+/* Sign-in button */
+.ms-signin-btn {
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    width:100%; padding:0.8rem 1.5rem;
+    background:#0078d4; color:white !important;
+    border-radius:8px; font-size:0.95rem; font-weight:600;
+    text-decoration:none !important;
+    box-shadow:0 2px 12px rgba(0,120,212,0.35);
+    letter-spacing:0.01em; transition:background 0.15s, box-shadow 0.15s;
+    border:1px solid rgba(255,255,255,0.12);
+}
+.ms-signin-btn:hover { background:#106ebe; box-shadow:0 4px 20px rgba(0,120,212,0.5); }
+.ms-logo { width:18px; height:18px; flex-shrink:0; }
+
+/* Access note */
+.login-access-note {
+    margin-top:1.4rem; font-size:0.72rem; color:#3d4a6a;
+    line-height:1.5;
+}
+
+/* Global footer */
+.login-global-footer {
+    margin-top:2rem; font-size:0.65rem; color:#2d3555;
+    letter-spacing:0.06em; text-align:center;
+}
+.login-global-footer span { color:#3d4a6a; }
 
 /* Header gets squashed to zero height but kept in the DOM so the
    sidebar collapse/expand chevron (which lives inside it in modern
@@ -102,18 +197,31 @@ button[aria-label*="sidebar" i] {
     display: none !important;
 }
 
-/* Force the sidebar open at its natural width even if a previous browser
-   session left it collapsed (Streamlit persists collapse state client-side). */
+/* Sidebar width.
+   Rules:
+   - !important on transform/visibility/margin so collapsed state can't hide it.
+   - min-width with !important prevents shrinking below 360px.
+   - NO !important on width or max-width — Streamlit's JS resize handler
+     sets style.width directly; !important on those properties overrides JS
+     and makes the drag handle appear to do nothing.
+   - The initial width is set on the inner div (no !important) so the first
+     paint shows 360px but the outer section can still be dragged wider. */
 section[data-testid="stSidebar"],
 section[data-testid="stSidebar"][aria-expanded="false"] {
     transform: none !important;
     visibility: visible !important;
-    width: 256px !important;
-    min-width: 256px !important;
-    max-width: 256px !important;
+    min-width: 360px !important;
     margin-left: 0 !important;
 }
-section[data-testid="stSidebar"] > div { visibility: visible !important; }
+/* Set starting width on the inner container so JS can still override the
+   outer section's width via the drag handle */
+section[data-testid="stSidebar"] > div:first-child {
+    min-width: 360px;
+    width: 360px;
+}
+section[data-testid="stSidebar"] > div {
+    visibility: visible !important;
+}
 [data-testid="stAppViewContainer"] > .main,
 [data-testid="stMain"] {
     padding-top: 0 !important;
@@ -125,6 +233,26 @@ section[data-testid="stSidebar"] > div { visibility: visible !important; }
 section[data-testid="stSidebar"] {
     background: var(--bg-elev-1);
     border-right: 1px solid var(--border);
+    overflow-x: hidden !important;
+}
+/* Sidebar widgets: ensure text wraps and doesn't overflow horizontally */
+section[data-testid="stSidebar"] .stSelectbox label,
+section[data-testid="stSidebar"] .stMultiSelect label,
+section[data-testid="stSidebar"] .stTextInput label,
+section[data-testid="stSidebar"] .stToggle label,
+section[data-testid="stSidebar"] .stCheckbox label,
+section[data-testid="stSidebar"] .stMarkdown p,
+section[data-testid="stSidebar"] .stCaption {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+/* Selectbox option text — allow wrapping in the dropdown */
+section[data-testid="stSidebar"] [data-baseweb="select"] span,
+section[data-testid="stSidebar"] [data-baseweb="select"] div {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
 }
 /* Compact the horizontal radio so all 4 presets fit on two rows of 2,
    with smaller font so Local / Free / Balanced / Premium don't overflow. */

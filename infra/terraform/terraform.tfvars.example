@@ -1,0 +1,16 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit real secrets.
+
+location             = "eastus"
+environment          = "staging"
+resource_group_name  = "rg-backlog-synthesizer"
+acr_name             = "backlogsynth"        # change to something globally unique
+keyvault_name        = "kv-backlog-synth"    # change to something globally unique
+storage_account_name = "stbacklogsynth"      # change to something globally unique
+
+# Secrets — required
+anthropic_api_key = "sk-ant-..."
+
+# Optional
+google_api_key = ""
+jira_api_token = ""

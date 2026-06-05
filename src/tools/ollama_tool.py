@@ -116,35 +116,45 @@ class OllamaTool(Tool):
             },
         }
         try:
+            from telemetry import child_span as _cs
+        except ImportError:
+            from contextlib import nullcontext as _cs  # type: ignore[assignment]
+
+        with _cs("llm.call", **{"llm.provider": "ollama", "llm.model": self.model,
+                                "llm.max_tokens": max_tokens}) as _llm_span:
+         try:
             resp = self._requests.post(
                 f"{self._base_url}/api/chat",
                 json=payload,
-                timeout=120,  # local generation can be slow on CPU
+                timeout=120,
             )
-        except self._requests.exceptions.Timeout as e:
+         except self._requests.exceptions.Timeout as e:
             raise ToolError(
                 f"Ollama generation timed out for model '{self.model}'. "
                 "Consider using a smaller model or increasing timeout."
             ) from e
-        except self._requests.exceptions.ConnectionError as e:
+         except self._requests.exceptions.ConnectionError as e:
             raise ToolError(
                 f"Lost connection to Ollama at {self._base_url}: {e}"
             ) from e
 
-        if resp.status_code >= 400:
+         if resp.status_code >= 400:
             raise ToolError(
                 f"Ollama /api/chat returned {resp.status_code}: {resp.text[:200]}"
             )
 
-        data = resp.json()
-        text = (data.get("message") or {}).get("content", "") or ""
-
-        # Ollama's eval_count ≈ output tokens; prompt_eval_count ≈ input tokens.
-        usage: dict[str, Any] = {
+         data = resp.json()
+         text = (data.get("message") or {}).get("content", "") or ""
+         usage: dict[str, Any] = {
             "input_tokens":  data.get("prompt_eval_count"),
             "output_tokens": data.get("eval_count"),
-        }
-        return text, usage
+         }
+         try:
+            _llm_span.set_attribute("llm.tokens_in",  usage.get("input_tokens")  or 0)
+            _llm_span.set_attribute("llm.tokens_out", usage.get("output_tokens") or 0)
+         except Exception:  # noqa: BLE001
+            pass
+         return text, usage
 
     def call_for_json(
         self,

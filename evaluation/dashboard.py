@@ -188,20 +188,55 @@ def render_markdown(runs: list[dict]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Evaluation regression dashboard.")
     parser.add_argument("--last", type=int, default=None,
                         help="Limit the dashboard to the N most recent runs.")
     parser.add_argument("--md", default=None,
                         help="Also write a markdown report to this path.")
     parser.add_argument("--results-dir", default=str(RESULTS_DIR),
                         help="Override the results directory.")
+    parser.add_argument("--fail-on-regression", action="store_true",
+                        help="Exit 1 if any case drops >= threshold vs. previous run (CI gate).")
+    parser.add_argument("--regression-threshold", type=float, default=0.10,
+                        help="Score drop threshold that triggers failure (default: 0.10).")
     args = parser.parse_args()
 
     runs = _load_runs(Path(args.results_dir), limit=args.last)
-    print(render_text(runs))
+    report = render_text(runs)
+    print(report)
+
     if args.md:
         Path(args.md).write_text(render_markdown(runs), encoding="utf-8")
         print(f"\n Markdown report written to: {args.md}")
+
+    # ---- CI gate: exit non-zero on regression ----
+    if args.fail_on_regression and len(runs) >= 2:
+        curr_run, prev_run = runs[0], runs[1]
+        curr_cases = {c["case_id"]: c for c in curr_run.get("cases", [])}
+        prev_cases = {c["case_id"]: c for c in prev_run.get("cases", [])}
+        regressions = []
+        for cid, curr_c in curr_cases.items():
+            prev_c = prev_cases.get(cid)
+            if not prev_c:
+                continue
+            curr_score = curr_c.get("score_deterministic")
+            prev_score = prev_c.get("score_deterministic")
+            if curr_score is None or prev_score is None:
+                continue
+            drop = prev_score - curr_score
+            if drop >= args.regression_threshold:
+                regressions.append((cid, prev_score, curr_score, drop))
+
+        if regressions:
+            print(f"\n❌ CI GATE FAILED — {len(regressions)} regression(s) "
+                  f"≥ {args.regression_threshold:.2f} vs. previous run:")
+            for cid, prev_s, curr_s, drop in regressions:
+                print(f"   {cid}: {prev_s:.3f} → {curr_s:.3f}  (drop {drop:.3f})")
+            print("Fix prompt regressions before merging.\n")
+            return 1
+
+        print(f"\n✅ CI gate passed — no regressions ≥ {args.regression_threshold:.2f}.\n")
+
     return 0
 
 

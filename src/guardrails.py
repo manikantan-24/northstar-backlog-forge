@@ -59,35 +59,32 @@ class GuardrailFinding:
 
 
 def run_guardrails(synthesis: dict) -> list[GuardrailFinding]:
-    """Run every check in order. Returns the combined finding list.
+    """Run every check in order. Returns the combined finding list."""
+    try:
+        from telemetry import child_span as _cs
+    except ImportError:
+        from contextlib import nullcontext as _cs  # type: ignore[assignment]
 
-    Each check is independent — if one raises, the others still run.
-    Order doesn't affect correctness; we run cheap checks first so an
-    early stop wouldn't lose anything important (we don't actually
-    early-stop, but the order is robustness insurance).
-    """
     findings: list[GuardrailFinding] = []
     epics = synthesis.get("epics") or []
     stories = [s for e in epics for s in (e.get("stories") or [])]
 
-    # 1. Every story has the minimum acceptance criteria count.
-    findings.extend(_check_ac_count(stories))
-
-    # 2. AC items look testable (Given / When / Then keywords present).
-    findings.extend(_check_ac_grammar(stories))
-
-    # 3. Story titles within a run are unique.
-    findings.extend(_check_unique_titles(stories))
-
-    # 4. Tags drawn from the canonical vocabulary.
-    findings.extend(_check_canonical_tags(stories))
-
-    # 5. Every story traces back to a parsed topic (evidence block present
-    #    OR source_topic_id exists in the topics list).
-    findings.extend(_check_story_grounding(stories, synthesis.get("topics") or []))
-
-    # 6. High-priority stories have a non-trivial priority_rationale.
-    findings.extend(_check_priority_rationale(stories))
+    checks = [
+        ("guardrail.ac_count",          lambda: _check_ac_count(stories)),
+        ("guardrail.ac_grammar",        lambda: _check_ac_grammar(stories)),
+        ("guardrail.unique_titles",     lambda: _check_unique_titles(stories)),
+        ("guardrail.canonical_tags",    lambda: _check_canonical_tags(stories)),
+        ("guardrail.story_grounding",   lambda: _check_story_grounding(stories, synthesis.get("topics") or [])),
+        ("guardrail.priority_rationale",lambda: _check_priority_rationale(stories)),
+    ]
+    for span_name, check_fn in checks:
+        with _cs(span_name, **{"guardrail.story_count": len(stories)}) as _span:
+            result = check_fn()
+            findings.extend(result)
+            try:
+                _span.set_attribute("guardrail.finding_count", len(result))
+            except Exception:  # noqa: BLE001
+                pass
 
     return findings
 
@@ -197,8 +194,12 @@ def _check_story_grounding(stories: list[dict], topics: list[dict]) -> list[Guar
         if topic_ids and sid not in topic_ids:
             out.append(GuardrailFinding(
                 code="dangling_topic_ref",
-                severity="error",
-                message=f"source_topic_id={sid!r} doesn't match any parsed topic.",
+                severity="warn",
+                message=(
+                    f"source_topic_id={sid!r} doesn't match any parsed topic. "
+                    "The story writer agent attempted auto-repair; if this persists, "
+                    "try a stronger model (Balanced or Premium preset)."
+                ),
                 story_id=s.get("id"),
             ))
         if not evidence:

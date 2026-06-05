@@ -119,25 +119,62 @@ class ClaudeTool(Tool):
         else:
             messages = [{"role": "user", "content": user_message}]
 
-        try:
-            response = self._client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                system=self.system_prompt,
-                messages=messages,
-            )
-        except (RateLimitError, APIConnectionError):
-            raise  # let tenacity catch + retry
-        except APIError as e:
-            raise ToolError(f"Anthropic API error: {e}") from e
+        # Prompt caching: mark the system prompt as cacheable.
+        # The system prompt is identical across every call in a pipeline run
+        # (same model, same prompt file), so Anthropic can serve it from
+        # cache after the first call — typically 80-90% cheaper on input
+        # tokens for the system block. Requires claude-3-5-* or claude-3-7-*+.
+        system_block: list[dict[str, Any]] | str
+        if self.model.startswith("claude"):
+            system_block = [
+                {
+                    "type": "text",
+                    "text": self.system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        else:
+            system_block = self.system_prompt
 
-        parts = [b.text for b in response.content if hasattr(b, "text")]
-        text = "".join(parts)
-        usage = {
-            "input_tokens": getattr(response.usage, "input_tokens", None),
-            "output_tokens": getattr(response.usage, "output_tokens", None),
-        }
-        return text, usage
+        try:
+            from telemetry import child_span as _cs
+        except ImportError:
+            from contextlib import nullcontext as _cs  # type: ignore[assignment]
+
+        with _cs(
+            "llm.call",
+            **{
+                "llm.provider": "anthropic",
+                "llm.model": self.model,
+                "llm.max_tokens": max_tokens,
+                "llm.has_images": bool(images),
+            },
+        ) as _llm_span:
+            try:
+                response = self._client.messages.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    system=system_block,
+                    messages=messages,
+                )
+            except (RateLimitError, APIConnectionError):
+                raise  # let tenacity catch + retry
+            except APIError as e:
+                raise ToolError(f"Anthropic API error: {e}") from e
+
+            parts = [b.text for b in response.content if hasattr(b, "text")]
+            text = "".join(parts)
+            usage = {
+                "input_tokens": getattr(response.usage, "input_tokens", None),
+                "output_tokens": getattr(response.usage, "output_tokens", None),
+            }
+            try:
+                _llm_span.set_attribute("llm.tokens_in",  usage["input_tokens"]  or 0)
+                _llm_span.set_attribute("llm.tokens_out", usage["output_tokens"] or 0)
+                _llm_span.set_attribute("llm.response_chars", len(text))
+            except Exception:  # noqa: BLE001
+                pass
+            return text, usage
 
     # ---------------------------------------------- JSON extraction
 

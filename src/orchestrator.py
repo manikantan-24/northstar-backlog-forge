@@ -37,6 +37,41 @@ from tools.jira_tool import JiraTool
 from tools.confluence_tool import ConfluenceTool
 from tools.github_tool import GithubTool
 
+import os as _os
+
+def _build_jira_tool() -> JiraTool:
+    """Return MCPJiraTool when ATLASSIAN_MCP_ENABLED=1, else JiraTool."""
+    if _os.environ.get("ATLASSIAN_MCP_ENABLED") == "1":
+        try:
+            from tools.mcp_atlassian_tool import MCPJiraTool
+            logger.info("Orchestrator: using MCPJiraTool (ATLASSIAN_MCP_ENABLED=1)")
+            return MCPJiraTool(mode="live")
+        except ImportError:
+            logger.warning("mcp package not installed — falling back to JiraTool REST")
+    return JiraTool()
+
+def _build_confluence_tool() -> ConfluenceTool:
+    """Return MCPConfluenceTool when ATLASSIAN_MCP_ENABLED=1, else ConfluenceTool."""
+    if _os.environ.get("ATLASSIAN_MCP_ENABLED") == "1":
+        try:
+            from tools.mcp_atlassian_tool import MCPConfluenceTool
+            logger.info("Orchestrator: using MCPConfluenceTool (ATLASSIAN_MCP_ENABLED=1)")
+            return MCPConfluenceTool()
+        except ImportError:
+            logger.warning("mcp package not installed — falling back to ConfluenceTool REST")
+    return ConfluenceTool()
+
+def _build_github_tool() -> GithubTool:
+    """Return MCPGithubTool when GITHUB_MCP_ENABLED=1, else GithubTool."""
+    if _os.environ.get("GITHUB_MCP_ENABLED") == "1":
+        try:
+            from tools.mcp_github_tool import MCPGithubTool
+            logger.info("Orchestrator: using MCPGithubTool (GITHUB_MCP_ENABLED=1)")
+            return MCPGithubTool()
+        except ImportError:
+            logger.warning("mcp package not installed — falling back to GithubTool fixture")
+    return GithubTool()
+
 from redactor import (
     RedactionMap,
     StrictRedactionViolation,
@@ -45,6 +80,22 @@ from redactor import (
     redact_backlog,
     unredact_obj,
 )
+
+try:
+    from telemetry import pipeline_span, stage_span, record_stage_tokens, record_guardrail_findings
+except ImportError:  # pragma: no cover — telemetry is optional
+    from contextlib import contextmanager
+
+    @contextmanager
+    def pipeline_span(*a, **kw):
+        yield None
+
+    @contextmanager
+    def stage_span(*a, **kw):
+        yield None
+
+    def record_stage_tokens(*a, **kw): pass
+    def record_guardrail_findings(*a, **kw): pass
 
 logger = get_logger(__name__)
 
@@ -174,9 +225,9 @@ class Orchestrator:
         # accept a `claude=` kwarg so the test suite (which passes a
         # FakeClaudeTool) keeps working unchanged.
         self.claude = claude  # may be None — built per-stage in run()
-        self.jira = jira or JiraTool()
-        self.confluence = confluence or ConfluenceTool()
-        self.github = github or GithubTool()
+        self.jira       = jira       or _build_jira_tool()
+        self.confluence = confluence or _build_confluence_tool()
+        self.github     = github     or _build_github_tool()
 
     def run(
         self,
@@ -194,6 +245,7 @@ class Orchestrator:
         live_jira: bool = False,
         vision_attachments: list | None = None,
         auto_switch: bool = True,
+        run_metadata: dict | None = None,
     ) -> dict[str, Any]:
         """Run the full pipeline. Returns the synthesized result dict.
 
@@ -241,8 +293,13 @@ class Orchestrator:
         # problem becomes a clean audit event instead of a stack trace.
         if live_confluence_page_id and not constraint_text:
             try:
-                from tools.confluence_tool import ConfluenceTool as _CT
-                ct = _CT(mode="live") if self.confluence._mode != "live" else self.confluence  # type: ignore[attr-defined]
+                # Use self.confluence (may be MCPConfluenceTool or ConfluenceTool).
+                # If it's the plain REST tool in mock mode, upgrade to live mode.
+                if hasattr(self.confluence, '_mode') and self.confluence._mode != "live":
+                    from tools.confluence_tool import ConfluenceTool as _CT
+                    ct = _CT(mode="live")
+                else:
+                    ct = self.confluence
                 constraint_text = ct.get_page(live_confluence_page_id)
                 logger.info(
                     "Pulled %d chars from live Confluence page %s",
@@ -261,8 +318,15 @@ class Orchestrator:
 
         if live_jira and not existing_tickets:
             try:
-                from tools.jira_tool import JiraTool as _JT
-                jt = _JT(mode="live") if self.jira.mode != "live" else self.jira
+                # Use self.jira (may be MCPJiraTool or JiraTool).
+                # MCPJiraTool always fetches live via MCP; plain JiraTool needs mode="live".
+                if hasattr(self.jira, '_use_mcp') and self.jira._use_mcp:
+                    jt = self.jira
+                elif hasattr(self.jira, 'mode') and self.jira.mode != "live":
+                    from tools.jira_tool import JiraTool as _JT
+                    jt = _JT(mode="live")
+                else:
+                    jt = self.jira
                 existing_tickets = jt.list_all()
                 logger.info("Pulled %d ticket(s) from live Jira", len(existing_tickets))
             except Exception as e:  # noqa: BLE001
@@ -286,22 +350,19 @@ class Orchestrator:
                     resolved_models[key] = v
 
         # ---- Vision auto-switch ----
-        # The Gemini tool wrapper doesn't forward image attachments, so a
-        # whiteboard/screenshot would be silently dropped if the Parser is on
-        # a Gemini model. When vision input is present, bump the Parser to a
-        # vision-capable Claude model so the image is actually read.
+        _auto_switched_parser: bool = False
+        _auto_switched_from: str = ""
         if auto_switch and vision_attachments and resolved_models.get("parser", "").lower().startswith("gemini"):
+            _auto_switched_from = resolved_models["parser"]
+            _auto_switched_parser = True
             logger.info(
                 "Vision attachment present — switching parser %s → claude-sonnet-4-5 "
                 "(Gemini wrapper can't carry images).",
-                resolved_models["parser"],
+                _auto_switched_from,
             )
             resolved_models["parser"] = "claude-sonnet-4-5"
 
         # ---- Dry-run short-circuit ----
-        # Build prompts for each agent without invoking the LLM. Each agent
-        # exposes its prompt template via `load_prompt(...)`; we replicate
-        # the same substitution the agent would do at run time.
         if dry_run:
             return self._build_dry_run_result(
                 transcript_text=transcript_text,
@@ -314,6 +375,41 @@ class Orchestrator:
         memory = MemoryStore(persistent=persistent_memory)
         audit = AuditLog()
 
+        # ---- Record MCP tool configuration ----
+        # Log which transport layer (MCP server vs. REST vs. fixture) is active
+        # for each integration so audit reviewers and interviewers can see the
+        # full data-source provenance at a glance.
+        _jira_transport = (
+            "Atlassian MCP server (mcp-atlassian)"
+            if hasattr(self.jira, "_use_mcp") and self.jira._use_mcp
+            else ("Jira REST API (live)" if getattr(self.jira, "mode", "mock") == "live"
+                  else "Jira fixture (mock)")
+        )
+        _github_transport = (
+            "GitHub MCP server (@modelcontextprotocol/server-github)"
+            if hasattr(self.github, "_use_mcp") and self.github._use_mcp
+            else "GitHub fixture (mock)"
+        )
+        _confluence_transport = (
+            "Atlassian MCP server (mcp-atlassian)"
+            if hasattr(self.confluence, "_use_mcp") and self.confluence._use_mcp
+            else ("Confluence REST API (live)" if getattr(self.confluence, "_mode", "mock") == "live"
+                  else "Confluence fixture (mock)")
+        )
+        audit.record(
+            "orchestrator", "data_sources_configured",
+            payload={
+                "jira_transport":       _jira_transport,
+                "github_transport":     _github_transport,
+                "confluence_transport": _confluence_transport,
+            },
+            reasoning=(
+                "Data source transports resolved at pipeline start. "
+                "MCP servers provide a standardised interface to live Atlassian and GitHub APIs; "
+                "REST and fixture modes are used when MCP is not enabled."
+            ),
+        )
+
         # Now that the audit log exists, retroactively log any live-source
         # results so the trail explains where constraint_text / tickets came
         # from. Keeps the audit story honest when reviewers diff a run that
@@ -323,29 +419,45 @@ class Orchestrator:
                 audit.record(
                     "orchestrator", "live_confluence_fetch_failed",
                     payload={"page_id": live_confluence_page_id,
-                             "error": _live_confluence_error[:300]},
+                             "error": _live_confluence_error[:300],
+                             "transport": _confluence_transport},
                     reasoning="Live Confluence fetch failed; falling back to whatever constraint_text was passed in.",
                 )
             else:
                 audit.record(
                     "orchestrator", "live_confluence_fetch_ok",
                     payload={"page_id": live_confluence_page_id,
-                             "chars_fetched": len(constraint_text)},
-                    reasoning="Constraint text pulled from a live Confluence page.",
+                             "chars_fetched": len(constraint_text),
+                             "transport": _confluence_transport},
+                    reasoning=f"Constraint text pulled from a live Confluence page via {_confluence_transport}.",
                 )
         if live_jira:
             if _live_jira_error:
                 audit.record(
                     "orchestrator", "live_jira_fetch_failed",
-                    payload={"error": _live_jira_error[:300]},
+                    payload={"error": _live_jira_error[:300],
+                             "transport": _jira_transport},
                     reasoning="Live Jira fetch failed; existing_tickets stays as passed in.",
                 )
             else:
                 audit.record(
                     "orchestrator", "live_jira_fetch_ok",
-                    payload={"ticket_count": len(existing_tickets)},
-                    reasoning="Existing tickets pulled from live Jira via JQL on the configured project.",
+                    payload={"ticket_count": len(existing_tickets),
+                             "transport": _jira_transport},
+                    reasoning=f"Existing tickets pulled via {_jira_transport}.",
                 )
+        # Always log the GitHub transport used for duplicate detection
+        audit.record(
+            "orchestrator", "github_issues_source",
+            payload={
+                "transport":    _github_transport,
+                "ticket_count": len(existing_tickets),
+            },
+            reasoning=(
+                f"GitHub Issues fed to the Gap Detector via {_github_transport}. "
+                "Used for duplicate detection alongside the Jira backlog."
+            ),
+        )
 
         # ---- PII redaction (opt-in) ----
         # Applied at the orchestrator boundary, not inside agents, so a single
@@ -361,10 +473,25 @@ class Orchestrator:
                 constraint_text, _ = redact(constraint_text, rmap=rmap)
             if existing_tickets:
                 existing_tickets, _ = redact_backlog(existing_tickets, rmap=rmap)
+            _pii_counts = rmap.summary()
+            _pii_total  = sum(_pii_counts.values())
+            _pii_detail = ", ".join(f"{v} {k}" for k, v in _pii_counts.items() if v > 0)
             audit.record(
                 "orchestrator", "pii_redacted",
-                payload={"counts": rmap.summary()},
-                reasoning="PII redaction was enabled; placeholders shared across all three inputs.",
+                payload={
+                    "counts": _pii_counts,
+                    "total_items_redacted": _pii_total,
+                    "types_found": [k for k, v in _pii_counts.items() if v > 0],
+                },
+                reasoning=(
+                    f"PII redaction complete. {_pii_total} item(s) replaced with stable tokens "
+                    f"({_pii_detail}). "
+                    "The same token map is shared across transcript, wiki, and backlog so identical "
+                    "values (e.g. the same email in two inputs) map to the same placeholder. "
+                    "The LLM never sees raw personal data. "
+                    "The synthesis output is un-redacted before returning to the user; "
+                    "this audit entry and all prompt excerpts retain the redacted form."
+                ),
             )
 
             # Strict mode: after redaction, scan every tool-bound input for
@@ -433,6 +560,82 @@ class Orchestrator:
         # Seed memory with existing tickets so the Gap Detector can search them
         memory.put("existing_tickets", existing_tickets)
 
+        # ---- pipeline_started ----
+        audit.record(
+            "orchestrator", "pipeline_started",
+            payload={
+                "run_metadata":           run_metadata or {},
+                "transcript_chars":       len(transcript_text),
+                "constraint_chars":       len(constraint_text),
+                "existing_ticket_count":  len(existing_tickets),
+                "vision_attachment_count": len(vision_attachments) if vision_attachments else 0,
+                "redact_pii":             redact_pii,
+                "strict_redact":          strict_redact,
+                "auto_switch":            auto_switch,
+                "dry_run":                False,
+                "persistent_memory":      bool(persistent_memory),
+                "live_jira":              live_jira,
+                "live_confluence":        bool(live_confluence_page_id),
+            },
+            reasoning="Pipeline initialised. All inputs and configuration flags are recorded here for full reproducibility.",
+        )
+
+        # ---- models_resolved ----
+        audit.record(
+            "orchestrator", "models_resolved",
+            payload={
+                "stage_models": dict(resolved_models),
+                "preset_summary": _summarize_models(resolved_models),
+            },
+            reasoning=(
+                "Per-stage model assignments after preset + overrides are resolved. "
+                "This is the exact configuration that will be used for every LLM call in this run."
+            ),
+        )
+
+        # ---- vision_attachments_provided ----
+        if vision_attachments:
+            audit.record(
+                "orchestrator", "vision_attachments_provided",
+                payload={
+                    "count":  len(vision_attachments),
+                    "labels": [getattr(v, "label", "unknown") for v in vision_attachments],
+                    "media_types": [getattr(v, "media_type", "unknown") for v in vision_attachments],
+                },
+                reasoning="One or more image attachments (whiteboard/screenshot) were provided alongside the transcript.",
+            )
+
+        # ---- auto_switch_model ----
+        if _auto_switched_parser:
+            audit.record(
+                "orchestrator", "auto_switch_model",
+                payload={
+                    "stage":    "parser",
+                    "from":     _auto_switched_from,
+                    "to":       "claude-sonnet-4-5",
+                    "reason":   "vision_attachment_present",
+                },
+                reasoning=(
+                    f"Parser model auto-switched from {_auto_switched_from} to claude-sonnet-4-5 "
+                    "because image attachments were provided. Gemini wrapper cannot carry image payloads."
+                ),
+            )
+
+        # ---- existing_tickets_seeded ----
+        audit.record(
+            "orchestrator", "existing_tickets_seeded",
+            payload={
+                "ticket_count":    len(existing_tickets),
+                "jira_transport":  _jira_transport,
+                "github_transport": _github_transport,
+                "sample_ids":      [t.get("id", "?") for t in existing_tickets[:5]],
+            },
+            reasoning=(
+                f"{len(existing_tickets)} ticket(s) seeded into shared memory for the Gap Detector. "
+                f"Jira source: {_jira_transport}. GitHub source: {_github_transport}."
+            ),
+        )
+
         # Per-stage tool factory. Wraps `_build_tool_for_model` with the
         # injected `self.claude` fallback so test fakes pass through and
         # a tool init failure (missing API key, bad model id) surfaces as
@@ -488,9 +691,6 @@ class Orchestrator:
             return True
 
         # ---- Stage 1: Parse the transcript into topics ----
-        # The parser runs when EITHER text OR vision input is present —
-        # a whiteboard photo with no text is still a valid input for a
-        # vision-capable model.
         if transcript_text.strip() or vision_attachments:
             detail_chars = f"reading {len(transcript_text):,} chars"
             if vision_attachments:
@@ -499,24 +699,36 @@ class Orchestrator:
             parser_tool = _tool_for(0, "parser")
             if parser_tool is not None:
                 parser = ParserAgent(tool=parser_tool, memory=memory, audit=audit)
-                try:
-                    parser.run(transcript_text, vision_attachments=vision_attachments)
-                    _emit(0, "parser", "completed",
-                          f"{len(memory.get('topics', []))} topics extracted")
-                except AgentError as e:
-                    def _retry_parser(t):
-                        ParserAgent(tool=t, memory=memory, audit=audit).run(
-                            transcript_text, vision_attachments=vision_attachments)
-                    if _attempt_failover(0, "parser", e, _retry_parser):
+                with stage_span("parser", model=resolved_models.get("parser", ""), input_chars=len(transcript_text)):
+                    try:
+                        parser.run(transcript_text, vision_attachments=vision_attachments)
                         _emit(0, "parser", "completed",
-                              f"{len(memory.get('topics', []))} topics extracted (via failover)")
+                              f"{len(memory.get('topics', []))} topics extracted")
+                    except AgentError as e:
+                        def _retry_parser(t):
+                            ParserAgent(tool=t, memory=memory, audit=audit).run(
+                                transcript_text, vision_attachments=vision_attachments)
+                        if _attempt_failover(0, "parser", e, _retry_parser):
+                            _emit(0, "parser", "completed",
+                                  f"{len(memory.get('topics', []))} topics extracted (via failover)")
         else:
             _emit(0, "parser", "skipped", "no transcript provided")
+            audit.record("parser", "stage_skipped", payload={"reason": "no transcript or vision input provided"},
+                         reasoning="Parser was not run because no text transcript or image attachment was supplied.")
 
         # ---- Stage 2: Extract constraints from the wiki ----
         if constraint_text.strip():
+            # Show where the constraint text came from so the live log is informative.
+            if live_confluence_page_id and not _live_confluence_error:
+                _conf_source = (
+                    f"from Confluence via Atlassian MCP (page {live_confluence_page_id})"
+                    if hasattr(self.confluence, "_use_mcp") and self.confluence._use_mcp
+                    else f"from live Confluence REST (page {live_confluence_page_id})"
+                )
+            else:
+                _conf_source = "from local file / sample"
             _emit(1, "constraint_extractor", "started",
-                  f"reading {len(constraint_text):,} chars")
+                  f"reading {len(constraint_text):,} chars · {_conf_source}")
             constraint_tool = _tool_for(1, "constraint_extractor")
             if constraint_tool is not None:
                 constraint_agent = ConstraintAgent(
@@ -525,19 +737,22 @@ class Orchestrator:
                     memory=memory,
                     audit=audit,
                 )
-                try:
-                    constraint_agent.run(constraint_text)
-                    _emit(1, "constraint_extractor", "completed",
-                          f"{len(memory.get('constraints', []))} constraints captured")
-                except AgentError as e:
-                    def _retry_constraint(t):
-                        ConstraintAgent(tool=t, confluence=self.confluence,
-                                        memory=memory, audit=audit).run(constraint_text)
-                    if _attempt_failover(1, "constraint_extractor", e, _retry_constraint):
+                with stage_span("constraint_extractor", model=resolved_models.get("constraint", ""), input_chars=len(constraint_text)):
+                    try:
+                        constraint_agent.run(constraint_text)
                         _emit(1, "constraint_extractor", "completed",
-                              f"{len(memory.get('constraints', []))} constraints captured (via failover)")
+                              f"{len(memory.get('constraints', []))} constraints captured")
+                    except AgentError as e:
+                        def _retry_constraint(t):
+                            ConstraintAgent(tool=t, confluence=self.confluence,
+                                            memory=memory, audit=audit).run(constraint_text)
+                        if _attempt_failover(1, "constraint_extractor", e, _retry_constraint):
+                            _emit(1, "constraint_extractor", "completed",
+                                  f"{len(memory.get('constraints', []))} constraints captured (via failover)")
         else:
             _emit(1, "constraint_extractor", "skipped", "no wiki / constraints provided")
+            audit.record("constraint_extractor", "stage_skipped", payload={"reason": "no wiki / constraints text provided"},
+                         reasoning="Constraint Extractor was not run because no architecture wiki or constraint text was supplied.")
 
         # ---- Stage 3: Draft user stories from topics + constraints ----
         topics = memory.get("topics", [])
@@ -546,18 +761,21 @@ class Orchestrator:
             story_tool = _tool_for(2, "story_writer")
             if story_tool is not None:
                 story_writer = StoryWriterAgent(tool=story_tool, memory=memory, audit=audit)
-                try:
-                    story_writer.run()
-                    _emit(2, "story_writer", "completed",
-                          f"{len(memory.get('stories', []))} user stories written")
-                except AgentError as e:
-                    def _retry_story(t):
-                        StoryWriterAgent(tool=t, memory=memory, audit=audit).run()
-                    if _attempt_failover(2, "story_writer", e, _retry_story):
+                with stage_span("story_writer", model=resolved_models.get("story_writer", "")):
+                    try:
+                        story_writer.run()
                         _emit(2, "story_writer", "completed",
-                              f"{len(memory.get('stories', []))} user stories written (via failover)")
+                              f"{len(memory.get('stories', []))} user stories written")
+                    except AgentError as e:
+                        def _retry_story(t):
+                            StoryWriterAgent(tool=t, memory=memory, audit=audit).run()
+                        if _attempt_failover(2, "story_writer", e, _retry_story):
+                            _emit(2, "story_writer", "completed",
+                                  f"{len(memory.get('stories', []))} user stories written (via failover)")
         else:
             _emit(2, "story_writer", "skipped", "no topics — Parser produced nothing")
+            audit.record("story_writer", "stage_skipped", payload={"reason": "no topics in memory"},
+                         reasoning="Story Writer was not run because the Parser produced no topics (empty or off-topic transcript).")
 
         # ---- Stage 4: Group stories into epics + decompose into tasks ----
         stories = memory.get("stories", [])
@@ -566,23 +784,48 @@ class Orchestrator:
             decomp_tool = _tool_for(3, "epic_decomposer")
             if decomp_tool is not None:
                 decomposer = EpicDecomposerAgent(tool=decomp_tool, memory=memory, audit=audit)
-                try:
-                    decomposer.run()
-                    _emit(3, "epic_decomposer", "completed",
-                          f"{len(memory.get('epics', []))} epics with task breakdowns")
-                except AgentError as e:
-                    def _retry_epic(t):
-                        EpicDecomposerAgent(tool=t, memory=memory, audit=audit).run()
-                    if _attempt_failover(3, "epic_decomposer", e, _retry_epic):
+                with stage_span("epic_decomposer", model=resolved_models.get("epic_decomposer", "")):
+                    try:
+                        decomposer.run()
                         _emit(3, "epic_decomposer", "completed",
-                              f"{len(memory.get('epics', []))} epics with task breakdowns (via failover)")
+                              f"{len(memory.get('epics', []))} epics with task breakdowns")
+                    except AgentError as e:
+                        def _retry_epic(t):
+                            EpicDecomposerAgent(tool=t, memory=memory, audit=audit).run()
+                        if _attempt_failover(3, "epic_decomposer", e, _retry_epic):
+                            _emit(3, "epic_decomposer", "completed",
+                                  f"{len(memory.get('epics', []))} epics with task breakdowns (via failover)")
         else:
             _emit(3, "epic_decomposer", "skipped", "no stories to group")
+            audit.record("epic_decomposer", "stage_skipped", payload={"reason": "no stories in memory"},
+                         reasoning="Epic Decomposer was not run because the Story Writer produced no stories.")
 
         # ---- Stage 5: Find gaps, conflicts, duplicates ----
         if stories:
+            # Labels reflect WHERE the data actually came from this run, not
+            # just what transport the tool is configured as. If the user didn't
+            # toggle "Live Jira", the tickets came from their local file/sample
+            # selection regardless of whether MCPJiraTool is the configured tool.
+            if live_jira and not _live_jira_error:
+                # Tickets were fetched live in this run
+                _jira_label = (
+                    f"{len(existing_tickets)} tickets via Atlassian MCP"
+                    if "MCP" in _jira_transport
+                    else f"{len(existing_tickets)} tickets via Jira REST"
+                )
+            elif existing_tickets:
+                _jira_label = f"{len(existing_tickets)} tickets from local file / sample"
+            else:
+                _jira_label = "no backlog provided"
+
+            # GitHub MCP always fetches live issues when configured.
+            _gh_label = (
+                "GitHub Issues via MCP"
+                if hasattr(self.github, "_use_mcp") and self.github._use_mcp
+                else "GitHub fixture"
+            )
             _emit(4, "gap_detector", "started",
-                  f"comparing {len(stories)} stories against {len(existing_tickets)} tickets")
+                  f"comparing {len(stories)} stories · {_jira_label} · {_gh_label}")
             gap_tool = _tool_for(4, "gap_detector")
             if gap_tool is not None:
                 gap_detector = GapDetectorAgent(
@@ -593,28 +836,31 @@ class Orchestrator:
                     audit=audit,
                     use_embeddings_for_duplicates=use_embeddings_for_duplicates,
                 )
-                try:
-                    gap_detector.run()
-                    _emit(
-                        4, "gap_detector", "completed",
-                        f"{len(memory.get('duplicates', []))} dupes, "
-                        f"{len(memory.get('conflicts', []))} conflicts, "
-                        f"{len(memory.get('gaps', []))} gaps",
-                    )
-                except AgentError as e:
-                    def _retry_gap(t):
-                        GapDetectorAgent(
-                            tool=t, jira=self.jira, github=self.github,
-                            memory=memory, audit=audit,
-                            use_embeddings_for_duplicates=use_embeddings_for_duplicates,
-                        ).run()
-                    if _attempt_failover(4, "gap_detector", e, _retry_gap):
-                        _emit(4, "gap_detector", "completed",
-                              f"{len(memory.get('duplicates', []))} dupes, "
-                              f"{len(memory.get('conflicts', []))} conflicts, "
-                              f"{len(memory.get('gaps', []))} gaps (via failover)")
+                with stage_span("gap_detector", model=resolved_models.get("gap_detector", "")):
+                    try:
+                        gap_detector.run()
+                        _emit(
+                            4, "gap_detector", "completed",
+                            f"{len(memory.get('duplicates', []))} dupes, "
+                            f"{len(memory.get('conflicts', []))} conflicts, "
+                            f"{len(memory.get('gaps', []))} gaps",
+                        )
+                    except AgentError as e:
+                        def _retry_gap(t):
+                            GapDetectorAgent(
+                                tool=t, jira=self.jira, github=self.github,
+                                memory=memory, audit=audit,
+                                use_embeddings_for_duplicates=use_embeddings_for_duplicates,
+                            ).run()
+                        if _attempt_failover(4, "gap_detector", e, _retry_gap):
+                            _emit(4, "gap_detector", "completed",
+                                  f"{len(memory.get('duplicates', []))} dupes, "
+                                  f"{len(memory.get('conflicts', []))} conflicts, "
+                                  f"{len(memory.get('gaps', []))} gaps (via failover)")
         else:
             _emit(4, "gap_detector", "skipped", "no stories to compare")
+            audit.record("gap_detector", "stage_skipped", payload={"reason": "no stories in memory"},
+                         reasoning="Gap Detector was not run because there were no stories to compare against the backlog.")
 
         # ---- Tally token usage from the audit log ----
         # Each agent calls `audit.record_tool_call(...)` with a `tokens_used`
@@ -655,28 +901,68 @@ class Orchestrator:
                 result[key] = unredact_obj(result[key], rmap)
 
         # ---- Output guardrails ----
-        # Run the cheap deterministic checks against the un-redacted output
-        # so error messages reference the real story ids the user will see.
-        # Findings are non-blocking; they ride along on the result dict and
-        # are audit-logged so reviewers can see them.
         try:
             from guardrails import run_guardrails, summarise
             findings = run_guardrails(result)
             result["guardrail_findings"] = [f.to_dict() for f in findings]
             tally = summarise(findings)
+
+            # Log each individual guardrail finding so reviewers can see
+            # exactly which story triggered which check — not just the tally.
+            for f in findings:
+                audit.record(
+                    "orchestrator", "guardrail_finding",
+                    payload={
+                        "code":     f.code,
+                        "severity": f.severity,
+                        "story_id": f.story_id or "—",
+                        "message":  f.message,
+                    },
+                    reasoning=f"Guardrail check '{f.code}' fired at severity '{f.severity}'.",
+                )
+
             audit.record(
                 "orchestrator", "guardrails_completed",
                 payload={"tally": tally, "finding_count": len(findings)},
                 reasoning=(
-                    f"Post-synthesis guardrails ran. "
+                    f"All post-synthesis guardrails completed. "
                     f"{tally['error']} error / {tally['warn']} warn / {tally['info']} info."
                 ),
             )
-            # Refresh the audit_trail markdown so the guardrail event shows up.
             result["audit_trail"] = audit.render_markdown()
+            result["audit_chain_fingerprint"] = audit.chain_fingerprint
         except Exception as e:  # noqa: BLE001 — guardrails must never break a run
             logger.warning("Guardrails crashed (suppressed): %s", e)
             result["guardrail_findings"] = []
+
+        # ---- pipeline_completed ----
+        _epics_out   = result.get("epics") or []
+        _n_stories   = sum(len(e.get("stories") or []) for e in _epics_out)
+        _total_tokens = (
+            int((token_usage.get("total") or {}).get("input", 0))
+            + int((token_usage.get("total") or {}).get("output", 0))
+        )
+        audit.record(
+            "orchestrator", "pipeline_completed",
+            payload={
+                "epics":        len(_epics_out),
+                "stories":      _n_stories,
+                "gaps":         len(result.get("gaps") or []),
+                "conflicts":    len(result.get("conflicts") or []),
+                "duplicates":   len(result.get("duplicates") or []),
+                "guardrail_errors": sum(1 for f in (result.get("guardrail_findings") or []) if f.get("severity") == "error"),
+                "total_tokens": _total_tokens,
+                "model_summary": model_summary,
+                "audit_chain_fingerprint": audit.chain_fingerprint,
+            },
+            reasoning=(
+                f"Pipeline completed. Produced {len(_epics_out)} epic(s) with {_n_stories} story(ies). "
+                f"Audit chain fingerprint is the tamper-evidence hash of all {len(audit.events)} events in this log."
+            ),
+        )
+        # Final render after pipeline_completed is appended.
+        result["audit_trail"] = audit.render_markdown()
+        result["audit_chain_fingerprint"] = audit.chain_fingerprint
 
         return result
 

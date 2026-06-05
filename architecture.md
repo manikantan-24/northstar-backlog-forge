@@ -1,203 +1,192 @@
 # Architecture
 
-A multi-agent Python system. A single orchestrator coordinates five specialized agents. Each agent has one reasoning job, calls Claude through a wrapped tool, and writes its findings to a shared memory store. Every agent decision goes into a structured audit log so a human reviewer can trace exactly how the final synthesis was produced.
+Enterprise production-grade multi-agent AI system for sprint backlog synthesis.  
+**Accenture · AI-First Agentic Solutions**
 
-## High-level data flow
+---
+
+## System Architecture
 
 ```mermaid
 flowchart TB
-    User((User / CLI)):::user
-    User --> Loader
+    %% ── User & Identity ──────────────────────────────────────────
+    Browser((Browser)):::user
+    EntraID["Microsoft Entra ID\nnorthstarretailcorp.onmicrosoft.com\nadmin / contributor / viewer"]:::auth
 
-    Loader["Input Loader<br/>(txt · md · pdf · json)"]:::io
+    Browser <-->|OAuth2 / OIDC| EntraID
 
-    Loader -->|raw transcripts| P[Parser Agent]
-    Loader -->|wiki / Confluence| CE[Constraint Extractor Agent]
-    Loader -->|JIRA / GitHub| Mem
+    %% ── Application ──────────────────────────────────────────────
+    Browser -->|HTTPS| App
 
-    P -->|topics + entities| Mem[(Shared Memory<br/>+ Audit Log)]:::mem
-    CE -->|architecture rules| Mem
+    subgraph App["Application Layer — Streamlit"]
+        UI["app.py\nRole-gated UI · Feature flags\nRate limiting · PII redaction\nHuman-in-the-loop Jira gate\nExpandable profile panel"]:::app
 
-    Mem -->|context| SW[Story Writer Agent]
-    SW -->|user stories + AC| Mem
+        subgraph Orch["Orchestrator (orchestrator.py)"]
+            P["Parser\nAgent"]:::agent
+            CE["Constraint\nExtractor"]:::agent
+            SW["Story\nWriter"]:::agent
+            ED["Epic\nDecomposer"]:::agent
+            GD["Gap\nDetector"]:::agent
+            P --> CE --> SW --> ED --> GD
+        end
 
-    Mem -->|stories| ED[Epic Decomposer Agent]
-    ED -->|epics → stories → tasks| Mem
+        Mem["MemoryStore\nKV + Vector\nChromaDB"]:::store
+        Audit["AuditLog\nSHA-256 hash chain\nSQLite · 26+ events/run"]:::store
 
-    Mem -->|stories + existing tickets| GD[Gap Detector Agent]
-    GD -->|gaps · conflicts · duplicates| Mem
+        UI --> Orch
+        P & CE & SW & ED & GD <--> Mem
+        P & CE & SW & ED & GD --> Audit
+    end
 
-    Mem --> Out["Output Formatter<br/>(synthesis.json + .md)"]:::io
-    Mem --> AT["Audit trail<br/>(audit_trail.md)"]:::io
+    %% ── LLM Providers ─────────────────────────────────────────────
+    subgraph LLMs["LLM Providers"]
+        Claude["Anthropic Claude\nSonnet 4.5\n+ cache_control"]:::llm
+        Gemini["Google Gemini\n2.5 Flash / Pro\n+ JSON mode"]:::llm
+        Ollama["Ollama Local\nllama3.2:3b\n+ format:json"]:::llm
+    end
 
-    Out --> User
-    AT --> User
+    SW & GD -.->|reasoning| Claude
+    P & CE & ED -.->|extraction| Gemini
+    P & CE & ED -.->|local free| Ollama
 
-    %% Tools (sit beside agents)
-    Claude[("Anthropic Claude<br/>claude-sonnet-4-5")]:::llm
-    Jira[("JIRA tool<br/>(mocked)")]:::tool
-    Conf[("Confluence tool<br/>(mocked)")]:::tool
-    Gh[("GitHub tool<br/>(mocked)")]:::tool
+    %% ── MCP Layer ─────────────────────────────────────────────────
+    subgraph MCP["MCP Integration Layer"]
+        AtlMCP["mcp-atlassian\nMCPJiraTool\nMCPConfluenceTool"]:::mcp
+        GHubMCP["server-github\nMCPGithubTool\n20 issues live"]:::mcp
+        MCPSvr["mcp_server.py\nsynthesize_backlog\npreview_prompts\nget_run_history\npush_to_jira"]:::mcp
+    end
 
-    P -.->|reason| Claude
-    CE -.->|reason| Claude
-    CE -.->|fetch wiki| Conf
-    SW -.->|reason| Claude
-    ED -.->|reason| Claude
-    GD -.->|reason| Claude
-    GD -.->|search tickets| Jira
-    GD -.->|search issues| Gh
+    GD -.->|jira_search| AtlMCP
+    CE -.->|confluence_get_page| AtlMCP
+    GD -.->|list_issues| GHubMCP
+    ExtAgent["Claude Desktop\nor other agents"]:::user -.->|tool calls| MCPSvr
+    MCPSvr -.->|runs pipeline| Orch
 
-    classDef user fill:#fff,stroke:#444,stroke-width:2px
-    classDef io fill:#e6edf7,stroke:#3a5285,stroke-width:1.5px
-    classDef mem fill:#fff4d6,stroke:#c2870c,stroke-width:1.5px
-    classDef llm fill:#fde2f3,stroke:#a83080,stroke-width:2px
-    classDef tool fill:#e0f5e0,stroke:#3a7a3a,stroke-width:1.5px
+    %% ── External Services ─────────────────────────────────────────
+    subgraph External["External Services"]
+        Jira["Jira Cloud\nNS project\n127 tickets live\ntwo-way sync"]:::ext
+        Confluence["Confluence Cloud\nArchitecture wiki"]:::ext
+        GitHub["GitHub\nnorthstar-retail-backlog\n20 seeded issues"]:::ext
+        Grafana["Grafana Cloud\nTempo — traces\nMimir — metrics\nAlerting rules"]:::obs
+    end
+
+    AtlMCP <-->|REST| Jira
+    AtlMCP <-->|REST| Confluence
+    GHubMCP <-->|REST| GitHub
+    UI -->|Push synthesis| Jira
+    UI -->|Sync status| Jira
+
+    %% ── Observability ─────────────────────────────────────────────
+    OTel["OpenTelemetry\npipeline.run\nstage.* spans\nllm.call spans\ntool.* spans\nguardrail.* spans"]:::obs
+    App --> OTel
+    OTel -->|OTLP / HTTP| Grafana
+
+    %% ── Deployment ────────────────────────────────────────────────
+    subgraph Deploy["Deployment (Azure)"]
+        GHA["GitHub Actions\nCI: 210 tests + lint\nCD: build→push→deploy"]:::deploy
+        ACR["Azure Container\nRegistry"]:::deploy
+        ACA["Azure Container Apps\npython:3.11-slim\nscale-to-zero"]:::deploy
+        KV["Azure Key Vault\nAnthropicKey\nJiraToken\nGoogleKey"]:::deploy
+        AF["Azure Files\nlogs/ outputs/\nper-user scoped"]:::deploy
+        TF["Terraform IaC\nmain.tf · variables.tf\noutputs.tf"]:::deploy
+    end
+
+    GHA -->|push image| ACR
+    GHA -->|deploy| ACA
+    ACR --> ACA
+    KV --> ACA
+    AF --> ACA
+    TF -.->|provisions| ACR & ACA & KV & AF
+
+    App -.- ACA
+
+    %% ── Styles ────────────────────────────────────────────────────
+    classDef user     fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    classDef auth     fill:#1e1b4b,stroke:#818cf8,color:#e0e7ff
+    classDef app      fill:#0f172a,stroke:#3b82f6,color:#bfdbfe
+    classDef agent    fill:#14532d,stroke:#4ade80,color:#dcfce7
+    classDef llm      fill:#4c1d95,stroke:#a78bfa,color:#ede9fe
+    classDef mcp      fill:#0c4a6e,stroke:#38bdf8,color:#e0f2fe
+    classDef store    fill:#1c1917,stroke:#d97706,color:#fef3c7
+    classDef ext      fill:#1a1a2e,stroke:#64748b,color:#cbd5e1
+    classDef obs      fill:#0d3349,stroke:#22d3ee,color:#cffafe
+    classDef deploy   fill:#1e3a5f,stroke:#3b82f6,color:#dbeafe
 ```
 
-## The five agents
+---
 
-| Agent | Single responsibility | Inputs | Outputs (written to memory) | Tools used |
-|---|---|---|---|---|
-| **Parser** | Extract distinct topics / entities / asks from raw transcript text | Raw transcripts (txt/md/pdf) | List of `topic` records with raw quotes | `claude_tool` |
-| **Constraint Extractor** | Pull architectural constraints, integrations, and platform rules from wiki / Confluence content | Confluence-style markdown | List of `constraint` records (must / should / forbidden) | `claude_tool`, `confluence_tool` |
-| **Story Writer** | Draft user stories with Given/When/Then acceptance criteria for each topic | Topics from Parser, constraints from Constraint Extractor | List of `story` records | `claude_tool` |
-| **Epic Decomposer** | Group stories into epics; break each story into 3-7 concrete tasks | Stories from Story Writer | Tree of `epic → stories → tasks` | `claude_tool` |
-| **Gap Detector** | Find conflicts (vs. constraints) and gaps via the LLM; duplicates are detected separately by local embedding similarity | Stories + constraints + existing tickets | Lists of `duplicate` (from embeddings), `conflict`, `gap` records | `claude_tool`, `embedding_tool`, `jira_tool`, `github_tool` |
+## Agent Pipeline Detail
 
-Each agent runs independently. The orchestrator chains them in this order, blocking on the previous agent's memory writes before invoking the next.
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant O as Orchestrator
+    participant P as Parser
+    participant CE as Constraint Extractor
+    participant SW as Story Writer
+    participant ED as Epic Decomposer
+    participant GD as Gap Detector
+    participant J as Jira (MCP)
+    participant GH as GitHub (MCP)
 
-## Shared memory
+    U->>O: transcript + wiki + backlog
+    Note over O: PII redaction (email→[EMAIL_1] etc.)
+    O->>P: transcript text
+    P->>P: Gemini Flash call → topics
+    P-->>O: [{id:T-01, theme, quote, speaker}]
 
-A single `MemoryStore` instance is passed to every agent. Two flavors of storage:
+    O->>CE: wiki text + Confluence page (MCP)
+    CE->>CE: Gemini Flash call → constraints
+    CE-->>O: [{id:C-01, severity:must, statement}]
 
-**Vector memory** (in-process: `sentence-transformers` + numpy cosine search) — for semantic similarity:
-- Existing JIRA / GitHub tickets are embedded once at the start of a run using `all-MiniLM-L6-v2`
-- Embeddings are held in a numpy matrix for the lifetime of the run; cosine similarity for top-K retrieval
-- The Gap Detector queries this to find candidates for each new story before LLM reranking
-- ChromaDB is listed in `requirements.txt` and the `MemoryStore` interface is shaped so a Chroma-backed store can be swapped in without touching agent code — for runs where embeddings must persist across processes
+    O->>SW: topics + constraints
+    SW->>SW: Claude Sonnet → stories + AC
+    SW->>SW: auto-repair bad source_topic_ids
+    SW-->>O: [{id:ST-01, title, user_story, AC[]}]
 
-**Structured KV memory** — for agent handoff:
-- `topics`, `constraints`, `stories`, `epics`, `gaps`, `conflicts`, `duplicates`
-- Each entry includes the agent that wrote it, a timestamp, and a reference to the source content
-- Downstream agents read structured records, not raw text
+    O->>ED: stories
+    ED->>ED: Gemini Flash → epics + tasks
+    ED-->>O: [{epic, stories:[{tasks:[]}]}]
 
-Why both? Vector for fuzzy lookup (`find tickets similar to this story`), KV for explicit handoff (`give me the list of stories so I can group them into epics`).
+    O->>GD: stories + tickets
+    GD->>J: jira_search (MCP) → 50 tickets
+    GD->>GH: list_issues (MCP) → 20 issues
+    GD->>GD: sentence-transformers → duplicates
+    GD->>GD: Claude Sonnet → conflicts + gaps
+    GD-->>O: {duplicates, conflicts, gaps}
 
-## Audit log
+    Note over O: 6 guardrail checks (AC, grounding, tags...)
+    Note over O: PII un-redact output only
+    Note over O: Audit chain fingerprint (SHA-256)
+    O-->>U: synthesis result
 
-Every agent emits **trace events** to an append-only audit log:
-
-```json
-{
-  "timestamp": "2026-05-19T22:14:31Z",
-  "agent": "story_writer",
-  "event": "story_drafted",
-  "story_id": "ST-04",
-  "source_topic_id": "T-02",
-  "prompt_excerpt": "...",
-  "response_excerpt": "...",
-  "tokens_used": 1487,
-  "reasoning": "Source quote 'cashiers can't process returns when WiFi drops' clearly implies offline-tolerant return flow; categorized as 'pos' + 'offline-mode'."
-}
+    U->>J: [human approves] Push to Jira
+    J-->>U: Epic→Story→Sub-task created
+    U->>J: Sync status from Jira
+    J-->>U: {status, assignee, priority}
 ```
 
-At the end of the run, the audit log is rendered to `audit_trail.md` — a human-readable walkthrough of every decision the system made. This addresses the brief's requirement: *"Audit logs must show how conclusions were reached."*
+---
 
-## Why multi-agent (vs. one big prompt)
+## Security & Data Flow
 
-The v1 single-agent design works when:
-- Input is a single source
-- Output is a flat list
-- Detection is duplicate-only
+```mermaid
+flowchart LR
+    T["Raw transcript\n(may contain PII)"]
+    R["Redactor\nemail→[EMAIL_1]\nphone→[PHONE_1]\nSSN→[SSN_1]\ncard→[CARD_1]\nname→[NAME_1]"]
+    LLM["LLM APIs\nNever sees raw PII\nOnly [EMAIL_1] tokens"]
+    A["Audit Log\nSHA-256 hash chain\nRedacted form kept\nTamper-evident"]
+    U["User output\nPII restored\n[EMAIL_1]→original"]
+    J["Jira\nHuman approval\nrequired before write"]
 
-This system breaks all three assumptions. Three reasons multi-agent fits:
+    T --> R
+    R -->|redacted text| LLM
+    R -->|redacted excerpts| A
+    LLM -->|synthesis| U
+    U -->|un-redacted| U
+    U -.->|human approves| J
 
-1. **One reasoning task per prompt.** Story-writing reasoning is different from gap-detection reasoning. Cramming them into one prompt degraded both (we proved this in v1).
-2. **Sequencing matters.** Story Writer needs to read constraints written by Constraint Extractor. Gap Detector needs to read stories written by Story Writer. A shared memory + ordered orchestrator makes this explicit.
-3. **Tool invocation is bounded per agent.** Only the Gap Detector calls JIRA/GitHub tools. Only the Constraint Extractor calls Confluence. Bounding tool access per agent makes the system safer and easier to audit.
-
-## Why this is *bounded* multi-agent, not autonomous
-
-This is not a free-form agent system where any agent can call any tool and the run ends when the model decides it's done. It's a **fixed pipeline of specialized agents** with deterministic ordering. The benefits:
-
-- **Reproducible.** Same input → same agent order → comparable output.
-- **Testable.** Each agent has a single mocked-Claude unit test.
-- **Cost-bounded.** Each run makes exactly one Claude call per agent — five calls in the standard pipeline (one per agent). The number is bounded up front.
-- **Auditable.** The audit log is a complete linear trace, not a graph of agent-calls-agent.
-
-Autonomous agent loops (where the model decides what tool to call next) are powerful but harder to audit, harder to budget, and harder to test. This system gets the benefits of specialization without the unpredictability.
-
-## Component table
-
-| File | Responsibility |
-|---|---|
-| `src/main.py` | CLI entry; loads `.env`; parses args; calls orchestrator |
-| `src/orchestrator.py` | Multi-agent coordinator; constructs memory + audit log; runs agents in order |
-| `src/agents/base.py` | `Agent` base class with memory access, audit emission, and prompt-template loading. Retry logic lives in each tool (e.g. `ClaudeTool`), not in `Agent`, so tools can tune their own backoff |
-| `src/agents/parser_agent.py` | Topic extraction from transcripts |
-| `src/agents/constraint_agent.py` | Architecture constraint extraction from wiki |
-| `src/agents/story_writer_agent.py` | User stories + acceptance criteria |
-| `src/agents/epic_decomposer_agent.py` | Epic grouping + task breakdown |
-| `src/agents/gap_detector_agent.py` | Duplicates / conflicts / gaps detection |
-| `src/tools/claude_tool.py` | Wrapped Claude API client with retry + JSON extraction + vision payloads |
-| `src/tools/gemini_tool.py` | Google Gemini client (`google-genai`), same `call_for_json` interface |
-| `src/tools/embedding_tool.py` | Local `sentence-transformers` duplicate detection (no LLM call) |
-| `src/tools/jira_tool.py` | JIRA read (mock + live JQL) **and write-back** (`create_issue` / `publish_synthesis`) |
-| `src/tools/confluence_tool.py` | Confluence read (mock + live) + markdown→storage write (`seed_confluence.py`) |
-| `src/tools/github_tool.py` | GitHub Issues fetch (mock) |
-| `src/memory/store.py` | Vector + KV shared memory, content-addressed vector cache |
-| `src/memory/audit_log.py` | Append-only trace event log |
-| `src/guardrails.py` | Six post-synthesis deterministic checks (non-blocking) |
-| `src/redactor.py` | Opt-in PII redaction + strict-redact trust boundary |
-| `src/pricing.py` | Per-model token→USD rates for the cost panel |
-| `src/input_loader.py` | Reads txt / md / pdf / json |
-| `src/output_formatter.py` | Renders epic → story → task hierarchy to JSON + Markdown |
-| `app.py` | Streamlit UI (multi-select inputs, live log, top-nav, Create-in-Jira, compare-mode) |
-| `evaluation/` | Golden suite, metrics, LLM-as-judge, regression dashboard, A/B, single-prompt baseline |
-
-## Multi-provider, presets, and resilience
-
-The LLM provider is chosen **per stage**, not globally. `_build_tool_for_model` builds a `ClaudeTool` or `GeminiTool` from the model id prefix, and no agent code knows which is behind it. Three presets ship:
-
-- **Free** — Gemini Flash for all five stages.
-- **Balanced** (default) — Gemini Flash for the four mechanical stages, Claude Sonnet for the Story Writer (the hardest reasoning).
-- **Premium** — Claude Sonnet for all five.
-
-Two opt-in behaviours sit behind an **"Auto-switch model"** toggle (default off, so the exact preset is honoured and easy to verify):
-
-- **Provider failover** — if a stage fails after its tenacity retries (rate limit / 5xx / timeout), the orchestrator retries that one stage on the *other* provider (`_fallback_model`: Claude↔Gemini). Surfaced as an amber **⚠ FAILOVER** live-log line + a `provider_failover` audit event. This keeps a live demo — or compare-mode's all-Gemini "Free" leg — alive through a transient outage.
-- **Vision auto-switch** — the Gemini wrapper can't carry image parts, so when a vision attachment is present and the Parser is on Gemini, the Parser is switched to a vision-capable Claude model.
-
-So "exactly one LLM call per agent" is the steady-state; a failover adds at most one retry call on the other provider, and it's always logged.
-
-## Beyond synthesis: live data, write-back, safety
-
-- **Live Atlassian (read).** `JiraTool`/`ConfluenceTool` have a `mode="live"` path: Jira via paginated `/rest/api/3/search/jql`, Confluence via `/wiki/api/v2/pages/{id}`. One API token covers both products.
-- **Jira write-back.** `JiraTool.publish_synthesis()` creates the synthesis in live Jira as **Epic → Story → Sub-task** (CLI `--publish-jira`; UI "Create in Jira"). Defensive fallbacks handle differing project configs; partial failures are recorded, not fatal.
-- **Vision input.** Vision-capable models accept whiteboard photos / screenshots alongside the transcript (a bundled `samples/whiteboard_sprint_planning.png` is selectable directly).
-- **Output guardrails.** Six deterministic post-synthesis checks (AC count/grammar, unique titles, canonical tags, story grounding, priority-rationale rigor) annotate the result without blocking it.
-- **PII redaction.** Opt-in regex redaction at the orchestrator boundary, with a strict-redact halt-on-violation trust boundary; the synthesis is un-redacted on the way out while the audit trail stays redacted.
-
-## Error handling and retries
-
-Each agent's tool calls are wrapped in `tenacity` retry logic — exponential backoff with a cap of 3 attempts. Transient errors (rate limit, network failure) retry; deterministic errors (auth failure, bad request) fail fast.
-
-If an individual agent fails permanently:
-- Its failure is recorded in the audit log
-- Downstream agents are skipped if they depend on its output
-- The orchestrator returns whatever was completed before the failure
-
-This means partial results are still useful — a Gap Detector failure still produces a synthesis with stories and epics, just no gap analysis.
-
-## Where AI is used
-
-An LLM (Claude or Gemini, per the active preset) is called once per agent per run — five calls total for the standard pipeline (a failover adds at most one retry on the other provider). Outside those calls, everything is deterministic Python:
-
-- File I/O
-- Vector similarity + duplicate detection (sentence-transformers + numpy — no LLM call)
-- ID assignment, guardrails, PII redaction
-- Audit log writes, token/cost tallying
-- Output formatting and Jira issue creation
-
-The boundary is intentional. The model handles judgment (story shape, conflict/gap detection); the framework handles plumbing — and the deterministic layers are exactly why 128 mocked tests can cover the system without spending API credit.
+    style R fill:#7f1d1d,color:#fecaca
+    style A fill:#1c1917,color:#fef3c7
+    style J fill:#1e3a5f,color:#dbeafe
+```
