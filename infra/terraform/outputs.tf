@@ -41,13 +41,14 @@ output "github_actions_credentials" {
 
 output "key_vault_secrets_stored" {
   description = "Secrets stored in Key Vault (names only — values never output)"
+  sensitive   = true
   value = compact([
     "ANTHROPIC-API-KEY",
-    var.google_api_key       != "" ? "GOOGLE-API-KEY"                : "",
-    var.jira_api_token       != "" ? "JIRA-API-TOKEN"                : "",
-    var.github_token         != "" ? "GITHUB-TOKEN"                  : "",
-    var.entra_client_secret  != "" ? "ENTRA-CLIENT-SECRET"           : "",
-    var.otel_headers         != "" ? "OTEL-EXPORTER-OTLP-HEADERS"    : "",
+    var.google_api_key != "" ? "GOOGLE-API-KEY" : "",
+    var.jira_api_token != "" ? "JIRA-API-TOKEN" : "",
+    var.github_token != "" ? "GITHUB-TOKEN" : "",
+    var.entra_client_secret != "" ? "ENTRA-CLIENT-SECRET" : "",
+    var.otel_headers != "" ? "OTEL-EXPORTER-OTLP-HEADERS" : "",
     "ACR-ADMIN-PASSWORD",
   ])
 }

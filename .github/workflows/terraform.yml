@@ -1,0 +1,106 @@
+name: Terraform — Provision Azure Infrastructure
+
+# Triggers:
+#   Manual only — infra changes are intentional, not automatic.
+#   Plan runs on PRs that touch infra/ so reviewers see what will change.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action"
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+      environment:
+        description: "Target environment"
+        type: choice
+        options: [staging, production]
+        default: staging
+  pull_request:
+    branches: [main]
+    paths: ["infra/terraform/**"]
+
+env:
+  TF_VERSION:          "1.7.0"
+  ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      # ── Plan (always runs — shows what will change) ──────────────────────
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var="environment=${{ github.event.inputs.environment || 'staging' }}" \
+            -var="anthropic_api_key=${{ secrets.TF_VAR_ANTHROPIC_API_KEY }}" \
+            -var="google_api_key=${{ secrets.TF_VAR_GOOGLE_API_KEY }}" \
+            -var="jira_api_token=${{ secrets.TF_VAR_JIRA_API_TOKEN }}" \
+            -var="jira_base_url=${{ secrets.TF_VAR_JIRA_BASE_URL }}" \
+            -var="jira_email=${{ secrets.TF_VAR_JIRA_EMAIL }}" \
+            -var="jira_project_key=${{ secrets.TF_VAR_JIRA_PROJECT_KEY }}" \
+            -var="github_token=${{ secrets.TF_VAR_GITHUB_TOKEN }}" \
+            -var="github_owner=${{ secrets.TF_VAR_GITHUB_OWNER }}" \
+            -var="github_repo=${{ secrets.TF_VAR_GITHUB_REPO }}" \
+            -var="entra_tenant_id=${{ secrets.TF_VAR_ENTRA_TENANT_ID }}" \
+            -var="entra_client_id=${{ secrets.TF_VAR_ENTRA_CLIENT_ID }}" \
+            -var="entra_tenant_domain=${{ secrets.TF_VAR_ENTRA_TENANT_DOMAIN }}" \
+            -var="entra_client_secret=${{ secrets.TF_VAR_ENTRA_CLIENT_SECRET }}" \
+            -var="otel_endpoint=${{ secrets.TF_VAR_OTEL_ENDPOINT }}" \
+            -var="otel_headers=${{ secrets.TF_VAR_OTEL_HEADERS }}" \
+            -out=tfplan \
+            -no-color 2>&1 | tee plan-output.txt
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}
+          path: infra/terraform/plan-output.txt
+          retention-days: 30
+
+      # ── Apply (only on manual trigger with action=apply) ─────────────────
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve tfplan
+
+      - name: Show Outputs
+        if: github.event.inputs.action == 'apply'
+        run: terraform output -json | jq 'del(.github_actions_credentials, .key_vault_secrets_stored)'
+
+      # ── Destroy (only on manual trigger with action=destroy) ─────────────
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        run: |
+          terraform destroy -auto-approve \
+            -var="environment=${{ github.event.inputs.environment || 'staging' }}" \
+            -var="anthropic_api_key=${{ secrets.TF_VAR_ANTHROPIC_API_KEY }}" \
+            -var="google_api_key=${{ secrets.TF_VAR_GOOGLE_API_KEY }}" \
+            -var="jira_api_token=${{ secrets.TF_VAR_JIRA_API_TOKEN }}" \
+            -var="github_token=${{ secrets.TF_VAR_GITHUB_TOKEN }}" \
+            -var="entra_client_secret=${{ secrets.TF_VAR_ENTRA_CLIENT_SECRET }}" \
+            -var="otel_headers=${{ secrets.TF_VAR_OTEL_HEADERS }}"

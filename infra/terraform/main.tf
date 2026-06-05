@@ -288,42 +288,102 @@ resource "azurerm_container_app" "app" {
       memory = "2Gi"
 
       # ── Non-secret config (plain env vars) ────────────────────────────────
-      env { name = "AUTH_DISABLED";           value = "0" }
-      env { name = "OTEL_ENABLED";            value = "1" }
-      env { name = "OTEL_SERVICE_NAME";       value = "backlog-synthesizer" }
-      env { name = "OTEL_EXPORTER_OTLP_ENDPOINT"; value = var.otel_endpoint }
-      env { name = "ATLASSIAN_MCP_ENABLED";   value = "1" }
-      env { name = "GITHUB_MCP_ENABLED";      value = "1" }
-      env { name = "JIRA_BASE_URL";           value = var.jira_base_url }
-      env { name = "JIRA_EMAIL";              value = var.jira_email }
-      env { name = "JIRA_PROJECT_KEY";        value = var.jira_project_key }
-      env { name = "GITHUB_OWNER";            value = var.github_owner }
-      env { name = "GITHUB_REPO";             value = var.github_repo }
-      env { name = "ENTRA_TENANT_ID";         value = var.entra_tenant_id }
-      env { name = "ENTRA_CLIENT_ID";         value = var.entra_client_id }
-      env { name = "ENTRA_TENANT_DOMAIN";     value = var.entra_tenant_domain }
+      env {
+        name  = "AUTH_DISABLED"
+        value = "0"
+      }
+      env {
+        name  = "OTEL_ENABLED"
+        value = "1"
+      }
+      env {
+        name  = "OTEL_SERVICE_NAME"
+        value = "backlog-synthesizer"
+      }
+      env {
+        name  = "OTEL_EXPORTER_OTLP_ENDPOINT"
+        value = var.otel_endpoint
+      }
+      env {
+        name  = "ATLASSIAN_MCP_ENABLED"
+        value = "1"
+      }
+      env {
+        name  = "GITHUB_MCP_ENABLED"
+        value = "1"
+      }
+      env {
+        name  = "JIRA_BASE_URL"
+        value = var.jira_base_url
+      }
+      env {
+        name  = "JIRA_EMAIL"
+        value = var.jira_email
+      }
+      env {
+        name  = "JIRA_PROJECT_KEY"
+        value = var.jira_project_key
+      }
+      env {
+        name  = "GITHUB_OWNER"
+        value = var.github_owner
+      }
+      env {
+        name  = "GITHUB_REPO"
+        value = var.github_repo
+      }
+      env {
+        name  = "ENTRA_TENANT_ID"
+        value = var.entra_tenant_id
+      }
+      env {
+        name  = "ENTRA_CLIENT_ID"
+        value = var.entra_client_id
+      }
+      env {
+        name  = "ENTRA_TENANT_DOMAIN"
+        value = var.entra_tenant_domain
+      }
 
-      # ── Secrets from Key Vault (secret_name references the secrets above) ─
-      env { name = "ANTHROPIC_API_KEY";            secret_name = "anthropic-api-key" }
+      # ── Secrets from Key Vault (value comes from KV via managed identity) ─
+      env {
+        name        = "ANTHROPIC_API_KEY"
+        secret_name = "anthropic-api-key"
+      }
       dynamic "env" {
         for_each = var.google_api_key != "" ? [1] : []
-        content { name = "GOOGLE_API_KEY"; secret_name = "google-api-key" }
+        content {
+          name        = "GOOGLE_API_KEY"
+          secret_name = "google-api-key"
+        }
       }
       dynamic "env" {
         for_each = var.jira_api_token != "" ? [1] : []
-        content { name = "JIRA_API_TOKEN"; secret_name = "jira-api-token" }
+        content {
+          name        = "JIRA_API_TOKEN"
+          secret_name = "jira-api-token"
+        }
       }
       dynamic "env" {
         for_each = var.github_token != "" ? [1] : []
-        content { name = "GITHUB_TOKEN"; secret_name = "github-token" }
+        content {
+          name        = "GITHUB_TOKEN"
+          secret_name = "github-token"
+        }
       }
       dynamic "env" {
         for_each = var.entra_client_secret != "" ? [1] : []
-        content { name = "ENTRA_CLIENT_SECRET"; secret_name = "entra-client-secret" }
+        content {
+          name        = "ENTRA_CLIENT_SECRET"
+          secret_name = "entra-client-secret"
+        }
       }
       dynamic "env" {
         for_each = var.otel_headers != "" ? [1] : []
-        content { name = "OTEL_EXPORTER_OTLP_HEADERS"; secret_name = "otel-headers" }
+        content {
+          name        = "OTEL_EXPORTER_OTLP_HEADERS"
+          secret_name = "otel-headers"
+        }
       }
 
       volume_mounts {
@@ -335,17 +395,17 @@ resource "azurerm_container_app" "app" {
         transport               = "HTTP"
         port                    = 8501
         path                    = "/_stcore/health"
-        period_seconds          = 30
-        timeout_seconds         = 5
+        interval_seconds        = 30
+        timeout                 = 5
         failure_count_threshold = 3
       }
 
       readiness_probe {
-        transport       = "HTTP"
-        port            = 8501
-        path            = "/_stcore/health"
-        period_seconds  = 10
-        timeout_seconds = 5
+        transport        = "HTTP"
+        port             = 8501
+        path             = "/_stcore/health"
+        interval_seconds = 10
+        timeout          = 5
       }
     }
   }
