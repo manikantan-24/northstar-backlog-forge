@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.100"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.11"
+    }
     # azuread removed — SP created manually, not via Terraform (free tier lacks AD perms)
   }
 
@@ -69,19 +73,26 @@ resource "azurerm_key_vault" "main" {
   soft_delete_retention_days = 7
   tags                       = local.common_tags
 
-  # Operator (whoever runs Terraform) — full secret management
+  # Operator (whoever runs Terraform via GitHub Actions SP) — full secret management
   access_policy {
-    tenant_id = data.azurerm_client_config.current.tenant_id
-    object_id = data.azurerm_client_config.current.object_id
+    tenant_id          = data.azurerm_client_config.current.tenant_id
+    object_id          = data.azurerm_client_config.current.object_id
     secret_permissions = ["Get", "List", "Set", "Delete", "Purge", "Recover"]
   }
 
   # Container App managed identity — read only
   access_policy {
-    tenant_id = data.azurerm_client_config.current.tenant_id
-    object_id = azurerm_user_assigned_identity.app.principal_id
+    tenant_id          = data.azurerm_client_config.current.tenant_id
+    object_id          = azurerm_user_assigned_identity.app.principal_id
     secret_permissions = ["Get", "List"]
   }
+}
+
+# Wait for Key Vault access policy to propagate before writing secrets.
+# Azure RBAC/access policy changes can take 15-30s to take effect.
+resource "time_sleep" "kv_policy_propagation" {
+  depends_on      = [azurerm_key_vault.main]
+  create_duration = "30s"
 }
 
 # ── Secrets in Key Vault ───────────────────────────────────────────────────────
@@ -91,50 +102,50 @@ resource "azurerm_key_vault" "main" {
 resource "azurerm_key_vault_secret" "anthropic_key" {
   name         = "ANTHROPIC-API-KEY"
   value        = var.anthropic_api_key
-  key_vault_id = azurerm_key_vault.main.id
-
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
 }
 
 resource "azurerm_key_vault_secret" "google_key" {
   name         = "GOOGLE-API-KEY"
   value        = var.google_api_key
-  key_vault_id = azurerm_key_vault.main.id
-
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
 }
 
 resource "azurerm_key_vault_secret" "jira_token" {
   name         = "JIRA-API-TOKEN"
   value        = var.jira_api_token
-  key_vault_id = azurerm_key_vault.main.id
-
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
 }
 
 resource "azurerm_key_vault_secret" "github_token" {
   name         = "GITHUB-TOKEN"
   value        = var.github_token
-  key_vault_id = azurerm_key_vault.main.id
-
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
 }
 
 resource "azurerm_key_vault_secret" "entra_client_secret" {
   name         = "ENTRA-CLIENT-SECRET"
   value        = var.entra_client_secret
-  key_vault_id = azurerm_key_vault.main.id
-
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
 }
 
 resource "azurerm_key_vault_secret" "otel_headers" {
   name         = "OTEL-EXPORTER-OTLP-HEADERS"
   value        = var.otel_headers
-  key_vault_id = azurerm_key_vault.main.id
-
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
 }
 
 resource "azurerm_key_vault_secret" "acr_password" {
   name         = "ACR-ADMIN-PASSWORD"
   value        = azurerm_container_registry.acr.admin_password
-  key_vault_id = azurerm_key_vault.main.id
-
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
 }
 
 # ── Storage Account + Azure Files ─────────────────────────────────────────────
