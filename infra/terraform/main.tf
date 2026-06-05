@@ -12,8 +12,7 @@ terraform {
     }
   }
 
-  # Store Terraform state in Azure Blob Storage so the team shares one truth.
-  # Uncomment and fill in after running `az storage account create` for state.
+  # Uncomment after running `az storage account create` for state:
   # backend "azurerm" {
   #   resource_group_name  = "rg-tfstate"
   #   storage_account_name = "stbacklogsynth"
@@ -40,6 +39,16 @@ resource "azurerm_resource_group" "main" {
   tags     = local.common_tags
 }
 
+# ── User-Assigned Managed Identity ────────────────────────────────────────────
+# The Container App uses this identity to pull secrets from Key Vault without
+# any credentials appearing in Terraform state, GitHub Actions env, or logs.
+resource "azurerm_user_assigned_identity" "app" {
+  name                = "id-backlog-synthesizer"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  tags                = local.common_tags
+}
+
 # ── Azure Container Registry ───────────────────────────────────────────────────
 resource "azurerm_container_registry" "acr" {
   name                = var.acr_name
@@ -63,14 +72,24 @@ resource "azurerm_key_vault" "main" {
   tags                       = local.common_tags
 }
 
-# Grant the operator (whoever runs terraform) Key Vault Secrets Officer.
+# Grant the operator (whoever runs terraform) rights to write secrets
 resource "azurerm_role_assignment" "kv_operator" {
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
-# Secrets — values supplied via terraform.tfvars or env vars (TF_VAR_*)
+# Grant the Container App's managed identity read access to Key Vault
+resource "azurerm_role_assignment" "kv_app_reader" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}
+
+# ── Secrets in Key Vault ───────────────────────────────────────────────────────
+# All sensitive values live here. Container App reads them at runtime via MSI.
+# Secret values are marked sensitive=true in variables.tf and never logged.
+
 resource "azurerm_key_vault_secret" "anthropic_key" {
   name         = "ANTHROPIC-API-KEY"
   value        = var.anthropic_api_key
@@ -94,7 +113,38 @@ resource "azurerm_key_vault_secret" "jira_token" {
   depends_on   = [azurerm_role_assignment.kv_operator]
 }
 
-# ── Storage Account + Azure Files (persistent logs/outputs) ───────────────────
+resource "azurerm_key_vault_secret" "github_token" {
+  count        = var.github_token != "" ? 1 : 0
+  name         = "GITHUB-TOKEN"
+  value        = var.github_token
+  key_vault_id = azurerm_key_vault.main.id
+  depends_on   = [azurerm_role_assignment.kv_operator]
+}
+
+resource "azurerm_key_vault_secret" "entra_client_secret" {
+  count        = var.entra_client_secret != "" ? 1 : 0
+  name         = "ENTRA-CLIENT-SECRET"
+  value        = var.entra_client_secret
+  key_vault_id = azurerm_key_vault.main.id
+  depends_on   = [azurerm_role_assignment.kv_operator]
+}
+
+resource "azurerm_key_vault_secret" "otel_headers" {
+  count        = var.otel_headers != "" ? 1 : 0
+  name         = "OTEL-EXPORTER-OTLP-HEADERS"
+  value        = var.otel_headers
+  key_vault_id = azurerm_key_vault.main.id
+  depends_on   = [azurerm_role_assignment.kv_operator]
+}
+
+resource "azurerm_key_vault_secret" "acr_password" {
+  name         = "ACR-ADMIN-PASSWORD"
+  value        = azurerm_container_registry.acr.admin_password
+  key_vault_id = azurerm_key_vault.main.id
+  depends_on   = [azurerm_role_assignment.kv_operator]
+}
+
+# ── Storage Account + Azure Files ─────────────────────────────────────────────
 resource "azurerm_storage_account" "main" {
   name                     = var.storage_account_name
   resource_group_name      = azurerm_resource_group.main.name
@@ -107,10 +157,10 @@ resource "azurerm_storage_account" "main" {
 resource "azurerm_storage_share" "data" {
   name                 = "backlog-data"
   storage_account_name = azurerm_storage_account.main.name
-  quota                = 10  # GB
+  quota                = 10
 }
 
-# ── Log Analytics (required by Container Apps environment) ────────────────────
+# ── Log Analytics ──────────────────────────────────────────────────────────────
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "law-backlog-synthesizer"
   resource_group_name = azurerm_resource_group.main.name
@@ -129,7 +179,6 @@ resource "azurerm_container_app_environment" "main" {
   tags                       = local.common_tags
 }
 
-# Mount Azure Files into the Container Apps environment for persistent storage
 resource "azurerm_container_app_environment_storage" "data" {
   name                         = "backlog-data"
   container_app_environment_id = azurerm_container_app_environment.main.id
@@ -147,13 +196,64 @@ resource "azurerm_container_app" "app" {
   revision_mode                = "Single"
   tags                         = local.common_tags
 
+  # Attach the managed identity so it can pull from Key Vault
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.app.id]
+  }
+
+  # ── Secrets — all pulled from Key Vault via managed identity ────────────────
+  # The Container App runtime fetches the secret VALUE from KV at startup.
+  # Secret values never appear in Terraform plan output, state files, or logs.
   secret {
-    name  = "acr-password"
-    value = azurerm_container_registry.acr.admin_password
+    name                = "acr-password"
+    key_vault_secret_id = azurerm_key_vault_secret.acr_password.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
   secret {
-    name  = "anthropic-api-key"
-    value = var.anthropic_api_key
+    name                = "anthropic-api-key"
+    key_vault_secret_id = azurerm_key_vault_secret.anthropic_key.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
+  }
+  dynamic "secret" {
+    for_each = var.google_api_key != "" ? [1] : []
+    content {
+      name                = "google-api-key"
+      key_vault_secret_id = azurerm_key_vault_secret.google_key[0].versionless_id
+      identity            = azurerm_user_assigned_identity.app.id
+    }
+  }
+  dynamic "secret" {
+    for_each = var.jira_api_token != "" ? [1] : []
+    content {
+      name                = "jira-api-token"
+      key_vault_secret_id = azurerm_key_vault_secret.jira_token[0].versionless_id
+      identity            = azurerm_user_assigned_identity.app.id
+    }
+  }
+  dynamic "secret" {
+    for_each = var.github_token != "" ? [1] : []
+    content {
+      name                = "github-token"
+      key_vault_secret_id = azurerm_key_vault_secret.github_token[0].versionless_id
+      identity            = azurerm_user_assigned_identity.app.id
+    }
+  }
+  dynamic "secret" {
+    for_each = var.entra_client_secret != "" ? [1] : []
+    content {
+      name                = "entra-client-secret"
+      key_vault_secret_id = azurerm_key_vault_secret.entra_client_secret[0].versionless_id
+      identity            = azurerm_user_assigned_identity.app.id
+    }
+  }
+  dynamic "secret" {
+    for_each = var.otel_headers != "" ? [1] : []
+    content {
+      name                = "otel-headers"
+      key_vault_secret_id = azurerm_key_vault_secret.otel_headers[0].versionless_id
+      identity            = azurerm_user_assigned_identity.app.id
+    }
   }
 
   registry {
@@ -172,7 +272,7 @@ resource "azurerm_container_app" "app" {
   }
 
   template {
-    min_replicas = 0   # scale to zero when idle
+    min_replicas = 0
     max_replicas = 3
 
     volume {
@@ -187,29 +287,43 @@ resource "azurerm_container_app" "app" {
       cpu    = 1.0
       memory = "2Gi"
 
-      env {
-        name  = "AUTH_DISABLED"
-        value = "0"
+      # ── Non-secret config (plain env vars) ────────────────────────────────
+      env { name = "AUTH_DISABLED";           value = "0" }
+      env { name = "OTEL_ENABLED";            value = "1" }
+      env { name = "OTEL_SERVICE_NAME";       value = "backlog-synthesizer" }
+      env { name = "OTEL_EXPORTER_OTLP_ENDPOINT"; value = var.otel_endpoint }
+      env { name = "ATLASSIAN_MCP_ENABLED";   value = "1" }
+      env { name = "GITHUB_MCP_ENABLED";      value = "1" }
+      env { name = "JIRA_BASE_URL";           value = var.jira_base_url }
+      env { name = "JIRA_EMAIL";              value = var.jira_email }
+      env { name = "JIRA_PROJECT_KEY";        value = var.jira_project_key }
+      env { name = "GITHUB_OWNER";            value = var.github_owner }
+      env { name = "GITHUB_REPO";             value = var.github_repo }
+      env { name = "ENTRA_TENANT_ID";         value = var.entra_tenant_id }
+      env { name = "ENTRA_CLIENT_ID";         value = var.entra_client_id }
+      env { name = "ENTRA_TENANT_DOMAIN";     value = var.entra_tenant_domain }
+
+      # ── Secrets from Key Vault (secret_name references the secrets above) ─
+      env { name = "ANTHROPIC_API_KEY";            secret_name = "anthropic-api-key" }
+      dynamic "env" {
+        for_each = var.google_api_key != "" ? [1] : []
+        content { name = "GOOGLE_API_KEY"; secret_name = "google-api-key" }
       }
-      env {
-        name        = "ANTHROPIC_API_KEY"
-        secret_name = "anthropic-api-key"
+      dynamic "env" {
+        for_each = var.jira_api_token != "" ? [1] : []
+        content { name = "JIRA_API_TOKEN"; secret_name = "jira-api-token" }
       }
-      env {
-        name  = "OTEL_ENABLED"
-        value = "1"
+      dynamic "env" {
+        for_each = var.github_token != "" ? [1] : []
+        content { name = "GITHUB_TOKEN"; secret_name = "github-token" }
       }
-      env {
-        name  = "OTEL_SERVICE_NAME"
-        value = "backlog-synthesizer"
+      dynamic "env" {
+        for_each = var.entra_client_secret != "" ? [1] : []
+        content { name = "ENTRA_CLIENT_SECRET"; secret_name = "entra-client-secret" }
       }
-      env {
-        name  = "ATLASSIAN_MCP_ENABLED"
-        value = "1"
-      }
-      env {
-        name  = "GITHUB_MCP_ENABLED"
-        value = "1"
+      dynamic "env" {
+        for_each = var.otel_headers != "" ? [1] : []
+        content { name = "OTEL_EXPORTER_OTLP_HEADERS"; secret_name = "otel-headers" }
       }
 
       volume_mounts {
@@ -218,32 +332,30 @@ resource "azurerm_container_app" "app" {
       }
 
       liveness_probe {
-        transport = "HTTP"
-        port      = 8501
-        path      = "/_stcore/health"
-        period_seconds    = 30
-        timeout_seconds   = 5
+        transport               = "HTTP"
+        port                    = 8501
+        path                    = "/_stcore/health"
+        period_seconds          = 30
+        timeout_seconds         = 5
         failure_count_threshold = 3
       }
 
       readiness_probe {
-        transport = "HTTP"
-        port      = 8501
-        path      = "/_stcore/health"
-        period_seconds = 10
+        transport       = "HTTP"
+        port            = 8501
+        path            = "/_stcore/health"
+        period_seconds  = 10
         timeout_seconds = 5
       }
     }
   }
 
   lifecycle {
-    # Image tag is managed by GitHub Actions on every deploy.
-    # Prevent Terraform from resetting it to "latest" after the first deploy.
     ignore_changes = [template[0].container[0].image]
   }
 }
 
-# ── Service Principal for GitHub Actions ──────────────────────────────────────
+# ── Service Principal for GitHub Actions ───────────────────────────────────────
 resource "azuread_application" "github_actions" {
   display_name = "sp-backlog-synthesizer-ghactions"
 }
@@ -254,7 +366,7 @@ resource "azuread_service_principal" "github_actions" {
 
 resource "azuread_service_principal_password" "github_actions" {
   service_principal_id = azuread_service_principal.github_actions.id
-  end_date_relative    = "8760h"  # 1 year
+  end_date_relative    = "8760h"
 }
 
 resource "azurerm_role_assignment" "github_contributor" {
@@ -266,6 +378,13 @@ resource "azurerm_role_assignment" "github_contributor" {
 resource "azurerm_role_assignment" "github_acr_push" {
   scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPush"
+  principal_id         = azuread_service_principal.github_actions.object_id
+}
+
+# Grant GitHub Actions SP read access to Key Vault (for secret rotation via CI)
+resource "azurerm_role_assignment" "github_kv_reader" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets User"
   principal_id         = azuread_service_principal.github_actions.object_id
 }
 

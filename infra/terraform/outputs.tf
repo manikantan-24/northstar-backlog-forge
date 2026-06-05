@@ -18,6 +18,16 @@ output "container_app_name" {
   value       = azurerm_container_app.app.name
 }
 
+output "key_vault_uri" {
+  description = "Key Vault URI — all app secrets are stored here"
+  value       = azurerm_key_vault.main.vault_uri
+}
+
+output "managed_identity_client_id" {
+  description = "Client ID of the Container App managed identity"
+  value       = azurerm_user_assigned_identity.app.client_id
+}
+
 output "github_actions_credentials" {
   description = "AZURE_CREDENTIALS JSON for GitHub Actions secret"
   sensitive   = true
@@ -27,4 +37,17 @@ output "github_actions_credentials" {
     subscriptionId = data.azurerm_client_config.current.subscription_id
     tenantId       = data.azurerm_client_config.current.tenant_id
   })
+}
+
+output "key_vault_secrets_stored" {
+  description = "Secrets stored in Key Vault (names only — values never output)"
+  value = compact([
+    "ANTHROPIC-API-KEY",
+    var.google_api_key       != "" ? "GOOGLE-API-KEY"                : "",
+    var.jira_api_token       != "" ? "JIRA-API-TOKEN"                : "",
+    var.github_token         != "" ? "GITHUB-TOKEN"                  : "",
+    var.entra_client_secret  != "" ? "ENTRA-CLIENT-SECRET"           : "",
+    var.otel_headers         != "" ? "OTEL-EXPORTER-OTLP-HEADERS"    : "",
+    "ACR-ADMIN-PASSWORD",
+  ])
 }

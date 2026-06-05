@@ -1,16 +1,33 @@
-# Copy this file to terraform.tfvars and fill in your values.
+# Copy to terraform.tfvars and fill in values.
 # terraform.tfvars is gitignored — never commit real secrets.
 
+# ── Infrastructure ────────────────────────────────────────────────────────────
 location             = "eastus"
 environment          = "staging"
 resource_group_name  = "rg-backlog-synthesizer"
-acr_name             = "backlogsynth"        # change to something globally unique
-keyvault_name        = "kv-backlog-synth"    # change to something globally unique
-storage_account_name = "stbacklogsynth"      # change to something globally unique
+acr_name             = "backlogsynth"        # must be globally unique, lowercase
+keyvault_name        = "kv-backlog-synth"    # must be globally unique, 3-24 chars
+storage_account_name = "stbacklogsynth"      # must be globally unique, lowercase
 
-# Secrets — required
-anthropic_api_key = "sk-ant-..."
+# ── Non-secret config (safe to commit if needed) ──────────────────────────────
+jira_base_url        = "https://your-tenant.atlassian.net"
+jira_email           = "you@company.com"
+jira_project_key     = "PROJ"
+github_owner         = "your-org"
+github_repo          = "your-repo"
+entra_tenant_id      = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+entra_client_id      = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+entra_tenant_domain  = "yourcompany.onmicrosoft.com"
+otel_endpoint        = "https://otlp-gateway-prod-ap-south-1.grafana.net/otlp"
 
-# Optional
-google_api_key = ""
-jira_api_token = ""
+# ── Secrets → stored in Key Vault, never in Terraform state as plaintext ──────
+# These are written to Key Vault once at `terraform apply`.
+# The Container App reads them at runtime via Managed Identity — values never
+# appear in GitHub Actions logs, Terraform plan output, or Container App config.
+
+anthropic_api_key    = "sk-ant-..."
+google_api_key       = "AIza..."
+jira_api_token       = "ATATT3x..."
+github_token         = "ghp_..."
+entra_client_secret  = "xxxx~..."
+otel_headers         = "Authorization=Basic ..."
