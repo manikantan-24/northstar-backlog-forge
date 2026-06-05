@@ -141,11 +141,14 @@ jobs:
           echo "App: ${{ env.CONTAINERAPP_NAME }}"
           echo "RG:  ${{ env.AZURE_RESOURCE_GROUP }}"
 
-          # Update image only — env vars already set via Terraform/Key Vault
+          # Update image — revision-suffix forces a new revision even when
+          # the image digest matches the current one (avoids no-op deploys).
+          SHORT_SHA="${{ github.sha }}"
           az containerapp update \
             --name "${{ env.CONTAINERAPP_NAME }}" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --image "$IMAGE"
+            --image "$IMAGE" \
+            --revision-suffix "${SHORT_SHA:0:7}"
 
       - name: Wait for revision to be active
         run: |
