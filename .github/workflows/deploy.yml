@@ -114,6 +114,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     timeout-minutes: 15
+    # Environment secrets: AZURE_CREDENTIALS, ACR_REGISTRY, CONTAINERAPP_NAME,
+    # AZURE_RESOURCE_GROUP scoped to staging or production.
+    # Production requires reviewer approval before deployment proceeds.
     environment:
       name: ${{ github.event.inputs.environment || 'staging' }}
       url: ${{ steps.get-url.outputs.url }}

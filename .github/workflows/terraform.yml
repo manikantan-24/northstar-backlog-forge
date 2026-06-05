@@ -31,6 +31,9 @@ jobs:
   terraform:
     name: Terraform ${{ github.event.inputs.action || 'plan' }}
     runs-on: ubuntu-latest
+    # Environment-scoped secrets: staging or production.
+    # Production environment requires reviewer approval before secrets unlock.
+    environment: ${{ github.event.inputs.environment || 'staging' }}
     defaults:
       run:
         working-directory: infra/terraform
