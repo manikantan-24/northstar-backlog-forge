@@ -139,6 +139,7 @@ jobs:
           az containerapp update \
             --name "${{ env.CONTAINERAPP_NAME }}" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --container-name "${{ env.CONTAINERAPP_NAME }}" \
             --image "${{ needs.build-and-push.outputs.full-image }}" \
             --set-env-vars \
               "AUTH_DISABLED=0" \
