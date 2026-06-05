@@ -78,6 +78,11 @@ variable "entra_tenant_domain" {
   default = ""
 }
 
+variable "entra_redirect_uri" {
+  type    = string
+  default = ""
+}
+
 variable "github_owner" {
   type    = string
   default = ""

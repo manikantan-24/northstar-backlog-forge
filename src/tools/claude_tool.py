@@ -124,8 +124,12 @@ class ClaudeTool(Tool):
         # (same model, same prompt file), so Anthropic can serve it from
         # cache after the first call — typically 80-90% cheaper on input
         # tokens for the system block. Requires claude-3-5-* or claude-3-7-*+.
+        # Prompt caching requires at least 1024 tokens in the system prompt.
+        # Anthropic returns 400 invalid_request if the prompt is shorter.
+        # Rough estimate: 4 chars ≈ 1 token, so 4096 chars ≈ 1024 tokens.
         system_block: list[dict[str, Any]] | str
-        if self.model.startswith("claude"):
+        _prompt_long_enough = len(self.system_prompt) >= 4096
+        if self.model.startswith("claude") and _prompt_long_enough:
             system_block = [
                 {
                     "type": "text",

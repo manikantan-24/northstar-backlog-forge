@@ -83,7 +83,7 @@ except RuntimeError as _startup_err:
 if "ollama_started" not in st.session_state:
     try:
         from ollama_manager import ensure_running as _ensure_ollama
-        _ok, _msg = _ensure_ollama(timeout=15)
+        _ok, _msg = _ensure_ollama(timeout=30)
         st.session_state.ollama_started = _ok
         st.session_state.ollama_msg = _msg
     except Exception:  # noqa: BLE001
@@ -2069,7 +2069,17 @@ with st.sidebar:
         # Check which providers are actually available right now.
         _has_anthropic = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
         _has_google    = bool(os.environ.get("GOOGLE_API_KEY", "").strip())
-        _ollama_ok     = st.session_state.get("ollama_started", False)
+
+        # For Ollama: do a live check so we pick up the server starting after
+        # the initial page load (the session-state flag only captures startup).
+        try:
+            from ollama_manager import is_running as _ollama_is_running, ensure_running as _ollama_ensure
+            _ollama_ok = _ollama_is_running()
+            if _ollama_ok:
+                st.session_state.ollama_started = True
+        except Exception:
+            _ollama_ok = st.session_state.get("ollama_started", False)
+
 
         # Each preset requires specific providers — derive its ready status.
         # We check env-var presence (fast); actual API validity is caught at run time.
@@ -2203,15 +2213,31 @@ with st.sidebar:
         # If the selected preset is not ready, show a clear actionable error.
         _sel_ready, _sel_reason = _preset_status(_picked_key)
         if not _sel_ready:
-            _fix_hint = {
-                "free":     "Add `GOOGLE_API_KEY=...` to your `.env` file.",
-                "balanced": "Add the missing API key(s) to your `.env` file.",
-                "premium":  "Add `ANTHROPIC_API_KEY=...` to your `.env` file.",
-                "local":    "Run `./start.sh` to auto-start Ollama, or switch to **Balanced**.",
-            }.get(_picked_key, "Check your `.env` file.")
-            st.error(
-                f"**{_picked_label} preset not available** — {_sel_reason}. {_fix_hint}"
-            )
+            if _picked_key == "local" and not _ollama_ok:
+                # Auto-start Ollama instead of just showing an error.
+                with st.spinner("Starting Ollama…"):
+                    try:
+                        _ok2, _msg2 = _ollama_ensure(timeout=30)
+                    except Exception as _e:
+                        _ok2, _msg2 = False, str(_e)
+                if _ok2:
+                    st.session_state.ollama_started = True
+                    st.rerun()
+                else:
+                    st.error(
+                        f"**Could not start Ollama** — {_msg2}  \n"
+                        "Install from https://ollama.ai and run `ollama pull llama3.2:3b`, "
+                        "or switch to the **Balanced** preset."
+                    )
+            else:
+                _fix_hint = {
+                    "free":     "Add `GOOGLE_API_KEY=...` to your `.env` file.",
+                    "balanced": "Add the missing API key(s) to your `.env` file.",
+                    "premium":  "Add `ANTHROPIC_API_KEY=...` to your `.env` file.",
+                }.get(_picked_key, "Check your `.env` file.")
+                st.error(
+                    f"**{_picked_label} preset not available** — {_sel_reason}. {_fix_hint}"
+                )
 
         # ── ADMIN ONLY: Per-stage model override ──────────────────────────────
         if _is_admin():

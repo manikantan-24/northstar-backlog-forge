@@ -54,6 +54,7 @@ RUN pip install --upgrade pip \
 # Application code. Mirror these paths in .dockerignore for build-context
 # size, but this explicit COPY is the actual guarantee.
 COPY app.py ./
+COPY .streamlit/ ./.streamlit/
 COPY src/ ./src/
 COPY prompts/ ./prompts/
 COPY samples/ ./samples/

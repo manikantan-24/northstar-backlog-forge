@@ -333,6 +333,10 @@ resource "azurerm_container_app" "app" {
         name  = "ENTRA_TENANT_DOMAIN"
         value = var.entra_tenant_domain
       }
+      env {
+        name  = "ENTRA_REDIRECT_URI"
+        value = var.entra_redirect_uri
+      }
 
       # ── Secrets from Key Vault (value comes from KV via managed identity) ─
       env {
