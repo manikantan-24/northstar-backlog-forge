@@ -28,17 +28,6 @@ output "managed_identity_client_id" {
   value       = azurerm_user_assigned_identity.app.client_id
 }
 
-output "github_actions_credentials" {
-  description = "AZURE_CREDENTIALS JSON for GitHub Actions secret"
-  sensitive   = true
-  value = jsonencode({
-    clientId       = azuread_application.github_actions.client_id
-    clientSecret   = azuread_service_principal_password.github_actions.value
-    subscriptionId = data.azurerm_client_config.current.subscription_id
-    tenantId       = data.azurerm_client_config.current.tenant_id
-  })
-}
-
 output "key_vault_secrets_stored" {
   description = "Secrets stored in Key Vault (names only — values never output)"
   sensitive   = true

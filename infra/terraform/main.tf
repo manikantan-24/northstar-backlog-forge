@@ -6,10 +6,7 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.100"
     }
-    azuread = {
-      source  = "hashicorp/azuread"
-      version = "~> 2.50"
-    }
+    # azuread removed — SP created manually, not via Terraform (free tier lacks AD perms)
   }
 
   # Uncomment after running `az storage account create` for state:
@@ -60,30 +57,31 @@ resource "azurerm_container_registry" "acr" {
 }
 
 # ── Azure Key Vault ────────────────────────────────────────────────────────────
+# Using access policies (not RBAC) — works on free tier without Owner role.
 resource "azurerm_key_vault" "main" {
   name                       = var.keyvault_name
   resource_group_name        = azurerm_resource_group.main.name
   location                   = azurerm_resource_group.main.location
   tenant_id                  = data.azurerm_client_config.current.tenant_id
   sku_name                   = "standard"
-  enable_rbac_authorization  = true
+  enable_rbac_authorization  = false
   purge_protection_enabled   = false
   soft_delete_retention_days = 7
   tags                       = local.common_tags
-}
 
-# Grant the operator (whoever runs terraform) rights to write secrets
-resource "azurerm_role_assignment" "kv_operator" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
-}
+  # Operator (whoever runs Terraform) — full secret management
+  access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = data.azurerm_client_config.current.object_id
+    secret_permissions = ["Get", "List", "Set", "Delete", "Purge", "Recover"]
+  }
 
-# Grant the Container App's managed identity read access to Key Vault
-resource "azurerm_role_assignment" "kv_app_reader" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_user_assigned_identity.app.principal_id
+  # Container App managed identity — read only
+  access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = azurerm_user_assigned_identity.app.principal_id
+    secret_permissions = ["Get", "List"]
+  }
 }
 
 # ── Secrets in Key Vault ───────────────────────────────────────────────────────
@@ -94,49 +92,49 @@ resource "azurerm_key_vault_secret" "anthropic_key" {
   name         = "ANTHROPIC-API-KEY"
   value        = var.anthropic_api_key
   key_vault_id = azurerm_key_vault.main.id
-  depends_on   = [azurerm_role_assignment.kv_operator]
+
 }
 
 resource "azurerm_key_vault_secret" "google_key" {
   name         = "GOOGLE-API-KEY"
   value        = var.google_api_key
   key_vault_id = azurerm_key_vault.main.id
-  depends_on   = [azurerm_role_assignment.kv_operator]
+
 }
 
 resource "azurerm_key_vault_secret" "jira_token" {
   name         = "JIRA-API-TOKEN"
   value        = var.jira_api_token
   key_vault_id = azurerm_key_vault.main.id
-  depends_on   = [azurerm_role_assignment.kv_operator]
+
 }
 
 resource "azurerm_key_vault_secret" "github_token" {
   name         = "GITHUB-TOKEN"
   value        = var.github_token
   key_vault_id = azurerm_key_vault.main.id
-  depends_on   = [azurerm_role_assignment.kv_operator]
+
 }
 
 resource "azurerm_key_vault_secret" "entra_client_secret" {
   name         = "ENTRA-CLIENT-SECRET"
   value        = var.entra_client_secret
   key_vault_id = azurerm_key_vault.main.id
-  depends_on   = [azurerm_role_assignment.kv_operator]
+
 }
 
 resource "azurerm_key_vault_secret" "otel_headers" {
   name         = "OTEL-EXPORTER-OTLP-HEADERS"
   value        = var.otel_headers
   key_vault_id = azurerm_key_vault.main.id
-  depends_on   = [azurerm_role_assignment.kv_operator]
+
 }
 
 resource "azurerm_key_vault_secret" "acr_password" {
   name         = "ACR-ADMIN-PASSWORD"
   value        = azurerm_container_registry.acr.admin_password
   key_vault_id = azurerm_key_vault.main.id
-  depends_on   = [azurerm_role_assignment.kv_operator]
+
 }
 
 # ── Storage Account + Azure Files ─────────────────────────────────────────────
@@ -380,38 +378,10 @@ resource "azurerm_container_app" "app" {
   }
 }
 
-# ── Service Principal for GitHub Actions ───────────────────────────────────────
-resource "azuread_application" "github_actions" {
-  display_name = "sp-backlog-synthesizer-ghactions"
-}
-
-resource "azuread_service_principal" "github_actions" {
-  client_id = azuread_application.github_actions.client_id
-}
-
-resource "azuread_service_principal_password" "github_actions" {
-  service_principal_id = azuread_service_principal.github_actions.id
-  end_date_relative    = "8760h"
-}
-
-resource "azurerm_role_assignment" "github_contributor" {
-  scope                = azurerm_resource_group.main.id
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.github_actions.object_id
-}
-
-resource "azurerm_role_assignment" "github_acr_push" {
-  scope                = azurerm_container_registry.acr.id
-  role_definition_name = "AcrPush"
-  principal_id         = azuread_service_principal.github_actions.object_id
-}
-
-# Grant GitHub Actions SP read access to Key Vault (for secret rotation via CI)
-resource "azurerm_role_assignment" "github_kv_reader" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = azuread_service_principal.github_actions.object_id
-}
+# ── Note: GitHub Actions service principal (sp-backlog-synthesizer-terraform) ──
+# Created manually in Azure Portal — not managed by Terraform to avoid
+# Azure AD app registration permissions requirement on free tier accounts.
+# Credentials stored as GitHub environment secrets: AZURE_CLIENT_ID / SECRET.
 
 # ── Locals ─────────────────────────────────────────────────────────────────────
 locals {

@@ -47,6 +47,19 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Register Azure providers
+        run: |
+          az login --service-principal \
+            --username "${{ secrets.AZURE_CLIENT_ID }}" \
+            --password "${{ secrets.AZURE_CLIENT_SECRET }}" \
+            --tenant  "${{ secrets.AZURE_TENANT_ID }}"
+          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          for ns in Microsoft.App Microsoft.ContainerRegistry Microsoft.KeyVault \
+                    Microsoft.Storage Microsoft.OperationalInsights \
+                    Microsoft.ContainerService Microsoft.ManagedIdentity; do
+            az provider register --namespace "$ns" --wait || true
+          done
+
       - name: Terraform Init
         run: terraform init
 
