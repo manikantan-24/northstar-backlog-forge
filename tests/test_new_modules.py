@@ -476,7 +476,8 @@ class TestOrchestratorToolSelection:
 
 class TestPromptCaching:
     def test_cache_control_present_in_claude_tool_call(self, monkeypatch):
-        """System prompt is sent as a list with cache_control when model is claude-*."""
+        """System prompt ≥4096 chars is sent as a list with cache_control for claude-* models.
+        Short prompts are sent as plain strings (Anthropic requires ≥1024 tokens to cache)."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake-key")
         captured = {}
 
@@ -487,7 +488,8 @@ class TestPromptCaching:
         from tools.claude_tool import ClaudeTool
         tool = ClaudeTool.__new__(ClaudeTool)
         tool.model = "claude-sonnet-4-5"
-        tool.system_prompt = "You are a helpful assistant."
+        # Must be ≥4096 chars to trigger cache_control (≈1024 tokens minimum)
+        tool.system_prompt = "You are a helpful assistant. " * 200  # ~5800 chars
 
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = fake_create
@@ -501,6 +503,29 @@ class TestPromptCaching:
         assert system[0]["type"] == "text"
         assert "cache_control" in system[0]
         assert system[0]["cache_control"]["type"] == "ephemeral"
+
+    def test_no_cache_control_for_short_prompt(self, monkeypatch):
+        """Short system prompts (<4096 chars) are sent as plain strings even for claude-* models."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake-key")
+        captured = {}
+
+        def fake_create(**kwargs):
+            captured["system"] = kwargs.get("system")
+            raise Exception("stop")
+
+        from tools.claude_tool import ClaudeTool
+        tool = ClaudeTool.__new__(ClaudeTool)
+        tool.model = "claude-sonnet-4-5"
+        tool.system_prompt = "You are a helpful assistant."  # short — no caching
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = fake_create
+        tool._client = mock_client
+
+        with pytest.raises(Exception, match="stop"):
+            tool._call_with_retry("test message", 100)
+
+        assert isinstance(captured["system"], str), "short prompt should be plain string"
 
     def test_no_cache_control_for_non_claude_model(self, monkeypatch):
         """Non-Claude models (gemini, ollama) get plain string system prompt."""
