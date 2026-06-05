@@ -98,7 +98,6 @@ resource "azurerm_key_vault_secret" "anthropic_key" {
 }
 
 resource "azurerm_key_vault_secret" "google_key" {
-  count        = var.google_api_key != "" ? 1 : 0
   name         = "GOOGLE-API-KEY"
   value        = var.google_api_key
   key_vault_id = azurerm_key_vault.main.id
@@ -106,7 +105,6 @@ resource "azurerm_key_vault_secret" "google_key" {
 }
 
 resource "azurerm_key_vault_secret" "jira_token" {
-  count        = var.jira_api_token != "" ? 1 : 0
   name         = "JIRA-API-TOKEN"
   value        = var.jira_api_token
   key_vault_id = azurerm_key_vault.main.id
@@ -114,7 +112,6 @@ resource "azurerm_key_vault_secret" "jira_token" {
 }
 
 resource "azurerm_key_vault_secret" "github_token" {
-  count        = var.github_token != "" ? 1 : 0
   name         = "GITHUB-TOKEN"
   value        = var.github_token
   key_vault_id = azurerm_key_vault.main.id
@@ -122,7 +119,6 @@ resource "azurerm_key_vault_secret" "github_token" {
 }
 
 resource "azurerm_key_vault_secret" "entra_client_secret" {
-  count        = var.entra_client_secret != "" ? 1 : 0
   name         = "ENTRA-CLIENT-SECRET"
   value        = var.entra_client_secret
   key_vault_id = azurerm_key_vault.main.id
@@ -130,7 +126,6 @@ resource "azurerm_key_vault_secret" "entra_client_secret" {
 }
 
 resource "azurerm_key_vault_secret" "otel_headers" {
-  count        = var.otel_headers != "" ? 1 : 0
   name         = "OTEL-EXPORTER-OTLP-HEADERS"
   value        = var.otel_headers
   key_vault_id = azurerm_key_vault.main.id
@@ -215,45 +210,30 @@ resource "azurerm_container_app" "app" {
     key_vault_secret_id = azurerm_key_vault_secret.anthropic_key.versionless_id
     identity            = azurerm_user_assigned_identity.app.id
   }
-  dynamic "secret" {
-    for_each = var.google_api_key != "" ? [1] : []
-    content {
-      name                = "google-api-key"
-      key_vault_secret_id = azurerm_key_vault_secret.google_key[0].versionless_id
-      identity            = azurerm_user_assigned_identity.app.id
-    }
+  secret {
+    name                = "google-api-key"
+    key_vault_secret_id = azurerm_key_vault_secret.google_key.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
-  dynamic "secret" {
-    for_each = var.jira_api_token != "" ? [1] : []
-    content {
-      name                = "jira-api-token"
-      key_vault_secret_id = azurerm_key_vault_secret.jira_token[0].versionless_id
-      identity            = azurerm_user_assigned_identity.app.id
-    }
+  secret {
+    name                = "jira-api-token"
+    key_vault_secret_id = azurerm_key_vault_secret.jira_token.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
-  dynamic "secret" {
-    for_each = var.github_token != "" ? [1] : []
-    content {
-      name                = "github-token"
-      key_vault_secret_id = azurerm_key_vault_secret.github_token[0].versionless_id
-      identity            = azurerm_user_assigned_identity.app.id
-    }
+  secret {
+    name                = "github-token"
+    key_vault_secret_id = azurerm_key_vault_secret.github_token.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
-  dynamic "secret" {
-    for_each = var.entra_client_secret != "" ? [1] : []
-    content {
-      name                = "entra-client-secret"
-      key_vault_secret_id = azurerm_key_vault_secret.entra_client_secret[0].versionless_id
-      identity            = azurerm_user_assigned_identity.app.id
-    }
+  secret {
+    name                = "entra-client-secret"
+    key_vault_secret_id = azurerm_key_vault_secret.entra_client_secret.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
-  dynamic "secret" {
-    for_each = var.otel_headers != "" ? [1] : []
-    content {
-      name                = "otel-headers"
-      key_vault_secret_id = azurerm_key_vault_secret.otel_headers[0].versionless_id
-      identity            = azurerm_user_assigned_identity.app.id
-    }
+  secret {
+    name                = "otel-headers"
+    key_vault_secret_id = azurerm_key_vault_secret.otel_headers.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
 
   registry {
@@ -350,40 +330,25 @@ resource "azurerm_container_app" "app" {
         name        = "ANTHROPIC_API_KEY"
         secret_name = "anthropic-api-key"
       }
-      dynamic "env" {
-        for_each = var.google_api_key != "" ? [1] : []
-        content {
-          name        = "GOOGLE_API_KEY"
-          secret_name = "google-api-key"
-        }
+      env {
+        name        = "GOOGLE_API_KEY"
+        secret_name = "google-api-key"
       }
-      dynamic "env" {
-        for_each = var.jira_api_token != "" ? [1] : []
-        content {
-          name        = "JIRA_API_TOKEN"
-          secret_name = "jira-api-token"
-        }
+      env {
+        name        = "JIRA_API_TOKEN"
+        secret_name = "jira-api-token"
       }
-      dynamic "env" {
-        for_each = var.github_token != "" ? [1] : []
-        content {
-          name        = "GITHUB_TOKEN"
-          secret_name = "github-token"
-        }
+      env {
+        name        = "GITHUB_TOKEN"
+        secret_name = "github-token"
       }
-      dynamic "env" {
-        for_each = var.entra_client_secret != "" ? [1] : []
-        content {
-          name        = "ENTRA_CLIENT_SECRET"
-          secret_name = "entra-client-secret"
-        }
+      env {
+        name        = "ENTRA_CLIENT_SECRET"
+        secret_name = "entra-client-secret"
       }
-      dynamic "env" {
-        for_each = var.otel_headers != "" ? [1] : []
-        content {
-          name        = "OTEL_EXPORTER_OTLP_HEADERS"
-          secret_name = "otel-headers"
-        }
+      env {
+        name        = "OTEL_EXPORTER_OTLP_HEADERS"
+        secret_name = "otel-headers"
       }
 
       volume_mounts {
