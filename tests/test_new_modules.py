@@ -16,7 +16,6 @@ Covers:
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 from pathlib import Path
@@ -35,7 +34,6 @@ sys.path.insert(0, str(ROOT / "src"))
 
 class TestFeatureFlags:
     def _make_flags(self, yaml_text: str):
-        import yaml
         from feature_flags import FeatureFlags, FLAGS_PATH
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False
@@ -454,7 +452,6 @@ class TestOrchestratorToolSelection:
         monkeypatch.delenv("ATLASSIAN_MCP_ENABLED", raising=False)
         from orchestrator import _build_jira_tool
         from tools.jira_tool import JiraTool
-        from tools.mcp_atlassian_tool import MCPJiraTool
         tool = _build_jira_tool()
         assert type(tool) is JiraTool  # not MCP subclass
 
@@ -469,7 +466,6 @@ class TestOrchestratorToolSelection:
         monkeypatch.delenv("ATLASSIAN_MCP_ENABLED", raising=False)
         from orchestrator import _build_confluence_tool
         from tools.confluence_tool import ConfluenceTool
-        from tools.mcp_atlassian_tool import MCPConfluenceTool
         tool = _build_confluence_tool()
         assert type(tool) is ConfluenceTool
 

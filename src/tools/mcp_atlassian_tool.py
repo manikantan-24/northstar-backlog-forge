@@ -128,7 +128,7 @@ def _list_available_tools() -> list[str]:
                     await session.initialize()
                     resp = await session.list_tools()
                     return [t.name for t in resp.tools]
-        except Exception as e:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return []
     return asyncio.run(_list())
 

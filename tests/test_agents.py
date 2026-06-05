@@ -418,7 +418,7 @@ def test_ollama_tool_call_for_json_success(monkeypatch):
 
 def test_ollama_tool_strips_ollama_prefix(monkeypatch):
     """The 'ollama/' prefix is stripped before the API call."""
-    import sys, json, requests as _r
+    import sys, requests as _r
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
     from tools.ollama_tool import OllamaTool
 
@@ -453,7 +453,7 @@ def test_ollama_tool_raises_when_server_unreachable(monkeypatch):
 
 def test_ollama_tool_handles_fenced_json(monkeypatch):
     """_extract_json_block is used when the model wraps output in ```json."""
-    import sys, json, requests as _r
+    import sys, requests as _r
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
     from tools.ollama_tool import OllamaTool
 

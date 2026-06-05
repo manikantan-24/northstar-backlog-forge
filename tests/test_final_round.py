@@ -12,12 +12,10 @@ Covers all modules added after test_new_modules.py:
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -269,7 +267,6 @@ class TestEvalDashboardCIGate:
         assert exit_code == 0
 
     def test_regression_detected_returns_one(self):
-        from evaluation.dashboard import _load_runs
         # Patch internal functions for a dry test
         runs = [
             {"cases": [{"case_id": "c1", "score_deterministic": 0.50}]},
