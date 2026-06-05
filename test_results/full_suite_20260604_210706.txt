@@ -1,0 +1,266 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.12, pytest-9.0.3, pluggy-1.6.0 -- /Users/mani.kantan.arun/Downloads/backlog-synthesizer/venv313/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/mani.kantan.arun/Downloads/backlog-synthesizer
+plugins: anyio-4.13.0
+collecting ... collected 180 items
+
+tests/test_agents.py::test_parser_agent_writes_topics_and_summary PASSED [  0%]
+tests/test_agents.py::test_parser_agent_raises_agent_error_when_claude_fails PASSED [  1%]
+tests/test_agents.py::test_constraint_agent_writes_constraints PASSED    [  1%]
+tests/test_agents.py::test_constraint_agent_raises_agent_error_when_claude_fails PASSED [  2%]
+tests/test_agents.py::test_story_writer_agent_writes_stories_with_acceptance_criteria PASSED [  2%]
+tests/test_agents.py::test_story_writer_agent_skips_when_no_topics PASSED [  3%]
+tests/test_agents.py::test_epic_decomposer_agent_groups_stories_into_epics_with_tasks PASSED [  3%]
+tests/test_agents.py::test_gap_detector_writes_duplicates_conflicts_and_gaps PASSED [  4%]
+tests/test_agents.py::test_gap_detector_skips_when_no_stories PASSED     [  5%]
+tests/test_agents.py::test_memory_store_kv_put_get_append PASSED         [  5%]
+tests/test_agents.py::test_audit_log_renders_markdown PASSED             [  6%]
+tests/test_agents.py::test_ollama_tool_call_for_json_success PASSED      [  6%]
+tests/test_agents.py::test_ollama_tool_strips_ollama_prefix PASSED       [  7%]
+tests/test_agents.py::test_ollama_tool_raises_when_server_unreachable PASSED [  7%]
+tests/test_agents.py::test_ollama_tool_handles_fenced_json PASSED        [  8%]
+tests/test_compare_mode.py::test_run_compare_produces_expected_shape PASSED [  8%]
+tests/test_compare_mode.py::test_run_compare_summary_counts_match_actual_outputs PASSED [  9%]
+tests/test_compare_mode.py::test_run_compare_summary_deltas_are_signed_correctly PASSED [ 10%]
+tests/test_compare_mode.py::test_run_compare_invokes_progress_callback_with_leg_prefix PASSED [ 10%]
+tests/test_compare_mode.py::test_run_compare_title_overlap_detects_similar_stories PASSED [ 11%]
+tests/test_compare_mode.py::test_run_compare_handles_identical_legs PASSED [ 11%]
+tests/test_compare_mode.py::test_build_compare_summary_unit PASSED       [ 12%]
+tests/test_compare_mode.py::test_build_compare_summary_handles_empty_runs PASSED [ 12%]
+tests/test_confluence_live.py::test_strip_storage_format_unwraps_basic_tags PASSED [ 13%]
+tests/test_confluence_live.py::test_strip_storage_format_decodes_html_entities PASSED [ 13%]
+tests/test_confluence_live.py::test_strip_storage_format_handles_empty PASSED [ 14%]
+tests/test_confluence_live.py::test_strip_storage_format_collapses_blank_lines PASSED [ 15%]
+tests/test_confluence_live.py::test_markdown_headings_become_h_tags PASSED [ 15%]
+tests/test_confluence_live.py::test_markdown_unordered_list_becomes_ul_li PASSED [ 16%]
+tests/test_confluence_live.py::test_markdown_ordered_list_becomes_ol_li PASSED [ 16%]
+tests/test_confluence_live.py::test_markdown_horizontal_rule PASSED      [ 17%]
+tests/test_confluence_live.py::test_markdown_inline_bold_and_italic_and_code PASSED [ 17%]
+tests/test_confluence_live.py::test_markdown_fenced_code_block_becomes_storage_macro PASSED [ 18%]
+tests/test_confluence_live.py::test_markdown_escapes_lt_gt_in_paragraphs PASSED [ 18%]
+tests/test_confluence_live.py::test_markdown_empty_input_returns_empty_string PASSED [ 19%]
+tests/test_confluence_live.py::test_get_page_live_calls_v2_pages_endpoint PASSED [ 20%]
+tests/test_confluence_live.py::test_get_page_live_requires_credentials PASSED [ 20%]
+tests/test_confluence_live.py::test_get_page_live_requires_real_page_id PASSED [ 21%]
+tests/test_confluence_live.py::test_get_page_live_404_raises PASSED      [ 21%]
+tests/test_confluence_live.py::test_get_page_live_401_raises_auth_error PASSED [ 22%]
+tests/test_confluence_live.py::test_get_page_live_5xx_raises_generic PASSED [ 22%]
+tests/test_confluence_live.py::test_list_spaces_returns_results_array PASSED [ 23%]
+tests/test_confluence_live.py::test_create_page_posts_storage_format PASSED [ 23%]
+tests/test_confluence_live.py::test_create_page_409_surfaces_conflict PASSED [ 24%]
+tests/test_confluence_live.py::test_create_page_requires_live_mode PASSED [ 25%]
+tests/test_confluence_live.py::test_mock_mode_reads_default_page_path PASSED [ 25%]
+tests/test_confluence_live.py::test_mock_mode_no_fixture_raises PASSED   [ 26%]
+tests/test_evaluation_runner.py::test_list_cases_returns_sorted_unique_ids PASSED [ 26%]
+tests/test_evaluation_runner.py::test_run_case_returns_expected_shape PASSED [ 27%]
+tests/test_evaluation_runner.py::test_run_case_invokes_llm_judge_when_enabled PASSED [ 27%]
+tests/test_evaluation_runner.py::test_run_case_judge_failure_is_non_fatal PASSED [ 28%]
+tests/test_evaluation_runner.py::test_run_case_missing_fixture_raises PASSED [ 28%]
+tests/test_evaluation_runner.py::test_save_results_writes_directory_structure PASSED [ 29%]
+tests/test_evaluation_runner.py::test_save_results_with_no_judge_results PASSED [ 30%]
+tests/test_evaluation_runner.py::test_dashboard_load_runs_returns_newest_first PASSED [ 30%]
+tests/test_evaluation_runner.py::test_dashboard_load_runs_honours_limit PASSED [ 31%]
+tests/test_evaluation_runner.py::test_dashboard_load_runs_empty_dir PASSED [ 31%]
+tests/test_evaluation_runner.py::test_dashboard_text_render_handles_no_runs PASSED [ 32%]
+tests/test_evaluation_runner.py::test_dashboard_text_render_shows_aggregate_table PASSED [ 32%]
+tests/test_evaluation_runner.py::test_dashboard_flags_regressions_above_threshold PASSED [ 33%]
+tests/test_evaluation_runner.py::test_dashboard_no_regression_when_within_tolerance PASSED [ 33%]
+tests/test_evaluation_runner.py::test_dashboard_markdown_render_returns_string PASSED [ 34%]
+tests/test_guardrails.py::test_clean_synthesis_produces_no_findings PASSED [ 35%]
+tests/test_guardrails.py::test_summarise_tallies_by_severity PASSED      [ 35%]
+tests/test_guardrails.py::test_summarise_empty PASSED                    [ 36%]
+tests/test_guardrails.py::test_ac_count_too_low_fires_when_under_two PASSED [ 36%]
+tests/test_guardrails.py::test_ac_count_too_high_fires_when_above_seven PASSED [ 37%]
+tests/test_guardrails.py::test_ac_missing_gwt_flags_prose_criteria PASSED [ 37%]
+tests/test_guardrails.py::test_duplicate_title_flags_second_occurrence PASSED [ 38%]
+tests/test_guardrails.py::test_duplicate_title_is_case_insensitive_and_trimmed PASSED [ 38%]
+tests/test_guardrails.py::test_non_canonical_tag_is_info_level PASSED    [ 39%]
+tests/test_guardrails.py::test_canonical_tags_pass_clean PASSED          [ 40%]
+tests/test_guardrails.py::test_ungrounded_story_when_source_topic_id_missing PASSED [ 40%]
+tests/test_guardrails.py::test_dangling_topic_ref_when_source_topic_id_unknown PASSED [ 41%]
+tests/test_guardrails.py::test_missing_evidence_when_block_empty PASSED  [ 41%]
+tests/test_guardrails.py::test_weak_priority_rationale_when_under_twenty_chars PASSED [ 42%]
+tests/test_guardrails.py::test_weak_priority_rationale_does_not_fire_for_medium_or_low PASSED [ 42%]
+tests/test_guardrails.py::test_weak_priority_rationale_does_not_fire_when_rationale_is_solid PASSED [ 43%]
+tests/test_guardrails.py::test_kitchen_sink_synthesis_surfaces_every_check PASSED [ 43%]
+tests/test_guardrails.py::test_guardrails_survive_empty_synthesis PASSED [ 44%]
+tests/test_guardrails.py::test_guardrails_survive_synthesis_with_no_epics PASSED [ 45%]
+tests/test_guardrails.py::test_finding_to_dict_serialises_cleanly PASSED [ 45%]
+tests/test_jira_live.py::test_normalise_issue_flattens_to_internal_shape PASSED [ 46%]
+tests/test_jira_live.py::test_normalise_issue_tolerates_missing_fields PASSED [ 46%]
+tests/test_jira_live.py::test_normalise_issue_with_string_description PASSED [ 47%]
+tests/test_jira_live.py::test_adf_to_text_walks_nested_structure PASSED  [ 47%]
+tests/test_jira_live.py::test_adf_to_text_handles_empty_input PASSED     [ 48%]
+tests/test_jira_live.py::test_mock_mode_reads_fixture PASSED             [ 48%]
+tests/test_jira_live.py::test_mock_mode_search_substring PASSED          [ 49%]
+tests/test_jira_live.py::test_live_mode_requires_credentials PASSED      [ 50%]
+tests/test_jira_live.py::test_live_list_all_uses_jql_search_endpoint PASSED [ 50%]
+tests/test_jira_live.py::test_live_list_all_paginates_via_next_page_token PASSED [ 51%]
+tests/test_jira_live.py::test_live_list_all_caps_at_max_results PASSED   [ 51%]
+tests/test_jira_live.py::test_live_search_wraps_plain_string_in_text_query PASSED [ 52%]
+tests/test_jira_live.py::test_live_search_escapes_double_quotes PASSED   [ 52%]
+tests/test_jira_live.py::test_live_401_raises_clear_error PASSED         [ 53%]
+tests/test_jira_live.py::test_live_400_surfaces_jql_error PASSED         [ 53%]
+tests/test_jira_live.py::test_live_500_raises_generic_error PASSED       [ 54%]
+tests/test_jira_live.py::test_live_caches_first_list_all PASSED          [ 55%]
+tests/test_jira_live.py::test_create_issue_success_returns_key_and_url PASSED [ 55%]
+tests/test_jira_live.py::test_create_issue_sanitizes_labels PASSED       [ 56%]
+tests/test_jira_live.py::test_create_issue_falls_back_when_parent_rejected PASSED [ 56%]
+tests/test_jira_live.py::test_create_issue_auth_failure_raises PASSED    [ 57%]
+tests/test_jira_live.py::test_publish_synthesis_creates_epic_story_subtask PASSED [ 57%]
+tests/test_jira_live.py::test_publish_synthesis_partial_failure_is_recorded PASSED [ 58%]
+tests/test_new_modules.py::TestFeatureFlags::test_defaults_are_loaded_when_no_yaml PASSED [ 58%]
+tests/test_new_modules.py::TestFeatureFlags::test_admin_always_has_full_access PASSED [ 59%]
+tests/test_new_modules.py::TestFeatureFlags::test_yaml_overrides_contributor_presets PASSED [ 60%]
+tests/test_new_modules.py::TestFeatureFlags::test_stage_lock_returns_none_when_not_locked PASSED [ 60%]
+tests/test_new_modules.py::TestFeatureFlags::test_stage_lock_returns_model_when_locked PASSED [ 61%]
+tests/test_new_modules.py::TestFeatureFlags::test_apply_stage_locks_overrides_matching_stages PASSED [ 61%]
+tests/test_new_modules.py::TestFeatureFlags::test_save_and_reload_round_trips PASSED [ 62%]
+tests/test_new_modules.py::TestFeatureFlags::test_viewer_has_no_allowed_presets PASSED [ 62%]
+tests/test_new_modules.py::TestRateLimiter::test_no_runs_passes PASSED   [ 63%]
+tests/test_new_modules.py::TestRateLimiter::test_exceeding_hourly_cap_raises FAILED [ 63%]
+tests/test_new_modules.py::TestRateLimiter::test_exceeding_daily_cost_raises PASSED [ 64%]
+tests/test_new_modules.py::TestRateLimiter::test_get_usage_summary_returns_expected_keys PASSED [ 65%]
+tests/test_new_modules.py::TestStartupCheck::test_raises_when_anthropic_key_missing FAILED [ 65%]
+tests/test_new_modules.py::TestStartupCheck::test_passes_when_anthropic_key_set PASSED [ 66%]
+tests/test_new_modules.py::TestStartupCheck::test_partial_jira_config_returns_warning PASSED [ 66%]
+tests/test_new_modules.py::TestStartupCheck::test_get_configured_integrations_returns_all_keys PASSED [ 67%]
+tests/test_new_modules.py::TestStartupCheck::test_atlassian_mcp_flag_detected PASSED [ 67%]
+tests/test_new_modules.py::TestStartupCheck::test_atlassian_mcp_false_when_not_set PASSED [ 68%]
+tests/test_new_modules.py::TestOllamaManager::test_is_running_returns_false_when_unreachable FAILED [ 68%]
+tests/test_new_modules.py::TestOllamaManager::test_is_running_returns_true_when_api_responds FAILED [ 69%]
+tests/test_new_modules.py::TestOllamaManager::test_ensure_running_returns_true_immediately_when_already_up PASSED [ 70%]
+tests/test_new_modules.py::TestOllamaManager::test_ensure_running_fails_gracefully_when_binary_missing PASSED [ 70%]
+tests/test_new_modules.py::TestOllamaManager::test_list_models_returns_list FAILED [ 71%]
+tests/test_new_modules.py::TestOllamaManager::test_list_models_returns_empty_on_error FAILED [ 71%]
+tests/test_new_modules.py::TestStoryWriterRepair::test_valid_id_unchanged PASSED [ 72%]
+tests/test_new_modules.py::TestStoryWriterRepair::test_placeholder_dots_repaired PASSED [ 72%]
+tests/test_new_modules.py::TestStoryWriterRepair::test_empty_string_repaired PASSED [ 73%]
+tests/test_new_modules.py::TestStoryWriterRepair::test_unknown_id_repaired_by_best_match PASSED [ 73%]
+tests/test_new_modules.py::TestStoryWriterRepair::test_null_string_repaired PASSED [ 74%]
+tests/test_new_modules.py::TestStoryWriterRepair::test_no_topics_leaves_story_unchanged PASSED [ 75%]
+tests/test_new_modules.py::TestAuditHashChain::test_chain_fingerprint_changes_with_each_event PASSED [ 75%]
+tests/test_new_modules.py::TestAuditHashChain::test_verify_chain_passes_on_intact_log PASSED [ 76%]
+tests/test_new_modules.py::TestAuditHashChain::test_verify_chain_detects_tampering PASSED [ 76%]
+tests/test_new_modules.py::TestAuditHashChain::test_empty_log_verifies_ok PASSED [ 77%]
+tests/test_new_modules.py::TestAuditHashChain::test_chain_fingerprint_is_hex_string PASSED [ 77%]
+tests/test_new_modules.py::TestOrchestratorToolSelection::test_github_tool_is_mcp_when_env_set PASSED [ 78%]
+tests/test_new_modules.py::TestOrchestratorToolSelection::test_github_tool_is_fixture_when_env_not_set PASSED [ 78%]
+tests/test_new_modules.py::TestOrchestratorToolSelection::test_jira_tool_is_mcp_when_env_set PASSED [ 79%]
+tests/test_new_modules.py::TestOrchestratorToolSelection::test_jira_tool_is_rest_when_env_not_set PASSED [ 80%]
+tests/test_new_modules.py::TestOrchestratorToolSelection::test_confluence_tool_is_mcp_when_env_set PASSED [ 80%]
+tests/test_new_modules.py::TestOrchestratorToolSelection::test_confluence_tool_is_rest_when_env_not_set PASSED [ 81%]
+tests/test_new_modules.py::TestPromptCaching::test_cache_control_present_in_claude_tool_call PASSED [ 81%]
+tests/test_new_modules.py::TestPromptCaching::test_no_cache_control_for_non_claude_model PASSED [ 82%]
+tests/test_new_modules.py::TestMCPToolFallback::test_mcp_jira_falls_back_to_rest_on_failure PASSED [ 82%]
+tests/test_new_modules.py::TestMCPToolFallback::test_mcp_github_falls_back_to_fixture_on_failure PASSED [ 83%]
+tests/test_new_modules.py::TestMCPToolFallback::test_mcp_confluence_falls_back_to_fixture_on_failure PASSED [ 83%]
+tests/test_new_modules.py::TestGuardrailSeverities::test_dangling_topic_ref_is_warn_not_error PASSED [ 84%]
+tests/test_new_modules.py::TestGuardrailSeverities::test_ungrounded_story_remains_error PASSED [ 85%]
+tests/test_orchestrator.py::test_orchestrator_end_to_end_with_mocks PASSED [ 85%]
+tests/test_orchestrator.py::test_orchestrator_skips_agents_when_input_missing PASSED [ 86%]
+tests/test_orchestrator.py::test_output_formatter_renders_epic_hierarchy PASSED [ 86%]
+tests/test_redactor.py::test_email_is_redacted_with_stable_token PASSED  [ 87%]
+tests/test_redactor.py::test_phone_ssn_card_all_redacted PASSED          [ 87%]
+tests/test_redactor.py::test_insurance_specific_patterns_are_no_longer_matched PASSED [ 88%]
+tests/test_redactor.py::test_name_pattern_redacts_two_word_capitalized_names_but_not_headings PASSED [ 88%]
+tests/test_redactor.py::test_name_redaction_can_be_disabled PASSED       [ 89%]
+tests/test_redactor.py::test_redact_unredact_round_trip_restores_original PASSED [ 90%]
+tests/test_redactor.py::test_redact_backlog_preserves_id_field_but_redacts_descriptions PASSED [ 90%]
+tests/test_redactor.py::test_shared_rmap_keeps_tokens_consistent_across_calls PASSED [ 91%]
+tests/test_redactor.py::test_unredact_obj_recurses_into_dicts_and_lists PASSED [ 91%]
+tests/test_redactor.py::test_orchestrator_redacts_inputs_when_redact_pii_is_true PASSED [ 92%]
+tests/test_vision.py::test_from_path_loads_png_and_base64_encodes PASSED [ 92%]
+tests/test_vision.py::test_from_path_rejects_missing_file PASSED         [ 93%]
+tests/test_vision.py::test_from_path_rejects_non_image PASSED            [ 93%]
+tests/test_vision.py::test_from_path_rejects_unsupported_image_type PASSED [ 94%]
+tests/test_vision.py::test_from_path_rejects_empty_file PASSED           [ 95%]
+tests/test_vision.py::test_from_bytes_validates_media_type PASSED        [ 95%]
+tests/test_vision.py::test_from_bytes_rejects_empty_payload PASSED       [ 96%]
+tests/test_vision.py::test_attachment_is_immutable PASSED                [ 96%]
+tests/test_vision.py::test_claude_tool_builds_multimodal_array_when_images_present PASSED [ 97%]
+tests/test_vision.py::test_claude_tool_sends_plain_string_when_no_images PASSED [ 97%]
+tests/test_vision.py::test_claude_tool_handles_multiple_images PASSED    [ 98%]
+tests/test_vision.py::test_parser_agent_forwards_vision_attachments PASSED [ 98%]
+tests/test_vision.py::test_parser_agent_no_images_means_no_kwarg PASSED  [ 99%]
+tests/test_vision.py::test_parser_agent_with_only_images_uses_placeholder_transcript PASSED [100%]
+
+=================================== FAILURES ===================================
+_______________ TestRateLimiter.test_exceeding_hourly_cap_raises _______________
+tests/test_new_modules.py:169: in test_exceeding_hourly_cap_raises
+    with pytest.raises(rl.RateLimitError, match="Rate limit"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE <class 'rate_limiter.RateLimitError'>
+___________ TestStartupCheck.test_raises_when_anthropic_key_missing ____________
+tests/test_new_modules.py:207: in test_raises_when_anthropic_key_missing
+    check_required_secrets()
+src/startup_check.py:56: in check_required_secrets
+    raise RuntimeError(
+E   RuntimeError: Missing required environment variable(s):
+E     • Anthropic API key — required for Claude models
+E   
+E   Set them in your deployment environment (not in .env for production). See .env.example for local development.
+
+During handling of the above exception, another exception occurred:
+tests/test_new_modules.py:206: in test_raises_when_anthropic_key_missing
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'ANTHROPIC_API_KEY'
+E     Actual message: 'Missing required environment variable(s):\n  • Anthropic API key — required for Claude models\n\nSet them in your deployment environment (not in .env for production). See .env.example for local development.'
+_______ TestOllamaManager.test_is_running_returns_false_when_unreachable _______
+tests/test_new_modules.py:254: in test_is_running_returns_false_when_unreachable
+    with patch("ollama_manager.requests") as mock_req:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1497: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1467: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'ollama_manager' from '/Users/mani.kantan.arun/Downloads/backlog-synthesizer/src/ollama_manager.py'> does not have the attribute 'requests'
+_______ TestOllamaManager.test_is_running_returns_true_when_api_responds _______
+tests/test_new_modules.py:262: in test_is_running_returns_true_when_api_responds
+    with patch("ollama_manager.requests") as mock_req:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1497: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1467: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'ollama_manager' from '/Users/mani.kantan.arun/Downloads/backlog-synthesizer/src/ollama_manager.py'> does not have the attribute 'requests'
+_______________ TestOllamaManager.test_list_models_returns_list ________________
+tests/test_new_modules.py:286: in test_list_models_returns_list
+    with patch("ollama_manager.requests") as mock_req:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1497: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1467: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'ollama_manager' from '/Users/mani.kantan.arun/Downloads/backlog-synthesizer/src/ollama_manager.py'> does not have the attribute 'requests'
+__________ TestOllamaManager.test_list_models_returns_empty_on_error ___________
+tests/test_new_modules.py:293: in test_list_models_returns_empty_on_error
+    with patch("ollama_manager.requests") as mock_req:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1497: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1467: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'ollama_manager' from '/Users/mani.kantan.arun/Downloads/backlog-synthesizer/src/ollama_manager.py'> does not have the attribute 'requests'
+=============================== warnings summary ===============================
+tests/test_evaluation_runner.py::test_save_results_writes_directory_structure
+tests/test_evaluation_runner.py::test_save_results_with_no_judge_results
+  /Users/mani.kantan.arun/Downloads/backlog-synthesizer/evaluation/run_evaluation.py:154: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_new_modules.py::TestRateLimiter::test_exceeding_hourly_cap_raises
+FAILED tests/test_new_modules.py::TestStartupCheck::test_raises_when_anthropic_key_missing
+FAILED tests/test_new_modules.py::TestOllamaManager::test_is_running_returns_false_when_unreachable
+FAILED tests/test_new_modules.py::TestOllamaManager::test_is_running_returns_true_when_api_responds
+FAILED tests/test_new_modules.py::TestOllamaManager::test_list_models_returns_list
+FAILED tests/test_new_modules.py::TestOllamaManager::test_list_models_returns_empty_on_error
+================== 6 failed, 174 passed, 2 warnings in 2.84s ===================

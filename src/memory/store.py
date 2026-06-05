@@ -10,15 +10,17 @@ Two flavors of storage:
    lookup. Used by the Gap Detector to find candidate JIRA/GitHub tickets
    that look semantically similar to a new story before LLM reranking.
 
-The vector layer supports two backends:
+The vector layer supports three backends (selected by env vars):
 
+  - **ChromaDB** (USE_CHROMADB=1): persistent, multi-replica-safe, file-backed
+    ChromaDB collection. Data survives process restarts and is shared across
+    all replicas that mount the same volume. Best for production deployments.
+    Collection path: `.cache/memory/chroma/`.
+  - **NPZ file cache** (MEMORY_PERSISTENT=1, default persistent mode): stores
+    embeddings in `.cache/memory/<corpus_hash>.npz`. Single-process, fast.
+    Right for single-host deployments and development.
   - **in-process** (default): numpy + sentence-transformers, no persistence.
     Right for unit tests, dry runs, and short-lived demo runs.
-  - **persistent**: stores embeddings in a content-addressed file cache at
-    `.cache/memory/<corpus_hash>.npz` (vectors) and `.json` (tickets), so
-    re-indexing the same backlog across runs is a no-op disk read instead of
-    a fresh model encode. Switch on by constructing the store with
-    `persistent=True`, or by setting `MEMORY_PERSISTENT=1` in the env.
 
 A simple .json file under `.cache/memory/kv/<key>.json` is also written for
 each `put()` when persistence is on, so a follow-up run can hydrate the
@@ -56,14 +58,18 @@ class MemoryStore:
         self._np = None
         self._ticket_vectors = None
         self._tickets_for_vectors: list[dict] = []
+        self._chroma_collection = None  # ChromaDB collection (when USE_CHROMADB=1)
 
         if persistent is None:
             persistent = os.environ.get("MEMORY_PERSISTENT", "").lower() in ("1", "true", "yes")
         self._persistent = bool(persistent)
+        self._use_chromadb = os.environ.get("USE_CHROMADB", "").lower() in ("1", "true", "yes")
         self._cache_dir = Path(cache_dir) if cache_dir else _DEFAULT_CACHE_DIR
-        if self._persistent:
+        if self._persistent or self._use_chromadb:
             (self._cache_dir / "kv").mkdir(parents=True, exist_ok=True)
             (self._cache_dir / "vectors").mkdir(parents=True, exist_ok=True)
+        if self._use_chromadb:
+            self._init_chromadb()
 
     # ----------------------------------------------------- KV interface
 
@@ -111,7 +117,92 @@ class MemoryStore:
                 logger.warning("Skipping KV cache %s: %s", f.name, e)
         return count
 
+    # ----------------------------------------------------- ChromaDB backend
+
+    def _init_chromadb(self) -> None:
+        """Initialise a file-backed ChromaDB client + collection."""
+        try:
+            import chromadb
+            chroma_path = str(self._cache_dir / "chroma")
+            client = chromadb.PersistentClient(path=chroma_path)
+            self._chroma_collection = client.get_or_create_collection(
+                name="backlog_tickets",
+                metadata={"hnsw:space": "cosine"},
+            )
+            logger.info("ChromaDB persistent collection ready at %s", chroma_path)
+        except ImportError:
+            logger.warning("chromadb not installed — falling back to NPZ vector cache")
+            self._use_chromadb = False
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ChromaDB init failed (%s) — falling back to NPZ cache", e)
+            self._use_chromadb = False
+
+    def _chroma_index(self, tickets: list[dict]) -> bool:
+        """Upsert tickets into ChromaDB collection using sentence-transformers."""
+        if self._chroma_collection is None:
+            return False
+        try:
+            from sentence_transformers import SentenceTransformer
+            embedder = SentenceTransformer(_EMBEDDING_MODEL)
+            texts = [self._ticket_text(t) for t in tickets]
+            ids   = [str(t.get("id", f"ticket_{i}")) for i, t in enumerate(tickets)]
+            vecs  = embedder.encode(texts, convert_to_numpy=True,
+                                    normalize_embeddings=True, show_progress_bar=False)
+            # Upsert in chunks to avoid ChromaDB batch limits
+            chunk = 100
+            for i in range(0, len(tickets), chunk):
+                self._chroma_collection.upsert(
+                    ids=ids[i:i+chunk],
+                    embeddings=vecs[i:i+chunk].tolist(),
+                    metadatas=[{"title": t.get("title", ""), "id": t.get("id", "")}
+                               for t in tickets[i:i+chunk]],
+                )
+            self._tickets_for_vectors = list(tickets)
+            logger.info("ChromaDB: upserted %d tickets into persistent collection", len(tickets))
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ChromaDB index failed (%s) — falling back to NPZ", e)
+            self._use_chromadb = False
+            return False
+
+    def _chroma_search(self, query_text: str, top_k: int = 5) -> list[dict]:
+        """Query ChromaDB collection for top-K similar tickets."""
+        if self._chroma_collection is None or not self._tickets_for_vectors:
+            return list(self._tickets_for_vectors)
+        try:
+            from sentence_transformers import SentenceTransformer
+            if self._embedder is None:
+                self._embedder = SentenceTransformer(_EMBEDDING_MODEL)
+            qvec = self._embedder.encode([query_text], convert_to_numpy=True,
+                                         normalize_embeddings=True, show_progress_bar=False)
+            results = self._chroma_collection.query(
+                query_embeddings=qvec.tolist(),
+                n_results=min(top_k, self._chroma_collection.count()),
+            )
+            ids = results.get("ids", [[]])[0]
+            distances = results.get("distances", [[]])[0]
+            # Build lookup and return in similarity order
+            id_to_ticket = {str(t.get("id", "")): t for t in self._tickets_for_vectors}
+            out = []
+            for tid, dist in zip(ids, distances):
+                ticket = id_to_ticket.get(tid)
+                if ticket:
+                    out.append(dict(ticket, _similarity=float(1.0 - dist)))
+            return out or list(self._tickets_for_vectors[:top_k])
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ChromaDB search failed (%s) — returning all tickets", e)
+            return list(self._tickets_for_vectors[:top_k])
+
     # ----------------------------------------------------- Vector interface
+
+    def _cs(self, name: str, **attrs):
+        """Shortcut: child span or no-op."""
+        try:
+            from telemetry import child_span
+            return child_span(name, **attrs)
+        except ImportError:
+            from contextlib import nullcontext
+            return nullcontext()
 
     def index_tickets(self, tickets: list[dict]) -> bool:
         """Embed and index existing tickets for semantic search.
@@ -125,6 +216,13 @@ class MemoryStore:
         if len(tickets) < _RETRIEVAL_THRESHOLD:
             logger.info("Only %d tickets — skipping embeddings (under threshold)", len(tickets))
             return False
+
+        # ChromaDB path — preferred persistent backend for multi-replica safety.
+        if self._use_chromadb:
+            with self._cs("embedding.index", **{"embedding.backend": "chromadb",
+                                                 "embedding.ticket_count": len(tickets)}):
+                return self._chroma_index(tickets)
+
         try:
             from sentence_transformers import SentenceTransformer
             import numpy as np
@@ -134,36 +232,40 @@ class MemoryStore:
 
         self._np = np
 
-        # Persistent path: try to load embeddings keyed by content hash.
-        cache_hit = False
-        if self._persistent:
-            cache_hit = self._try_load_vectors(tickets, np)
-            if cache_hit:
-                logger.info("Hydrated %d embeddings from cache", len(tickets))
-                return True
+        with self._cs("embedding.index", **{"embedding.backend": "numpy",
+                                             "embedding.ticket_count": len(tickets),
+                                             "embedding.model": _EMBEDDING_MODEL}):
+            # Persistent path: try to load embeddings keyed by content hash.
+            if self._persistent:
+                cache_hit = self._try_load_vectors(tickets, np)
+                if cache_hit:
+                    logger.info("Hydrated %d embeddings from cache", len(tickets))
+                    return True
 
-        self._embedder = SentenceTransformer(_EMBEDDING_MODEL)
-        texts = [self._ticket_text(t) for t in tickets]
-        self._ticket_vectors = self._embedder.encode(
-            texts,
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-        )
+            self._embedder = SentenceTransformer(_EMBEDDING_MODEL)
+            texts = [self._ticket_text(t) for t in tickets]
+            self._ticket_vectors = self._embedder.encode(
+                texts,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
 
-        if self._persistent:
-            self._save_vectors(tickets)
+            if self._persistent:
+                self._save_vectors(tickets)
 
-        logger.info("Indexed %d tickets for semantic search", len(tickets))
-        return True
+            logger.info("Indexed %d tickets for semantic search", len(tickets))
+            return True
 
     def search_similar(self, query_text: str, top_k: int = 5) -> list[dict]:
         """Return top-K most similar tickets to query_text.
 
-        If the index wasn't built (small ticket set), returns the full list.
-        Loads the embedder lazily — searches against a hydrated cache work
-        even when the original `index_tickets()` call hit the cache.
+        Routes to ChromaDB when USE_CHROMADB=1, otherwise uses in-process
+        numpy vectors. Falls back to returning all tickets if index wasn't built.
         """
+        if self._use_chromadb and self._chroma_collection is not None:
+            with self._cs("embedding.search", **{"embedding.backend": "chromadb", "embedding.top_k": top_k}):
+                return self._chroma_search(query_text, top_k)
         if self._ticket_vectors is None:
             return list(self._tickets_for_vectors)
         if self._embedder is None:

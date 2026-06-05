@@ -135,14 +135,20 @@ jobs:
           python evaluation/run_evaluation.py --use-llm-judge 2>&1 \
             | tee artifacts/eval-results.txt
 
-      - name: Regression dashboard
-        # Aggregate results across runs and surface deterministic drops
-        # between this run and the previous one. Markdown output is
-        # uploaded as an artifact for review.
+      - name: Regression dashboard (with enforcement)
+        # Aggregate results and EXIT NON-ZERO if any case drops ≥0.10 vs main.
+        # This gates PRs on output quality — a prompt change that degrades
+        # the golden set will fail CI before merging.
         if: steps.gate.outputs.skip != 'true'
         run: |
-          python evaluation/dashboard.py --md artifacts/dashboard.md 2>&1 \
-            | tee artifacts/dashboard.txt
+          mkdir -p artifacts
+          python evaluation/dashboard.py \
+            --md artifacts/dashboard.md \
+            --fail-on-regression \
+            --regression-threshold 0.10 \
+            2>&1 | tee artifacts/dashboard.txt
+          # dashboard.py exits 1 if regression found; propagate it
+          exit ${PIPESTATUS[0]}
 
       - name: Upload eval results
         if: always() && steps.gate.outputs.skip != 'true'

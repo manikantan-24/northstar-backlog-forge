@@ -41,7 +41,7 @@ Reply with a single JSON object of this exact shape:
 - `priority`: `High`, `Medium`, or `Low`.
 - `priority_rationale`: Required. A concrete explanation for why the story has this priority.
 - `tags`: Use canonical NorthStar Retail tags whenever applicable.
-- `source_topic_id`: The id of the topic from the Parser output that this story addresses. This must exactly match an `id` in the topics input.
+- `source_topic_id`: The id of the topic from the Parser output that this story addresses. This must exactly match an `id` field in the topics input above (e.g. `"T-01"`, `"T-02"`). **Never use `"..."`, `"null"`, `""`, or any placeholder.** If you are unsure which topic a story addresses, pick the closest one by theme.
 - `potential_constraint_conflicts`: Array of relevant constraint ids if this story may contradict a `must` or `forbidden` constraint; otherwise `[]`.
 
 Note: you do **not** produce an `evidence` field. An evidence block is attached automatically by the system from the topic you cite in `source_topic_id`, so it can never be fabricated. Your only responsibility for traceability is to set `source_topic_id` accurately to the topic the story actually came from.
@@ -49,7 +49,8 @@ Note: you do **not** produce an `evidence` field. An evidence block is attached 
 # Rules
 
 1. Draft at least one story for every topic in the input. If the topic list is non-empty, the story list must also be non-empty.
-2. Every topic `id` in the input must appear at least once as a `source_topic_id` in the output.
+2. Every topic `id` in the input must appear at least once as a `source_topic_id` in the output. Copy the exact `id` string from the topic — never invent a new one or use a placeholder like `"..."`.
+2a. `source_topic_id` must be one of the exact `id` values from the topics list. Valid examples: `"T-01"`, `"T-02"`. Invalid: `"..."`, `null`, `""`, `"T-XX"`.
 3. Never suppress a story because it conflicts with a constraint. If a requested capability appears blocked by a `must` or `forbidden` constraint, you must still draft the story, include the relevant constraint id in `potential_constraint_conflicts`, and explicitly mention the conflict in `description`.
 4. Default to one story per topic. Produce two stories only when a topic clearly contains two separable user needs that would be implemented and prioritized independently. Never produce more than two stories for a single topic.
 5. If a topic is ambiguous or underspecified, still draft the most reasonable story grounded in the topic summary. Explicitly call out uncertainty or missing detail in `description`. Do not invent specific facts, metrics, personas, workflows, or system behavior that are not supported by the input.

@@ -23,3 +23,25 @@ tenacity>=8.2.3        # retry logic for agent tool calls
 # pandas is used for the cost-panel bar/line charts in the Streamlit UI.
 streamlit>=1.32.0
 pandas>=2.0.0
+
+# ── Enterprise production additions ───────────────────────────────────────
+
+# Authentication — viewer / contributor / admin roles.
+# PyYAML is required by streamlit-authenticator for config/auth.yaml.
+streamlit-authenticator>=0.4.0
+PyYAML>=6.0
+bcrypt>=4.0.0
+
+# MCP (Model Context Protocol) — consume Atlassian + GitHub MCP servers
+# and expose the pipeline as its own MCP server.
+# PEP 508 markers: install automatically on Python 3.10+, skip silently on 3.9.
+# The Docker image (python:3.11-slim) always installs them.
+# For local dev: use Python 3.10+ venv (./start.sh uses venv313 automatically).
+mcp>=1.0.0 ; python_version >= "3.10"
+mcp-atlassian>=0.21 ; python_version >= "3.10"
+
+# OpenTelemetry — per-stage spans + optional OTLP export.
+# Only active when OTEL_ENABLED=1 is set.
+opentelemetry-api>=1.24.0
+opentelemetry-sdk>=1.24.0
+opentelemetry-exporter-otlp-proto-http>=1.24.0   # Grafana Cloud / any OTLP HTTP backend

@@ -36,11 +36,11 @@ from dotenv import load_dotenv
 # -------------------------------------------------------- bootstrap
 
 ROOT = Path(__file__).resolve().parent
+# .env is for local development only. In production, set env vars via the
+# deployment platform (Fly.io secrets, AWS Secrets Manager, etc.).
 load_dotenv(ROOT / ".env")
 
 # Same Atlassian tenant — same credentials work for Jira and Confluence.
-# Promote JIRA_* into CONFLUENCE_* so the live-source toggles below can
-# rely on a single set of vars in .env.
 for _conf, _jira in (
     ("CONFLUENCE_BASE_URL", "JIRA_BASE_URL"),
     ("CONFLUENCE_EMAIL", "JIRA_EMAIL"),
@@ -56,6 +56,39 @@ from orchestrator import Orchestrator  # noqa: E402
 from output_formatter import write_outputs  # noqa: E402
 from ui.styling import get_css  # noqa: E402
 from pricing import estimate_cost_usd  # noqa: E402
+from startup_check import check_required_secrets, get_configured_integrations, check_python_version  # noqa: E402
+from rate_limiter import check_rate_limit, get_usage_summary, RateLimitError  # noqa: E402
+from feature_flags import FeatureFlags  # noqa: E402
+
+# Load feature flags once per session. Cached in session_state so editing
+# them in the Admin panel and clicking Save triggers a reload via st.rerun().
+if "feature_flags" not in st.session_state:
+    st.session_state.feature_flags = FeatureFlags.load()
+_ff: FeatureFlags = st.session_state.feature_flags
+
+# -------------------------------------------------------- startup validation
+# Runs once per Streamlit session. Hard-fails on missing ANTHROPIC_API_KEY;
+# surfaces warnings for partial optional configs as an info banner.
+_startup_warnings: list[str] = check_python_version()
+try:
+    _startup_warnings += check_required_secrets()
+except RuntimeError as _startup_err:
+    st.error(f"**Configuration error:** {_startup_err}")
+    st.info("Set the required environment variables and restart the app. See `.env.example`.")
+    st.stop()
+
+# -------------------------------------------------------- Ollama auto-start
+# Start Ollama in the background if any stage uses a local model and the
+# server isn't already running. Runs once per session — idempotent.
+if "ollama_started" not in st.session_state:
+    try:
+        from ollama_manager import ensure_running as _ensure_ollama
+        _ok, _msg = _ensure_ollama(timeout=15)
+        st.session_state.ollama_started = _ok
+        st.session_state.ollama_msg = _msg
+    except Exception:  # noqa: BLE001
+        st.session_state.ollama_started = False
+        st.session_state.ollama_msg = "Ollama manager unavailable."
 
 st.set_page_config(
     page_title="Backlog Synthesizer · Accenture",
@@ -64,11 +97,228 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# -------------------------------------------------------- styling
-# All CSS lives in src/ui/styling.py — kept out of this file so the
-# control flow stays readable. One injection per Streamlit rerun.
-
+# ── Inject CSS immediately after page config so the login page is styled ──
+# This must happen BEFORE the auth check which may call st.stop().
 st.markdown(get_css(), unsafe_allow_html=True)
+
+# -------------------------------------------------------- authentication
+# Priority order:
+#   1. AUTH_DISABLED=1              → skip auth entirely (local dev)
+#   2. ENTRA_TENANT_ID set          → Microsoft Entra ID SSO (enterprise)
+#   3. config/auth.yaml exists      → streamlit-authenticator (username/password fallback)
+
+_auth_disabled = os.environ.get("AUTH_DISABLED", "").strip() == "1"
+_current_user: str = "local"
+_current_role: str = "admin"
+_authenticator = None
+
+sys.path.insert(0, str(ROOT / "src"))
+from entra_auth import is_enabled as _entra_enabled, get_auth_url, exchange_code_for_token, parse_user  # noqa: E402
+
+if not _auth_disabled:
+
+    if _entra_enabled():
+        # ── Entra ID SSO path ─────────────────────────────────────────────────
+        # OAuth2 authorization code flow via MSAL.
+        # Step 1: check if Microsoft just redirected back with ?code=
+        _query = st.query_params
+        _auth_code = _query.get("code", "")
+        _auth_error = _query.get("error", "")
+
+        if _auth_error:
+            st.error(f"Microsoft login error: {_query.get('error_description', _auth_error)}")
+            st.stop()
+
+        if _auth_code and "entra_user" not in st.session_state:
+            # Exchange the one-time code for a token
+            with st.spinner("Signing in with Microsoft…"):
+                _token_result = exchange_code_for_token(_auth_code)
+            if "error" in _token_result:
+                st.error(f"Token exchange failed: {_token_result.get('error_description', _token_result['error'])}")
+                if st.button("Try again"):
+                    st.query_params.clear()
+                    st.rerun()
+                st.stop()
+            # Store user info in session state and clear the ?code= from URL
+            st.session_state["entra_user"] = parse_user(_token_result)
+            st.query_params.clear()
+            st.rerun()
+
+        if "entra_user" not in st.session_state:
+            _login_url = get_auth_url()
+            # Override the full page background + hide sidebar for login screen
+            st.markdown("""
+            <style>
+            /* Full-page midnight blue takeover for login */
+            .stApp, [data-testid="stAppViewContainer"] {
+                background-color: #010c1f !important;
+                background-image:
+                    radial-gradient(ellipse 800px 550px at 50% -5%, rgba(0,120,212,0.13), transparent 58%),
+                    radial-gradient(ellipse 400px 300px at 92% 95%, rgba(0,80,160,0.06), transparent 50%),
+                    radial-gradient(circle, rgba(0,120,212,0.055) 1px, transparent 1px) !important;
+                background-size: auto, auto, 28px 28px !important;
+            }
+            /* Hide sidebar entirely on login page */
+            section[data-testid="stSidebar"] { display:none !important; }
+            /* Remove default padding so login-wrap can fill the viewport */
+            .main .block-container,
+            [data-testid="stMainBlockContainer"] {
+                padding:0 !important; max-width:100% !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+            st.markdown(
+                f'<div class="login-wrap">'
+
+                # ── Accenture brand bar ──────────────────────────────────
+                f'<div class="login-acc-bar">'
+                f'accenture<span class="acc-purple">&gt;</span>'
+                f'&nbsp;&nbsp;AI&#8209;First Agentic Solutions'
+                f'</div>'
+
+                # ── Main card ───────────────────────────────────────────
+                f'<div class="login-card">'
+
+                # Client name
+                f'<div class="login-client">NorthStar Retail</div>'
+
+                # Product mark — diamond + name
+                f'<div class="login-product-mark">'
+                f'<div class="login-product-diamond"></div>'
+                f'<div class="login-product-name">Backlog Synthesizer</div>'
+                f'</div>'
+
+                # Capability pills — minimal, no grid
+                f'<div class="login-pills">'
+                f'<span class="login-pill">Five-agent pipeline</span>'
+                f'<span class="login-pill-dot"></span>'
+                f'<span class="login-pill">MCP-live integrations</span>'
+                f'<span class="login-pill-dot"></span>'
+                f'<span class="login-pill">Full audit trail</span>'
+                f'</div>'
+
+                # Sign-in button
+                f'<a href="{_login_url}" target="_self" class="ms-signin-btn">'
+                f'<svg class="ms-logo" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">'
+                f'<rect x="1" y="1" width="9" height="9" fill="#f25022"/>'
+                f'<rect x="11" y="1" width="9" height="9" fill="#7fba00"/>'
+                f'<rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>'
+                f'<rect x="11" y="11" width="9" height="9" fill="#ffb900"/>'
+                f'</svg>'
+                f'Sign in with Microsoft'
+                f'</a>'
+
+                # Access note
+                f'<div class="login-access-note">'
+                f'For authorised NorthStar Retail Corp employees only.'
+                f'</div>'
+
+                f'</div>'  # end card
+
+                # Global footer — demo disclaimer
+                f'<div class="login-global-footer">'
+                f'DEMO ENVIRONMENT &nbsp;&middot;&nbsp; '
+                f'<span>Fictional client &mdash; NorthStar Retail Corp</span>'
+                f' &nbsp;&middot;&nbsp; Secured by Microsoft Entra ID'
+                f'</div>'
+
+                f'</div>',  # end wrap
+                unsafe_allow_html=True,
+            )
+            st.stop()
+
+        # User is signed in via Entra ID
+        _entra_user   = st.session_state["entra_user"]
+        _current_user = _entra_user.get("email", "unknown")
+        _current_role = _entra_user.get("role", "viewer")
+        _display_name = _entra_user.get("name") or _current_user
+
+    else:
+        # ── streamlit-authenticator fallback (username/password) ──────────────
+        _auth_config_path = ROOT / "config" / "auth.yaml"
+        if not _auth_config_path.exists():
+            st.error(
+                "Authentication config missing: `config/auth.yaml` not found. "
+                "Set `AUTH_DISABLED=1` for local dev or configure Entra ID."
+            )
+            st.stop()
+        try:
+            import yaml
+            import streamlit_authenticator as stauth
+            with open(_auth_config_path) as _f:
+                _auth_cfg = yaml.safe_load(_f)
+
+            _all_passwords = [
+                v.get("password", "")
+                for v in (_auth_cfg.get("credentials", {}).get("usernames") or {}).values()
+            ]
+            if any(str(p).startswith("CHANGE_ME_") for p in _all_passwords):
+                st.error("**Auth not configured:** `config/auth.yaml` has placeholder passwords.")
+                st.info("Set `AUTH_DISABLED=1` for local dev or set `ENTRA_TENANT_ID` for SSO.")
+                st.stop()
+
+            _authenticator = stauth.Authenticate(
+                _auth_cfg["credentials"],
+                _auth_cfg["cookie"]["name"],
+                _auth_cfg["cookie"]["key"],
+                _auth_cfg["cookie"]["expiry_days"],
+                auto_hash=False,
+            )
+            _login_result = _authenticator.login(location="main")
+            if _login_result is not None:
+                _auth_name, _auth_status, _auth_username = _login_result
+            else:
+                _auth_name     = st.session_state.get("name")
+                _auth_status   = st.session_state.get("authentication_status")
+                _auth_username = st.session_state.get("username")
+
+            if _auth_status is False:
+                st.error("Incorrect username or password.")
+                st.stop()
+            elif not _auth_status:
+                st.info("Please log in to use the Backlog Synthesizer.")
+                st.stop()
+
+            _current_user = _auth_username or "unknown"
+            _user_config  = ((_auth_cfg.get("credentials") or {})
+                             .get("usernames", {}).get(_current_user, {}))
+            _current_role = _user_config.get("role", "viewer")
+
+        except ImportError:
+            st.warning("streamlit-authenticator not installed — running as admin.")
+            _current_role = "admin"
+
+
+def _is_admin() -> bool:
+    return _current_role == "admin"
+
+
+def _is_contributor() -> bool:
+    return _current_role in ("admin", "contributor")
+
+
+def _can_run() -> bool:
+    """Contributors and admins can run synthesis; viewers cannot."""
+    return _is_contributor()
+
+
+def _can_push_jira() -> bool:
+    # Contributors and admins can push to Jira.
+    # Contributors always go through the mandatory approval gate;
+    # admins can optionally bypass the confirmation checkbox.
+    return _is_contributor()
+
+
+def _can_use_premium_models() -> bool:
+    return _is_admin()
+
+
+def _can_use_live_atlassian() -> bool:
+    return _is_admin()
+
+
+# CSS already injected above (before auth) — no duplicate needed here.
 
 # -------------------------------------------------------- helpers
 
@@ -589,17 +839,33 @@ def _render_epics_tab(result: dict) -> None:
                 ev = evidence[0]
                 quote = (ev.get("raw_quote") or "").strip()
                 speaker = (ev.get("speaker") or "").strip()
+                # Filter LLM placeholder values — "...", "null", etc. — so they
+                # never reach the UI regardless of when the run was stored.
+                _ph = {"...", "…", "null", "none", "n/a", "tbd", "unknown", "—", "-"}
+                if quote.lower() in _ph:
+                    quote = ""
+                if speaker.lower() in _ph:
+                    speaker = ""
                 if quote:
                     attribution = f" — {_esc(speaker)}" if speaker else ""
+                    # Collapsed by default — click "Evidence" label to expand.
+                    # The quote is still there for audit/review; it just doesn't
+                    # clutter the card in normal daily use.
                     ep_html.append(
-                        f'<div class="story-evidence" style="border-left:3px solid #94a3b8;'
-                        f'padding:6px 10px;margin:6px 0;color:#475569;'
+                        f'<details style="margin:6px 0;">'
+                        f'<summary style="cursor:pointer;font-size:11px;'
+                        f'letter-spacing:0.06em;text-transform:uppercase;'
+                        f'color:#64748b;list-style:none;display:flex;'
+                        f'align-items:center;gap:4px;">'
+                        f'<span style="font-size:9px;">▶</span>'
+                        f'Evidence{attribution}'
+                        f'</summary>'
+                        f'<div style="border-left:3px solid #94a3b8;'
+                        f'padding:6px 10px;margin:4px 0 0 0;color:#475569;'
                         f'font-style:italic;background:#f8fafc;border-radius:4px;">'
-                        f'<span style="font-size:11px;letter-spacing:0.06em;'
-                        f'text-transform:uppercase;color:#64748b;'
-                        f'font-style:normal;display:block;margin-bottom:2px;">'
-                        f'Evidence{attribution}</span>"{_esc(quote)}"'
+                        f'"{_esc(quote)}"'
                         f'</div>'
+                        f'</details>'
                     )
             if tags:
                 ep_html.append('<div class="tags-row">')
@@ -955,16 +1221,20 @@ def show_duplicate_compare_dialog(focus_index: int = 0) -> None:
 RUNS_DIR = ROOT / "logs" / "runs"
 
 
-def _save_run_to_disk(summary: dict[str, Any]) -> Path:
-    """Write `summary` as JSON to `logs/runs/<timestamp>_<id>.json`.
+def _user_runs_dir(user_id: str) -> Path:
+    """Per-user run history directory: logs/runs/<safe_user_id>/"""
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in (user_id or "anonymous"))
+    return RUNS_DIR / safe
 
-    Returns the path. Failures are swallowed and logged via st.warning so a
-    history-write failure can't break the run flow.
-    """
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+
+def _save_run_to_disk(summary: dict[str, Any]) -> Path:
+    """Write summary JSON scoped to the current user: logs/runs/<user_id>/<stamp>_<id>.json"""
+    user_id = summary.get("user_id", "anonymous")
+    user_dir = _user_runs_dir(user_id)
+    user_dir.mkdir(parents=True, exist_ok=True)
     short_id = uuid.uuid4().hex[:6]
     stamp = summary.get("timestamp") or datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = RUNS_DIR / f"{stamp}_{short_id}.json"
+    path = user_dir / f"{stamp}_{short_id}.json"
     try:
         path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     except OSError as e:
@@ -973,15 +1243,47 @@ def _save_run_to_disk(summary: dict[str, Any]) -> Path:
 
 
 def _load_run_history() -> list[dict[str, Any]]:
-    """Read all `logs/runs/*.json` files. Sorted newest-first."""
+    """Load run history scoped by role:
+    - admin: sees ALL users' runs
+    - contributor/viewer: sees only their own runs
+    """
     if not RUNS_DIR.exists():
         return []
     entries: list[dict[str, Any]] = []
-    for p in RUNS_DIR.glob("*.json"):
-        try:
-            entries.append(json.loads(p.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError):
+
+    # Admins scan all user subdirectories; others scan only their own
+    try:
+        current_role = st.session_state.get("entra_user", {}).get("role") \
+            or st.session_state.get("authentication_status") and \
+            __import__("yaml").safe_load(
+                (ROOT / "config" / "auth.yaml").read_text()
+            ).get("credentials", {}).get("usernames", {}) \
+               .get(st.session_state.get("username", ""), {}).get("role", "viewer") \
+            or "viewer"
+    except Exception:  # noqa: BLE001
+        current_role = "viewer"
+
+    is_admin_user = (current_role == "admin")
+
+    if is_admin_user:
+        # Admins see all runs across all users
+        search_dirs = [d for d in RUNS_DIR.iterdir() if d.is_dir()] if RUNS_DIR.exists() else []
+        search_dirs += [RUNS_DIR]  # also legacy flat structure
+    else:
+        # Non-admins see only their own runs
+        current_uid = (st.session_state.get("entra_user") or {}).get("email") \
+            or st.session_state.get("username") or "anonymous"
+        search_dirs = [_user_runs_dir(current_uid)]
+
+    for d in search_dirs:
+        if not d.exists():
             continue
+        for p in d.glob("*.json"):
+            try:
+                entries.append(json.loads(p.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                continue
+
     entries.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
     return entries
 
@@ -1150,18 +1452,19 @@ def _delete_history_entry(entry: dict) -> None:
     run_id = entry.get("run_id") or entry.get("timestamp", "")
     if not run_id:
         return
-    runs_dir = ROOT / "logs" / "runs"
-    if not runs_dir.exists():
-        return
-    # Filename convention is "<timestamp>_<short-id>.json"; matching by
-    # run_id (which includes the timestamp prefix) catches both formats.
+    # Search all user subdirectories for the run file
     deleted = 0
-    for p in runs_dir.glob(f"{run_id}*.json"):
-        try:
-            p.unlink()
-            deleted += 1
-        except OSError:
-            pass
+    if not RUNS_DIR.exists():
+        st.toast(f"No metadata file found for run {run_id}", icon="⚠️")
+        return
+    search_dirs = [RUNS_DIR] + [d for d in RUNS_DIR.iterdir() if d.is_dir()]
+    for d in search_dirs:
+        for p in d.glob(f"{run_id}*.json"):
+            try:
+                p.unlink()
+                deleted += 1
+            except OSError:
+                pass
     if deleted:
         st.toast(f"Deleted run metadata · {deleted} file(s)", icon="🗑️")
     else:
@@ -1455,223 +1758,720 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    # ── INPUTS — one expander per section, dynamic label shows selection ─────
-    # Auto-expand Transcript only if nothing is selected yet (first load).
-    _saved_transcript = _default_multi("transcript_choice", TRANSCRIPT_OPTIONS)
-    with st.expander(
-        _expander_label("📝 Transcript", _saved_transcript, empty_hint="pick a source"),
-        expanded=not bool(_saved_transcript),
-    ):
-        transcript_choice = st.multiselect(
-            "Transcript",
-            options=list(TRANSCRIPT_OPTIONS.keys()),
-            default=_saved_transcript,
-            label_visibility="collapsed",
-            key="transcript_choice",
-            help="Pick one or more bundled transcripts — combined into one source.",
-        )
-        transcript_upload = st.file_uploader(
-            "↑ Upload (txt / md / pdf)", type=["txt", "md", "pdf"],
-            accept_multiple_files=True, key="transcript_upload",
-            help="Optional — combined with any samples selected above.",
-        )
-        st.caption("**📷 Whiteboard / vision**")
-        vision_samples = st.multiselect(
-            "Vision samples",
-            options=list(VISION_SAMPLE_OPTIONS.keys()),
-            default=_default_multi("vision_samples", VISION_SAMPLE_OPTIONS) if _persisted_ui.get("vision_samples") else [],
-            key="vision_samples", label_visibility="collapsed",
-            help="Bundled whiteboard images — fed directly to the Parser.",
-        )
-        vision_uploads = st.file_uploader(
-            "↑ Upload whiteboard (PNG / JPG)", type=["png", "jpg", "jpeg", "webp"],
-            accept_multiple_files=True, key="vision_uploads",
-            help="Vision-capable models only.",
-        )
+    # ── Profile panel — expandable like Azure Portal / Microsoft 365 ──────────
+    if not _auth_disabled and (_entra_enabled() or _authenticator is not None):
+        _role_color  = {"admin": "var(--rose)", "contributor": "var(--accent)", "viewer": "var(--text-faint)"}.get(_current_role, "var(--text-faint)")
+        _show_name   = _display_name if _entra_enabled() else _current_user
+        _show_email  = _current_user if _entra_enabled() else ""
+        _org         = "NorthStar Retail Corp" if _entra_enabled() else "Local"
+        _auth_method = "Microsoft Entra ID" if _entra_enabled() else "Username / Password"
+        _role_desc   = {
+            "admin": "Full access · Live integrations · Admin settings",
+            "contributor": "Run synthesis · Push to Jira · View history",
+            "viewer": "View results · Download exports only",
+        }.get(_current_role, "")
 
-    _saved_constraints = _default_multi("constraints_choice", CONSTRAINTS_OPTIONS)
-    with st.expander(
-        _expander_label("📐 Wiki", _saved_constraints, empty_hint="optional"),
-        expanded=False,
-    ):
-        constraints_choice = st.multiselect(
-            "Wiki",
-            options=list(CONSTRAINTS_OPTIONS.keys()),
-            default=_saved_constraints,
-            label_visibility="collapsed",
-            key="constraints_choice",
-            help="Pick one or more wiki pages. Leave empty to skip the Constraint Extractor.",
-        )
-        constraints_upload = st.file_uploader(
-            "↑ Upload wiki (md / txt)", type=["md", "txt"],
-            accept_multiple_files=True, key="constraints_upload",
-            help="Combined with any wiki samples selected above.",
-        )
+        # Profile header — always visible, click to expand/collapse
+        _profile_open = st.session_state.get("_profile_open", False)
+        _chevron = "▲" if _profile_open else "▼"
 
-    _saved_backlog = _default_multi("backlog_choice", BACKLOG_OPTIONS)
-    with st.expander(
-        _expander_label("🗂 Backlog", _saved_backlog, empty_hint="optional"),
-        expanded=False,
-    ):
-        backlog_choice = st.multiselect(
-            "Backlog",
-            options=list(BACKLOG_OPTIONS.keys()),
-            default=_saved_backlog,
-            label_visibility="collapsed",
-            key="backlog_choice",
-            help="Ticket exports merged for duplicate detection. Leave empty to skip.",
-        )
-        backlog_upload = st.file_uploader(
-            "↑ Upload backlog (JSON)", type=["json"],
-            accept_multiple_files=True, key="backlog_upload",
-            help="Merged with any backlog samples selected above.",
-        )
+        if st.button(
+            f"👤  {_esc(_show_name)}   {_chevron}",
+            key="profile_toggle_btn",
+            use_container_width=True,
+            help="Click to view your profile",
+        ):
+            st.session_state["_profile_open"] = not _profile_open
+            st.rerun()
 
-    # Live Atlassian — key integration, shown directly under Inputs
-    _live_conf_active = bool(st.session_state.get("use_live_confluence"))
-    _live_jira_active = bool(st.session_state.get("use_live_jira"))
-    _live_label = "☁ Live Atlassian" + (" — active" if (_live_conf_active or _live_jira_active) else "")
-    with st.expander(_live_label, expanded=False):
-        use_live_confluence = st.toggle(
-            "Pull constraints from live Confluence",
-            value=False,
-            help="Fetches a Confluence page by ID. Overrides the Architecture/wiki selector above.",
-            key="use_live_confluence",
-        )
-        live_confluence_page_id = ""
-        if use_live_confluence:
-            live_confluence_page_id = st.text_input(
-                "Confluence page ID",
-                value=os.environ.get("CONFLUENCE_PAGE_ID", ""),
-                placeholder="e.g. 65830",
-                key="live_confluence_page_id",
-            )
-        use_live_jira = st.toggle(
-            "Pull backlog from live Jira",
-            value=False,
-            help=f"Fetches issues from project `{os.environ.get('JIRA_PROJECT_KEY') or '?'}`. Overrides the backlog selector above.",
-            key="use_live_jira",
-        )
-
-    # ── MODELS — always visible, just one radio row ─────────────────────────
-    st.markdown("### Models")
-    _preset_labels = ["Local", "Free", "Balanced", "Premium"]
-    _label_to_key = {"Local": "local", "Free": "free", "Balanced": "balanced", "Premium": "premium"}
-    _key_to_label = {v: k for k, v in _label_to_key.items()}
-    _active = st.session_state.active_preset
-    _radio_index = _preset_labels.index(_key_to_label[_active]) if _active in _key_to_label else 2
-
-    _picked_label = st.selectbox(
-        "Model preset",
-        options=_preset_labels,
-        index=_radio_index,
-        label_visibility="collapsed",
-        key="preset_radio",
-        help=(
-            "Local: Ollama (llama3.2:3b) for extraction + Claude for reasoning · needs ollama serve.  "
-            "Free: all Gemini Flash · free tier.  "
-            "Balanced: Gemini Flash + Claude Sonnet for Story Writer & Gap Detector.  "
-            "Premium: all Claude Sonnet."
-        ),
-    )
-    _picked_key = _label_to_key[_picked_label]
-
-    def _apply_preset(key: str) -> None:
-        st.session_state.models = dict(MODEL_PRESETS[key])
-        st.session_state.active_preset = key
-        _save_ui_state({
-            "transcript_choice":   transcript_choice,
-            "constraints_choice":  constraints_choice,
-            "backlog_choice":      backlog_choice,
-            "active_preset":       key,
-            "models":              dict(MODEL_PRESETS[key]),
-        })
-        st.rerun()
-
-    if _picked_key != _active and _active != "custom":
-        _apply_preset(_picked_key)
-    elif _active == "custom" and _picked_key != _key_to_label.get(_active):
-        _apply_preset(_picked_key)
-
-    with st.expander("⚙ Per-stage override", expanded=False):
-        _stage_labels = {
-            "parser": "Parser", "constraint": "Constraint Extractor",
-            "story_writer": "Story Writer", "epic_decomposer": "Epic Decomposer",
-            "gap_detector": "Gap Detector",
-        }
-        for _stage in STAGE_KEYS:
-            _cur = st.session_state.models.get(_stage, MODEL_PRESETS["balanced"][_stage])
-            try: _idx = MODEL_OPTIONS.index(_cur)
-            except ValueError: _idx = 0
-            _spicked = st.selectbox(_stage_labels[_stage], options=MODEL_OPTIONS, index=_idx, key=f"model_pick_{_stage}")
-            if _spicked != _cur:
-                st.session_state.models[_stage] = _spicked
-                _matches = next((n for n, mp in MODEL_PRESETS.items() if mp == st.session_state.models), None)
-                st.session_state.active_preset = _matches or "custom"
-        st.caption("Claude needs `ANTHROPIC_API_KEY` · Gemini needs `GOOGLE_API_KEY` · Local needs `ollama serve`")
-
-    # ── ESTIMATED RUN COST — always visible ────────────────────────────────
-    _vision_present = bool(vision_samples) or bool(vision_uploads)
-    _transcript_ready = bool(transcript_choice) or bool(transcript_upload) or _vision_present
-
-    _pre_cost_usd, _pre_in_tokens, _pre_out_tokens = _estimate_pre_run_cost(
-        transcript_choice=transcript_choice, transcript_upload=transcript_upload,
-        constraints_choice=constraints_choice, constraints_upload=constraints_upload,
-        backlog_choice=backlog_choice, backlog_upload=backlog_upload,
-        models=st.session_state.models,
-    )
-    if _transcript_ready and (_pre_in_tokens > 0 or _pre_out_tokens > 0):
-        cost_line = (
-            f"≈ <strong style='color:var(--accent)'>${_pre_cost_usd:.4f}</strong> "
-            f"<span style='color:var(--text-faint)'>·</span> "
-            f"<span style='color:var(--text-muted)'>{_pre_in_tokens // 1000}k in, ~{_pre_out_tokens // 1000}k out</span>"
-        )
+        # Role badge sits below the button
         st.markdown(
-            "<div style='padding:0.45rem 0.8rem;background:var(--bg-elev-1);"
-            "border:1px solid var(--border);border-left:3px solid var(--accent);"
-            "border-radius:8px;font-size:0.82rem;margin-bottom:0.5rem;'>"
-            "<span style='font-size:0.62rem;font-weight:700;letter-spacing:0.12em;"
-            "text-transform:uppercase;color:var(--accent);display:block;margin-bottom:0.2rem;'>"
-            "Estimated run cost</span>"
-            f"{cost_line}</div>",
+            f'<div style="text-align:right;margin:-6px 2px 4px;font-size:0.62rem;'
+            f'font-weight:700;letter-spacing:0.12em;text-transform:uppercase;'
+            f'color:{_role_color};">{_current_role}</div>',
             unsafe_allow_html=True,
         )
 
-    # ── SYNTHESIZE — always visible ─────────────────────────────────────────
-    run_clicked = st.button(
-        "▶  Synthesize", type="primary", use_container_width=True,
-        disabled=not _transcript_ready,
-    )
-    if not _transcript_ready:
-        st.caption("↑ Pick a transcript source first.")
+        # Expanded profile panel
+        if _profile_open:
+            st.markdown(
+                f'<div style="background:var(--bg-elev-2);border:1px solid var(--border);'
+                f'border-radius:10px;padding:1rem;margin-bottom:0.5rem;font-size:0.8rem;">'
 
-    _sb_jira_ready = bool(
-        os.environ.get("JIRA_BASE_URL") and os.environ.get("JIRA_EMAIL")
-        and os.environ.get("JIRA_API_TOKEN") and os.environ.get("JIRA_PROJECT_KEY")
-    )
-    if _sb_jira_ready and st.session_state.get("result"):
-        if st.button(f"⤴  Push to Jira ({os.environ.get('JIRA_PROJECT_KEY')})",
-                     use_container_width=True, key="sidebar_jira_btn"):
-            show_jira_dialog()
-    elif _sb_jira_ready:
-        st.caption("Run a synthesis first, then push to Jira.")
+                # Avatar circle with initials
+                f'<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;">'
+                f'<div style="width:40px;height:40px;border-radius:50%;background:{_role_color};'
+                f'display:flex;align-items:center;justify-content:center;font-weight:700;'
+                f'font-size:1rem;color:white;flex-shrink:0;">'
+                f'{_esc(_show_name[0].upper()) if _show_name else "?"}'
+                f'</div>'
+                f'<div>'
+                f'<div style="font-weight:700;color:var(--text);font-size:0.88rem;">{_esc(_show_name)}</div>'
+                f'<div style="color:var(--text-faint);font-size:0.72rem;margin-top:1px;">{_esc(_show_email)}</div>'
+                f'</div>'
+                f'</div>'
 
-    # ── ADVANCED OPTIONS — collapsed, rarely needed ─────────────────────────
-    with st.expander("⚙ Advanced options", expanded=False):
-        redact_pii = st.toggle("Mask personal & sensitive info", value=False,
-            help="Replace PII with stable placeholders before sending to the LLM. Un-redacted in output.")
-        dry_run = st.toggle("Dry run (preview prompts only)", value=False,
-            help="Build prompts but skip all LLM calls — useful for inspection without API spend.")
-        auto_switch = st.toggle("Auto-switch model on failure / vision", value=False, key="auto_switch",
-            help="On failure, retry on the other provider. Bumps Parser to Claude when an image is attached.")
-        compare_enabled = st.toggle("Compare two presets side-by-side", value=False, key="compare_enabled",
-            help="Runs the pipeline twice and shows a side-by-side summary. Doubles cost and time.")
+                # Details rows
+                f'<div style="display:flex;flex-direction:column;gap:0.45rem;'
+                f'border-top:1px solid var(--border);padding-top:0.75rem;">'
+
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+                f'<span style="color:var(--text-faint);font-size:0.7rem;">Role</span>'
+                f'<span style="color:{_role_color};font-weight:700;font-size:0.7rem;'
+                f'letter-spacing:0.1em;text-transform:uppercase;">{_current_role}</span>'
+                f'</div>'
+
+                f'<div style="font-size:0.7rem;color:var(--text-faint);'
+                f'background:var(--bg-elev-1);border-radius:6px;padding:4px 8px;">'
+                f'{_esc(_role_desc)}'
+                f'</div>'
+
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px;">'
+                f'<span style="color:var(--text-faint);font-size:0.7rem;">Organisation</span>'
+                f'<span style="color:var(--text-muted);font-size:0.72rem;">{_esc(_org)}</span>'
+                f'</div>'
+
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+                f'<span style="color:var(--text-faint);font-size:0.7rem;">Signed in via</span>'
+                f'<span style="color:var(--text-muted);font-size:0.72rem;">{_esc(_auth_method)}</span>'
+                f'</div>'
+
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            # Sign out inside the panel
+            if _entra_enabled():
+                if st.button("↩  Sign out", key="profile_signout_btn", use_container_width=True, type="secondary"):
+                    st.session_state.pop("entra_user", None)
+                    st.session_state.pop("_profile_open", None)
+                    st.query_params.clear()
+                    st.rerun()
+            elif _authenticator is not None:
+                _authenticator.logout(button_name="↩  Sign out", location="sidebar", key="sidebar_logout")
+
+        elif not _profile_open:
+            # Compact logout when panel is closed
+            if _entra_enabled():
+                if st.button("Log out", key="sidebar_logout", use_container_width=False):
+                    st.session_state.pop("entra_user", None)
+                    st.query_params.clear()
+                    st.rerun()
+            elif _authenticator is not None:
+                _authenticator.logout(button_name="Log out", location="sidebar", key="sidebar_logout")
+
+    # ── Usage meter (rate limit) ────────────────────────────────────────────
+    if _can_run():
+        try:
+            _usage = get_usage_summary(_current_user)
+            _hr_pct = min(100, int(100 * _usage["runs_last_hour"] / max(1, _usage["max_runs_per_hour"])))
+            _day_pct = min(100, int(100 * _usage["cost_today_usd"] / max(0.01, _usage["max_cost_per_day_usd"])))
+            _hr_color = "var(--rose)" if _hr_pct >= 80 else "var(--accent)"
+            _day_color = "var(--rose)" if _day_pct >= 80 else "var(--accent)"
+            st.markdown(
+                f'<div style="padding:0.4rem 0.6rem;background:var(--bg-elev-1);'
+                f'border:1px solid var(--border);border-radius:8px;margin-bottom:0.5rem;font-size:0.75rem;">'
+                f'<div style="display:flex;justify-content:space-between;color:var(--text-faint);margin-bottom:0.25rem;">'
+                f'<span>Runs/hr</span><span style="color:{_hr_color};">'
+                f'{_usage["runs_last_hour"]}/{_usage["max_runs_per_hour"]}</span></div>'
+                f'<div style="height:3px;background:var(--border);border-radius:2px;margin-bottom:0.3rem;">'
+                f'<div style="height:3px;width:{_hr_pct}%;background:{_hr_color};border-radius:2px;"></div></div>'
+                f'<div style="display:flex;justify-content:space-between;color:var(--text-faint);">'
+                f'<span>Cost today</span><span style="color:{_day_color};">'
+                f'${_usage["cost_today_usd"]:.3f}/${_usage["max_cost_per_day_usd"]:.2f}</span></div>'
+                f'<div style="height:3px;background:var(--border);border-radius:2px;margin-top:0.25rem;">'
+                f'<div style="height:3px;width:{_day_pct}%;background:{_day_color};border-radius:2px;"></div></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        except Exception:  # noqa: BLE001 — usage meter must never block the UI
+            pass
+
+    # ── Admin: Feature Flags settings button ───────────────────────────────
+    # Note: show_admin_settings_dialog is defined LATER in the file. We set a
+    # session state flag here and call the dialog after its definition below.
+    if _is_admin():
+        if st.button("⚙  Admin Settings", use_container_width=True,
+                     key="admin_settings_btn", help="Configure what contributors can do"):
+            st.session_state["_trigger_admin_settings"] = True
+
+    # ── Show startup warnings if any ───────────────────────────────────────
+    for _w in _startup_warnings:
+        st.warning(_w, icon="⚠️")
+
+    # ── ROLE-GATED SIDEBAR CONTENT ─────────────────────────────────────────
+    # Viewer:      read-only panel + browse history only
+    # Contributor: inputs + models (Free/Balanced) + synthesize + advanced
+    # Admin:       everything above + Live Atlassian + Local/Premium + per-stage override
+
+    if not _can_run():
+        # ── VIEWER ───────────────────────────────────────────────────────────
+        st.markdown(
+            '<div style="padding:0.8rem 1rem;background:var(--bg-elev-1);'
+            'border:1px solid var(--border);border-left:3px solid var(--text-faint);'
+            'border-radius:8px;margin-bottom:0.7rem;">'
+            '<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.14em;'
+            'text-transform:uppercase;color:var(--text-faint);margin-bottom:0.35rem;">'
+            'View-only access</div>'
+            '<div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;">'
+            'Your role (<strong style="color:var(--text);">viewer</strong>) lets you '
+            'read results and download exports.<br><br>'
+            'To run synthesis or push to Jira, ask an admin to upgrade your role to '
+            '<strong>contributor</strong>.</div></div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("⌕  Browse run history", use_container_width=True, key="viewer_history_btn"):
+            show_run_history_dialog()
+        # Safe defaults — referenced by the run handler below the sidebar.
+        transcript_choice = []
+        transcript_upload = None
+        constraints_choice = []
+        constraints_upload = None
+        backlog_choice = []
+        backlog_upload = None
+        vision_samples = []
+        vision_uploads = []
+        run_clicked = False
+        redact_pii = True
+        dry_run = False
+        auto_switch = False
+        compare_enabled = False
         compare_with_preset = "free"
-        if compare_enabled:
-            compare_with_preset = st.selectbox("Compare against",
-                options=list(MODEL_PRESETS.keys()),
-                index=list(MODEL_PRESETS.keys()).index("free"),
-                key="compare_with_preset")
+        use_live_confluence = False
+        use_live_jira = False
+        live_confluence_page_id = ""
+
+    else:
+        # ── CONTRIBUTOR / ADMIN: INPUTS ───────────────────────────────────────
+        _saved_transcript = _default_multi("transcript_choice", TRANSCRIPT_OPTIONS)
+        with st.expander(
+            _expander_label("📝 Transcript", _saved_transcript, empty_hint="pick a source"),
+            expanded=not bool(_saved_transcript),
+        ):
+            transcript_choice = st.multiselect(
+                "Transcript",
+                options=list(TRANSCRIPT_OPTIONS.keys()),
+                default=_saved_transcript,
+                label_visibility="collapsed",
+                key="transcript_choice",
+                help="Pick one or more bundled transcripts — combined into one source.",
+            )
+            transcript_upload = st.file_uploader(
+                "↑ Upload (txt / md / pdf)", type=["txt", "md", "pdf"],
+                accept_multiple_files=True, key="transcript_upload",
+                help="Optional — combined with any samples selected above.",
+            )
+            if _ff.is_enabled(_current_role, "vision_input"):
+                st.caption("**📷 Whiteboard / vision**")
+                vision_samples = st.multiselect(
+                    "Vision samples",
+                    options=list(VISION_SAMPLE_OPTIONS.keys()),
+                    default=_default_multi("vision_samples", VISION_SAMPLE_OPTIONS) if _persisted_ui.get("vision_samples") else [],
+                    key="vision_samples", label_visibility="collapsed",
+                    help="Bundled whiteboard images — fed directly to the Parser.",
+                )
+                vision_uploads = st.file_uploader(
+                    "↑ Upload whiteboard (PNG / JPG)", type=["png", "jpg", "jpeg", "webp"],
+                    accept_multiple_files=True, key="vision_uploads",
+                    help="Vision-capable models only.",
+                )
+            else:
+                vision_samples = []
+                vision_uploads = []
+
+        _saved_constraints = _default_multi("constraints_choice", CONSTRAINTS_OPTIONS)
+        with st.expander(
+            _expander_label("📐 Wiki", _saved_constraints, empty_hint="optional"),
+            expanded=False,
+        ):
+            constraints_choice = st.multiselect(
+                "Wiki",
+                options=list(CONSTRAINTS_OPTIONS.keys()),
+                default=_saved_constraints,
+                label_visibility="collapsed",
+                key="constraints_choice",
+                help="Pick one or more wiki pages. Leave empty to skip the Constraint Extractor.",
+            )
+            constraints_upload = st.file_uploader(
+                "↑ Upload wiki (md / txt)", type=["md", "txt"],
+                accept_multiple_files=True, key="constraints_upload",
+                help="Combined with any wiki samples selected above.",
+            )
+
+        _saved_backlog = _default_multi("backlog_choice", BACKLOG_OPTIONS)
+        with st.expander(
+            _expander_label("🗂 Backlog", _saved_backlog, empty_hint="optional"),
+            expanded=False,
+        ):
+            backlog_choice = st.multiselect(
+                "Backlog",
+                options=list(BACKLOG_OPTIONS.keys()),
+                default=_saved_backlog,
+                label_visibility="collapsed",
+                key="backlog_choice",
+                help="Ticket exports merged for duplicate detection. Leave empty to skip.",
+            )
+            backlog_upload = st.file_uploader(
+                "↑ Upload backlog (JSON)", type=["json"],
+                accept_multiple_files=True, key="backlog_upload",
+                help="Merged with any backlog samples selected above.",
+            )
+
+        # ── ADMIN ONLY: Live Atlassian ────────────────────────────────────────
+        # Completely hidden for contributors unless live_jira_read flag is on.
+        use_live_confluence = False
+        use_live_jira = False
+        live_confluence_page_id = ""
+        _contributor_live_jira = _ff.is_enabled(_current_role, "live_jira_read")
+        if _is_admin() or _contributor_live_jira:
+            _live_conf_active = bool(st.session_state.get("use_live_confluence"))
+            _live_jira_active = bool(st.session_state.get("use_live_jira"))
+            _live_label = "☁ Live Atlassian" + (" — active" if (_live_conf_active or _live_jira_active) else "")
+            with st.expander(_live_label, expanded=False):
+                use_live_confluence = st.toggle(
+                    "Pull constraints from live Confluence",
+                    value=False,
+                    help="Fetches a Confluence page by ID. Overrides the wiki selector above.",
+                    key="use_live_confluence",
+                )
+                live_confluence_page_id = ""
+                if use_live_confluence:
+                    live_confluence_page_id = st.text_input(
+                        "Confluence page ID",
+                        value=os.environ.get("CONFLUENCE_PAGE_ID", ""),
+                        placeholder="e.g. 65830",
+                        key="live_confluence_page_id",
+                    )
+                use_live_jira = st.toggle(
+                    "Pull backlog from live Jira",
+                    value=False,
+                    help=f"Fetches issues from project `{os.environ.get('JIRA_PROJECT_KEY') or '?'}`. Overrides the backlog selector above.",
+                    key="use_live_jira",
+                )
+
+        # ── MODELS ────────────────────────────────────────────────────────────
+        st.markdown("### Models")
+        _label_to_key = {"Local": "local", "Free": "free", "Balanced": "balanced", "Premium": "premium"}
+        _key_to_label = {v: k for k, v in _label_to_key.items()}
+        # Allowed presets come from feature_flags for contributor; admin always gets all four.
+        _allowed_preset_keys = _ff.allowed_presets(_current_role)
+        _preset_labels = [
+            lbl for lbl, key in _label_to_key.items()
+            if key in _allowed_preset_keys
+        ] or ["Free", "Balanced"]
+
+        _active = st.session_state.active_preset
+        if _active not in [_label_to_key[l] for l in _preset_labels] and _active != "custom":
+            _active = "balanced"
+            st.session_state.active_preset = "balanced"
+            st.session_state.models = dict(MODEL_PRESETS["balanced"])
+
+        # Check which providers are actually available right now.
+        _has_anthropic = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+        _has_google    = bool(os.environ.get("GOOGLE_API_KEY", "").strip())
+        _ollama_ok     = st.session_state.get("ollama_started", False)
+
+        # Each preset requires specific providers — derive its ready status.
+        # We check env-var presence (fast); actual API validity is caught at run time.
+        def _preset_status(key: str) -> tuple[bool, str]:
+            """Return (ready, reason_if_not_ready) for a preset key."""
+            if key == "free":
+                return (_has_google, "needs GOOGLE_API_KEY")
+            if key == "balanced":
+                if not _has_google and not _has_anthropic:
+                    return (False, "needs GOOGLE_API_KEY + ANTHROPIC_API_KEY")
+                if not _has_google:
+                    return (False, "needs GOOGLE_API_KEY")
+                if not _has_anthropic:
+                    return (False, "needs ANTHROPIC_API_KEY")
+                return (True, "")
+            if key == "premium":
+                return (_has_anthropic, "needs ANTHROPIC_API_KEY")
+            if key == "local":
+                if not _ollama_ok:
+                    return (False, "Ollama offline")
+                if not _has_anthropic:
+                    return (False, "Ollama ok but needs ANTHROPIC_API_KEY for reasoning stages")
+                return (True, "")
+            return (True, "")
+
+        # ── Colored dot status row ────────────────────────────────────────────
+        # Green dot = every model in the preset is available right now.
+        # Red dot   = at least one model is missing a dependency.
+        # Hovering a red dot shows the tooltip explaining what's missing.
+        _dot_chips = []
+        for _lbl in _preset_labels:
+            _pkey = _label_to_key[_lbl]
+            _ready, _reason = _preset_status(_pkey)
+            _dot_color = "#34d399" if _ready else "#fb7185"   # green / red
+            _dot_glow  = "0 0 6px rgba(52,211,153,0.5)" if _ready else "0 0 6px rgba(251,113,133,0.5)"
+            _is_active_chip = (_active == _pkey)
+            _chip_bg     = "rgba(52,211,153,0.1)"  if _is_active_chip and _ready  else \
+                           "rgba(251,113,133,0.1)" if _is_active_chip and not _ready else \
+                           "var(--bg-elev-1)"
+            _chip_border = _dot_color if _is_active_chip else "var(--border)"
+            _tooltip = (
+                f"All models in {_lbl} preset are available"
+                if _ready else
+                f"{_lbl} preset unavailable: {_reason}"
+            )
+            _dot_chips.append(
+                f'<span title="{_esc(_tooltip)}" style="'
+                f'display:inline-flex;align-items:center;gap:5px;'
+                f'padding:3px 10px;border-radius:20px;font-size:0.78rem;'
+                f'color:var(--text);background:{_chip_bg};'
+                f'border:1px solid {_chip_border};white-space:nowrap;">'
+                f'<span style="width:9px;height:9px;border-radius:50%;'
+                f'background:{_dot_color};flex-shrink:0;'
+                f'box-shadow:{_dot_glow};display:inline-block;"></span>'
+                f'{_esc(_lbl)}'
+                f'</span>'
+            )
+        st.markdown(
+            f'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">'
+            + "".join(_dot_chips)
+            + '</div>'
+            + '<div style="display:flex;gap:12px;margin-bottom:6px;font-size:0.68rem;color:var(--text-faint);">'
+            + '<span style="display:flex;align-items:center;gap:4px;">'
+            + '<span style="width:7px;height:7px;border-radius:50%;background:#34d399;display:inline-block;"></span>All models online</span>'
+            + '<span style="display:flex;align-items:center;gap:4px;">'
+            + '<span style="width:7px;height:7px;border-radius:50%;background:#fb7185;display:inline-block;"></span>Unavailable — hover for details</span>'
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Selectbox — clean names only, no status text ──────────────────────
+        _radio_index = (
+            _preset_labels.index(_key_to_label[_active])
+            if _active in _key_to_label and _key_to_label[_active] in _preset_labels
+            else min(1, len(_preset_labels) - 1)
+        )
+        _picked_label = st.selectbox(
+            "Model preset",
+            options=_preset_labels,
+            index=_radio_index,
+            label_visibility="collapsed",
+            key="preset_radio",
+            help=(
+                "Free: all Gemini Flash · free tier.  "
+                "Balanced: Gemini Flash + Claude Sonnet for Story Writer & Gap Detector."
+                + ("  Local: Ollama + Claude for reasoning · run ./start.sh to auto-start."
+                   "  Premium: all Claude Sonnet."
+                   if _is_admin() else "")
+            ),
+        )
+        _picked_key = _label_to_key.get(_picked_label, "balanced")
+
+        def _apply_preset(key: str) -> None:
+            st.session_state.models = dict(MODEL_PRESETS[key])
+            st.session_state.active_preset = key
+            st.session_state["_preset_radio_last"] = key
+            # Also turn off per-stage override when preset changes — user is
+            # explicitly picking a preset, so override should reset cleanly.
+            st.session_state["_stage_override_enabled"] = False
+            # Clear per-stage widget state so the override selects reflect the
+            # new preset. Without this, Streamlit keeps the old selectbox value
+            # even after the preset changes (stale widget state bug).
+            for _s in STAGE_KEYS:
+                st.session_state.pop(f"model_pick_{_s}", None)
+            _save_ui_state({
+                "transcript_choice":   transcript_choice,
+                "constraints_choice":  constraints_choice,
+                "backlog_choice":      backlog_choice,
+                "active_preset":       key,
+                "models":              dict(MODEL_PRESETS[key]),
+            })
+            st.rerun()
+
+        # Track the last preset the user explicitly picked in the selectbox.
+        # This lets us distinguish between:
+        #   (a) user changed the dropdown → apply the new preset
+        #   (b) active_preset became "custom" due to per-stage override,
+        #       but the dropdown still shows the old preset → do NOT reset,
+        #       or the override would be wiped on every rerun.
+        _last_explicit_preset = st.session_state.get("_preset_radio_last", _active)
+
+        if _picked_key != _last_explicit_preset:
+            # User explicitly changed the preset dropdown — apply it.
+            st.session_state["_preset_radio_last"] = _picked_key
+            _apply_preset(_picked_key)
+        elif _picked_key != _active and _active != "custom":
+            # Drift between displayed preset and active (not a custom override) — sync.
+            st.session_state["_preset_radio_last"] = _picked_key
+            _apply_preset(_picked_key)
+
+        # If the selected preset is not ready, show a clear actionable error.
+        _sel_ready, _sel_reason = _preset_status(_picked_key)
+        if not _sel_ready:
+            _fix_hint = {
+                "free":     "Add `GOOGLE_API_KEY=...` to your `.env` file.",
+                "balanced": "Add the missing API key(s) to your `.env` file.",
+                "premium":  "Add `ANTHROPIC_API_KEY=...` to your `.env` file.",
+                "local":    "Run `./start.sh` to auto-start Ollama, or switch to **Balanced**.",
+            }.get(_picked_key, "Check your `.env` file.")
+            st.error(
+                f"**{_picked_label} preset not available** — {_sel_reason}. {_fix_hint}"
+            )
+
+        # ── ADMIN ONLY: Per-stage model override ──────────────────────────────
+        if _is_admin():
+            with st.expander("⚙ Per-stage override", expanded=False):
+                # Toggle guards the selects so the admin can't accidentally
+                # change a stage while just browsing what the preset uses.
+                _override_enabled = st.toggle(
+                    "Enable per-stage override",
+                    value=bool(st.session_state.get("_stage_override_enabled", False)),
+                    key="_stage_override_enabled",
+                    help="Turn on to customise individual stage models. "
+                         "Turn off to lock all stages back to the selected preset.",
+                )
+                if not _override_enabled:
+                    # Reset models to preset AND clear widget state so turning
+                    # override back ON starts fresh from the preset, not stale values.
+                    _cur_active = st.session_state.active_preset
+                    if _cur_active in MODEL_PRESETS:
+                        st.session_state.models = dict(MODEL_PRESETS[_cur_active])
+                    for _s in STAGE_KEYS:
+                        st.session_state.pop(f"model_pick_{_s}", None)
+
+                    # Show a read-only summary so the user can confirm what each
+                    # stage will use before running.
+                    _stage_names = {
+                        "parser": "Parser", "constraint": "Constraint Extractor",
+                        "story_writer": "Story Writer", "epic_decomposer": "Epic Decomposer",
+                        "gap_detector": "Gap Detector",
+                    }
+                    _rows = "".join(
+                        f'<div style="display:flex;justify-content:space-between;'
+                        f'padding:2px 0;font-size:0.78rem;">'
+                        f'<span style="color:var(--text-faint);">{_stage_names[_s]}</span>'
+                        f'<span style="color:var(--text);font-family:\'IBM Plex Mono\',monospace;">'
+                        f'{_esc(st.session_state.models.get(_s,"—"))}</span></div>'
+                        for _s in STAGE_KEYS
+                    )
+                    st.markdown(
+                        f'<div style="background:var(--bg-elev-2);border:1px solid var(--border);'
+                        f'border-radius:8px;padding:8px 12px;margin:4px 0;">'
+                        f'<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.1em;'
+                        f'text-transform:uppercase;color:var(--text-faint);margin-bottom:6px;">'
+                        f'{_esc(_cur_active.title())} preset — all stages</div>'
+                        + _rows + '</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    _stage_labels = {
+                        "parser": "Parser", "constraint": "Constraint Extractor",
+                        "story_writer": "Story Writer", "epic_decomposer": "Epic Decomposer",
+                        "gap_detector": "Gap Detector",
+                    }
+
+                    # Build labelled model options with live availability badges.
+                    # Checks: Anthropic key, Google key, Ollama running + model pulled.
+                    try:
+                        from ollama_manager import list_models as _list_ollama
+                        _pulled = {f"ollama/{m}" for m in _list_ollama()}
+                    except Exception:
+                        _pulled = {"ollama/llama3.2:3b"} if _ollama_ok else set()
+
+                    def _model_label(mid: str) -> str:
+                        """Return display label with plain-text availability tag."""
+                        if mid.startswith("claude"):
+                            tag = "[ready]" if _has_anthropic else "[no ANTHROPIC key]"
+                        elif mid.startswith("gemini"):
+                            if not _has_google:
+                                tag = "[no GOOGLE key]"
+                            elif mid == "gemini-2.5-pro":
+                                tag = "[ready - paid tier]"
+                            else:
+                                tag = "[ready]"
+                        elif mid.startswith("ollama"):
+                            if not _ollama_ok:
+                                tag = "[Ollama offline]"
+                            elif mid in _pulled:
+                                tag = "[ready]"
+                            else:
+                                model_name = mid.replace("ollama/", "")
+                                tag = f"[not pulled - run: ollama pull {model_name}]"
+                        else:
+                            tag = "[ready]"
+                        return f"{mid}  {tag}"
+
+                    # Build the labelled list and a reverse mapping to raw model id.
+                    _labelled_opts = [_model_label(m) for m in MODEL_OPTIONS]
+                    _label_to_model = {lbl: mid for lbl, mid in zip(_labelled_opts, MODEL_OPTIONS)}
+
+                    for _stage in STAGE_KEYS:
+                        _cur = st.session_state.models.get(_stage, MODEL_PRESETS["balanced"][_stage])
+                        # Find the labelled version of the current model.
+                        _cur_lbl = next(
+                            (lbl for lbl, mid in _label_to_model.items() if mid == _cur),
+                            _labelled_opts[0],
+                        )
+                        _spicked_lbl = st.selectbox(
+                            _stage_labels[_stage],
+                            options=_labelled_opts,
+                            index=_labelled_opts.index(_cur_lbl),
+                            key=f"model_pick_{_stage}",
+                        )
+                        _spicked = _label_to_model.get(_spicked_lbl, _cur)
+                        # Warn if the picked model is not available.
+                        if "[ready]" not in _spicked_lbl:
+                            _issue = _spicked_lbl.split("  [")[1].rstrip("]")
+                            st.caption(f"⚠  {_issue}")
+                        if _spicked != _cur:
+                            st.session_state.models[_stage] = _spicked
+                            _matches = next(
+                                (n for n, mp in MODEL_PRESETS.items() if mp == st.session_state.models),
+                                None,
+                            )
+                            st.session_state.active_preset = _matches or "custom"
+
+                    # ── Active configuration summary ──────────────────────────
+                    # Shows every stage's current model. Stages that differ from
+                    # the base preset are highlighted so the admin can quickly
+                    # confirm which overrides are active before running.
+                    st.divider()
+                    _base_preset_key = st.session_state.active_preset
+                    _base = dict(MODEL_PRESETS.get(_base_preset_key, MODEL_PRESETS["balanced"]))
+                    _stage_display_names = {
+                        "parser": "Parser", "constraint": "Constraint Extractor",
+                        "story_writer": "Story Writer", "epic_decomposer": "Epic Decomposer",
+                        "gap_detector": "Gap Detector",
+                    }
+                    _summary_rows = ""
+                    for _s in STAGE_KEYS:
+                        _active_m  = st.session_state.models.get(_s, _base.get(_s, "—"))
+                        _preset_m  = _base.get(_s, "—")
+                        _changed   = _active_m != _preset_m
+                        _color     = "var(--accent)" if _changed else "var(--text-muted)"
+                        _badge     = (
+                            f' <span style="font-size:0.62rem;color:var(--text-faint);">'
+                            f'← was {_esc(_preset_m)}</span>'
+                        ) if _changed else ""
+                        _summary_rows += (
+                            f'<div style="display:flex;align-items:baseline;'
+                            f'justify-content:space-between;padding:3px 0;font-size:0.78rem;">'
+                            f'<span style="color:var(--text-faint);">{_esc(_stage_display_names[_s])}</span>'
+                            f'<span style="color:{_color};font-family:\'IBM Plex Mono\',monospace;">'
+                            f'{_esc(_active_m)}{_badge}</span></div>'
+                        )
+                    _n_changed = sum(
+                        1 for _s in STAGE_KEYS
+                        if st.session_state.models.get(_s) != _base.get(_s)
+                    )
+                    _header_color = "var(--accent)" if _n_changed else "var(--text-faint)"
+                    _header_label = (
+                        f"Custom — {_n_changed} stage(s) overridden"
+                        if _n_changed else "No overrides — same as preset"
+                    )
+                    st.markdown(
+                        f'<div style="background:var(--bg-elev-2);border:1px solid var(--border);'
+                        f'border-radius:8px;padding:8px 12px;margin-top:4px;">'
+                        f'<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.1em;'
+                        f'text-transform:uppercase;color:{_header_color};margin-bottom:6px;">'
+                        f'{_esc(_header_label)}</div>'
+                        + _summary_rows + '</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    # Summary of what's ready on this machine.
+                    _ready_providers = []
+                    if _has_anthropic: _ready_providers.append("Claude")
+                    if _has_google:    _ready_providers.append("Gemini")
+                    if _ollama_ok:     _ready_providers.append(f"Ollama ({len(_pulled)} model pulled)")
+                    st.caption("Available: " + " · ".join(_ready_providers) if _ready_providers else "No providers configured.")
+
+        # ── ESTIMATED RUN COST ────────────────────────────────────────────────
+        _vision_present = bool(vision_samples) or bool(vision_uploads)
+        _transcript_ready = bool(transcript_choice) or bool(transcript_upload) or _vision_present
+
+        _pre_cost_usd, _pre_in_tokens, _pre_out_tokens = _estimate_pre_run_cost(
+            transcript_choice=transcript_choice, transcript_upload=transcript_upload,
+            constraints_choice=constraints_choice, constraints_upload=constraints_upload,
+            backlog_choice=backlog_choice, backlog_upload=backlog_upload,
+            models=st.session_state.models,
+        )
+        if _transcript_ready and (_pre_in_tokens > 0 or _pre_out_tokens > 0):
+            _cost_line = (
+                f"≈ <strong style='color:var(--accent)'>${_pre_cost_usd:.4f}</strong> "
+                f"<span style='color:var(--text-faint)'>·</span> "
+                f"<span style='color:var(--text-muted)'>{_pre_in_tokens // 1000}k in, ~{_pre_out_tokens // 1000}k out</span>"
+            )
+            st.markdown(
+                "<div style='padding:0.45rem 0.8rem;background:var(--bg-elev-1);"
+                "border:1px solid var(--border);border-left:3px solid var(--accent);"
+                "border-radius:8px;font-size:0.82rem;margin-bottom:0.5rem;'>"
+                "<span style='font-size:0.62rem;font-weight:700;letter-spacing:0.12em;"
+                "text-transform:uppercase;color:var(--accent);display:block;margin-bottom:0.2rem;'>"
+                "Estimated run cost</span>"
+                f"{_cost_line}</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            _transcript_ready = False
+
+        # ── SYNTHESIZE ────────────────────────────────────────────────────────
+        run_clicked = st.button(
+            "▶  Synthesize", type="primary", use_container_width=True,
+            disabled=not _transcript_ready,
+        )
+        if not _transcript_ready:
+            st.caption("↑ Pick a transcript source first.")
+
+        # ── JIRA PUSH — gated by jira_write_back feature flag ────────────────
+        # Approval dialog is always shown regardless; this flag controls visibility.
+        _sb_jira_ready = bool(
+            os.environ.get("JIRA_BASE_URL") and os.environ.get("JIRA_EMAIL")
+            and os.environ.get("JIRA_API_TOKEN") and os.environ.get("JIRA_PROJECT_KEY")
+        )
+        _jira_write_allowed = _ff.is_enabled(_current_role, "jira_write_back")
+        if _sb_jira_ready and _jira_write_allowed and st.session_state.get("result"):
+            if st.button(f"⤴  Push to Jira ({os.environ.get('JIRA_PROJECT_KEY')})",
+                         use_container_width=True, key="sidebar_jira_btn"):
+                st.session_state["_trigger_jira"] = True  # called after definition below
+        elif _sb_jira_ready and _jira_write_allowed:
+            st.caption("Run a synthesis first, then push to Jira.")
+
+        # ── ADVANCED OPTIONS — admin only ─────────────────────────────────────
+        # Contributors get safe defaults silently; no expander shown to them.
+        if _is_admin():
+            with st.expander("⚙ Advanced options", expanded=False):
+                redact_pii = st.toggle(
+                    "Mask personal & sensitive info", value=True,
+                    help="Replace PII with stable placeholders before the LLM sees input. Un-redacted in output.",
+                )
+                dry_run = st.toggle(
+                    "Dry run (preview prompts only)", value=False,
+                    help="Build prompts but skip LLM calls — zero API spend.",
+                )
+                auto_switch = st.toggle(
+                    "Auto-switch model on failure / vision", value=False, key="auto_switch",
+                    help="On failure, retry on the other provider. Bumps Parser to Claude when an image is attached.",
+                )
+                compare_enabled = st.toggle(
+                    "Compare two presets side-by-side", value=False, key="compare_enabled",
+                    help="Runs the pipeline twice and shows a side-by-side summary. Doubles cost and time.",
+                )
+                compare_with_preset = "free"
+                if compare_enabled:
+                    compare_with_preset = st.selectbox(
+                        "Compare against",
+                        options=list(MODEL_PRESETS.keys()),
+                        index=list(MODEL_PRESETS.keys()).index("free"),
+                        key="compare_with_preset",
+                    )
+        else:
+            # Contributor defaults — PII always on, no dry-run, no compare
+            redact_pii = True
+            dry_run = False
+            auto_switch = False
+            compare_enabled = False
+            compare_with_preset = "free"
+
+    # ── end role-gated block ──────────────────────────────────────────────────
+    # Ensure _transcript_ready is always defined (viewer path doesn't set it).
+    if not _can_run():
+        _transcript_ready = False
 
     # ── FOOTER ─────────────────────────────────────────────────────────────
     st.markdown(
@@ -1694,6 +2494,106 @@ _save_ui_state({
 
 
 # -------------------------------------------------------- main canvas
+
+# ---- Admin Settings dialog ----
+@st.dialog("Admin Settings — Feature Flags", width="large")
+def show_admin_settings_dialog() -> None:
+    """Admin-only panel to view and edit contributor feature flags live."""
+    st.markdown(
+        "Edit what **contributors** can do. Changes save to `config/feature_flags.yaml` "
+        "and take effect immediately after saving. Admins always have full access."
+    )
+
+    flags = _ff.to_dict()
+    c = flags.get("contributor", {})
+
+    st.markdown("#### Model presets")
+    _all_preset_keys = ["free", "balanced", "premium", "local"]
+    _preset_labels_map = {"free": "Free (Gemini Flash)", "balanced": "Balanced (Gemini + Claude)",
+                          "premium": "Premium (all Claude)", "local": "Local (Ollama + Claude)"}
+    current_allowed = set(c.get("allowed_presets") or [])
+    new_allowed = []
+    cols = st.columns(4)
+    for i, key in enumerate(_all_preset_keys):
+        with cols[i]:
+            checked = st.checkbox(_preset_labels_map[key], value=(key in current_allowed),
+                                  key=f"ff_preset_{key}")
+            if checked:
+                new_allowed.append(key)
+    c["allowed_presets"] = new_allowed
+
+    st.markdown("#### Per-stage model locks")
+    st.caption("Lock a stage to a specific model — contributor UI still shows their selection, "
+               "but the orchestrator uses the locked model. Leave blank to let contributors choose freely.")
+    _stage_display = {
+        "parser": "Parser", "constraint": "Constraint Extractor",
+        "story_writer": "Story Writer", "epic_decomposer": "Epic Decomposer",
+        "gap_detector": "Gap Detector",
+    }
+    _lock_options = ["(none — contributor chooses)", "claude-sonnet-4-5", "claude-haiku-4-5",
+                     "gemini-2.5-flash", "gemini-2.5-pro", "ollama/llama3.2:3b"]
+    locks = dict(c.get("stage_model_locks") or {})
+    lcols = st.columns(2)
+    for i, (stage, label) in enumerate(_stage_display.items()):
+        with lcols[i % 2]:
+            current_lock = locks.get(stage) or _lock_options[0]
+            if current_lock not in _lock_options:
+                current_lock = _lock_options[0]
+            picked = st.selectbox(label, options=_lock_options,
+                                  index=_lock_options.index(current_lock),
+                                  key=f"ff_lock_{stage}")
+            locks[stage] = None if picked == _lock_options[0] else picked
+    c["stage_model_locks"] = locks
+
+    st.markdown("#### Rate limits")
+    rl_c1, rl_c2 = st.columns(2)
+    with rl_c1:
+        c["max_runs_per_hour"] = st.number_input(
+            "Max runs / hour", min_value=1, max_value=100,
+            value=int(c.get("max_runs_per_hour", 10)), key="ff_runs_hr")
+    with rl_c2:
+        c["max_cost_per_day_usd"] = st.number_input(
+            "Max cost / day (USD)", min_value=0.5, max_value=50.0,
+            value=float(c.get("max_cost_per_day_usd", 5.0)),
+            step=0.5, format="%.2f", key="ff_cost_day")
+
+    st.markdown("#### Feature toggles")
+    _toggles = [
+        ("compare_mode",    "A/B Compare mode",           "Doubles cost and time"),
+        ("vision_input",    "Vision / whiteboard upload",  "Allow photo inputs"),
+        ("dry_run_allowed", "Dry-run mode",                "Preview prompts without LLM calls"),
+        ("jira_write_back", "Jira write-back",             "Push to Jira (approval gate always shown)"),
+        ("live_jira_read",  "Live Jira read",              "Pull live backlog as input"),
+        ("pii_override",    "PII masking override",        "Allow turning off PII masking"),
+    ]
+    t_cols = st.columns(2)
+    for i, (key, label, hint) in enumerate(_toggles):
+        with t_cols[i % 2]:
+            c[key] = st.toggle(label, value=bool(c.get(key, False)),
+                               help=hint, key=f"ff_toggle_{key}")
+
+    flags["contributor"] = c
+    st.divider()
+    if st.button("💾  Save feature flags", type="primary", use_container_width=True,
+                 key="ff_save_btn"):
+        try:
+            FeatureFlags.save(flags)
+            # Reload so changes take effect immediately for this session.
+            st.session_state.feature_flags = FeatureFlags.load()
+            st.success("Saved. Feature flags updated — contributors will see the new settings on their next action.")
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Save failed: {e}")
+
+    st.caption(
+        "Saving writes `config/feature_flags.yaml`. In a multi-replica deployment, "
+        "all replicas read the same file so the change propagates on their next page load."
+    )
+
+
+# Deferred dialog triggers — called here (after definition) based on sidebar button clicks.
+if st.session_state.pop("_trigger_admin_settings", False):
+    show_admin_settings_dialog()
+
 
 # ---- Top-nav dialogs ----
 @st.dialog("How it works", width="large")
@@ -1739,17 +2639,78 @@ def show_jira_dialog() -> None:
     if not res:
         st.info("Run a synthesis first — then publish it to Jira here.")
         return
+    if not _can_push_jira():
+        st.error("Your account does not have permission to push to Jira.")
+        return
     _ready = all(os.environ.get(k) for k in
                  ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "JIRA_PROJECT_KEY"))
     if not _ready:
         st.warning("Set JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN / JIRA_PROJECT_KEY in `.env` to enable.")
         return
     _proj = os.environ.get("JIRA_PROJECT_KEY")
+
+    # ---- Human-in-the-loop approval gate ----
+    # Show a full review of what will be created BEFORE the button is active.
+    # Contributors always see this gate; admins also see it (good hygiene).
+    _epics = res.get("epics") or []
+    _n_epics = len(_epics)
+    _n_stories = sum(len(e.get("stories") or []) for e in _epics)
+    _n_tasks = sum(len(s.get("tasks") or []) for e in _epics for s in (e.get("stories") or []))
+    _n_conflicts = len(res.get("conflicts") or [])
+    _n_gaps = len(res.get("gaps") or [])
+    _guardrail_errors = sum(1 for f in (res.get("guardrail_findings") or []) if f.get("severity") == "error")
+
+    st.markdown(
+        f'<div style="padding:0.8rem 1rem;background:var(--bg-elev-1);border:1px solid var(--border);'
+        f'border-left:3px solid var(--accent);border-radius:8px;margin-bottom:0.8rem;">'
+        f'<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+        f'color:var(--accent);margin-bottom:0.4rem;">Review before publishing</div>'
+        f'<div style="font-size:0.85rem;display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 1.2rem;">'
+        f'<span>📦 <strong>{_n_epics}</strong> epic(s)</span>'
+        f'<span>📝 <strong>{_n_stories}</strong> story(ies)</span>'
+        f'<span>✅ <strong>{_n_tasks}</strong> sub-task(s)</span>'
+        f'<span>⚠ <strong>{_n_conflicts}</strong> conflict(s) flagged</span>'
+        f'<span>🔍 <strong>{_n_gaps}</strong> gap(s) detected</span>'
+        f'<span style="color:{"var(--rose)" if _guardrail_errors else "var(--text-muted)"};">'
+        f'🛡 <strong>{_guardrail_errors}</strong> guardrail error(s)</span>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    if _guardrail_errors > 0:
+        st.warning(
+            f"**{_guardrail_errors} guardrail error(s) detected.** "
+            "Review the Guardrails tab before publishing — these stories may have "
+            "missing grounding or unresolvable constraint conflicts."
+        )
+
     _subs = st.checkbox("Also create sub-tasks", value=True, key="jira_dlg_subtasks")
-    st.caption(f"Writes real issues to **{_proj}** — Epic → Story → Sub-task, with acceptance "
-               "criteria, priority, and conflict flags in each description.")
-    if st.button(f"⤴  Create in Jira ({_proj})", type="primary",
-                 use_container_width=True, key="jira_dlg_go"):
+
+    st.markdown(
+        f'<div style="padding:0.5rem 0.8rem;background:rgba(251,113,133,.08);'
+        f'border:1px solid rgba(251,113,133,.3);border-radius:6px;margin:0.5rem 0;font-size:0.82rem;">'
+        f'⚠ This will create <strong>{_n_epics} epic(s)</strong>, '
+        f'<strong>{_n_stories} story(ies)</strong>, and up to '
+        f'<strong>{_n_tasks} sub-task(s)</strong> as <em>real issues</em> in '
+        f'<strong>{_esc(_proj)}</strong>. This action cannot be automatically undone.</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Mandatory confirmation for contributors; admins can also confirm (same gate).
+    _confirmed = st.checkbox(
+        f"I confirm: create {_n_epics} epic(s), {_n_stories} story(ies), "
+        f"up to {_n_tasks} sub-task(s) in **{_proj}**",
+        value=False,
+        key="jira_dlg_confirm",
+    )
+
+    if st.button(
+        f"⤴  Create in Jira ({_proj})",
+        type="primary",
+        use_container_width=True,
+        key="jira_dlg_go",
+        disabled=not _confirmed,
+    ):
         with st.spinner(f"Creating issues in {_proj}…"):
             try:
                 from tools.jira_tool import JiraTool
@@ -1757,6 +2718,10 @@ def show_jira_dialog() -> None:
                     res, create_subtasks=_subs)
             except Exception as e:  # noqa: BLE001
                 st.session_state["jira_publish_result"] = {"error": str(e)}
+
+    if not _confirmed:
+        st.caption("Tick the confirmation checkbox above to enable the Create button.")
+
     _pub = st.session_state.get("jira_publish_result")
     if _pub:
         if _pub.get("error"):
@@ -1770,6 +2735,49 @@ def show_jira_dialog() -> None:
                     _pad = "" if _it["level"] == "epic" else "&nbsp;&nbsp;&nbsp;&nbsp;↳ "
                     st.markdown(f'{_pad}<a href="{_it["url"]}" target="_blank">{_it["key"]}</a> — {_it["summary"]}',
                                 unsafe_allow_html=True)
+
+            # ── Two-way sync: read back current Jira status ───────────────────
+            st.divider()
+            if st.button("🔄  Sync status from Jira", key="jira_sync_btn",
+                         use_container_width=True,
+                         help="Read back current status, assignee and priority from live Jira"):
+                with st.spinner("Fetching current status from Jira…"):
+                    try:
+                        from tools.jira_tool import JiraTool as _JT2
+                        _sync_statuses = _JT2(mode="live").sync_published_stories(_pub)
+                        st.session_state["jira_sync_statuses"] = _sync_statuses
+                    except Exception as _se:
+                        st.error(f"Sync failed: {_se}")
+
+            _sync = st.session_state.get("jira_sync_statuses")
+            if _sync:
+                st.markdown("**Current Jira status:**")
+                _status_colors = {
+                    "To Do": "#64748b", "In Progress": "#f59e0b",
+                    "Done": "#22c55e", "Closed": "#22c55e",
+                    "In Review": "#8b5cf6", "Blocked": "#ef4444",
+                }
+                for _s in _sync:
+                    _sc = _status_colors.get(_s["status"], "#94a3b8")
+                    _assignee = _s["assignee"] or "Unassigned"
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                        f'padding:6px 10px;background:var(--bg-elev-1);border-radius:6px;'
+                        f'margin-bottom:4px;font-size:0.8rem;">'
+                        f'<span><a href="{_s["url"]}" target="_blank" style="color:var(--accent);'
+                        f'text-decoration:none;font-weight:600;">{_esc(_s["key"])}</a>'
+                        f' &nbsp;<span style="color:var(--text-muted);">{_esc(_s["summary"][:50])}</span></span>'
+                        f'<span style="display:flex;gap:8px;align-items:center;">'
+                        f'<span style="font-size:0.68rem;color:{_sc};font-weight:700;'
+                        f'background:{_sc}22;padding:2px 8px;border-radius:10px;">{_esc(_s["status"])}</span>'
+                        f'<span style="color:var(--text-faint);font-size:0.72rem;">{_esc(_assignee)}</span>'
+                        f'</span></div>',
+                        unsafe_allow_html=True,
+                    )
+
+
+if st.session_state.pop("_trigger_jira", False):
+    show_jira_dialog()
 
 
 # ---- Header + adaptive top-right nav ----
@@ -1819,14 +2827,18 @@ _pipeline_placeholder = st.empty()
 _progress_placeholder = st.empty()
 
 with _pipeline_placeholder.container():
+    # Always use the CURRENT sidebar selection (st.session_state.models) for the
+    # pre-run pipeline cards so per-stage overrides are reflected immediately.
+    # Only use result["models"] AFTER a run to show what was actually used —
+    # but even then, show the current selection if it has changed since the run.
+    _last_run_models = (st.session_state.get("result") or {}).get("models") or {}
+    _current_models  = dict(st.session_state.get("models") or {})
+    _display_models  = _current_models if _current_models else _last_run_models
     _render_pipeline(
         stage_states=st.session_state.get("stage_states"),
         model=st.session_state.get("model_used") or None,
         token_usage=st.session_state.get("token_usage") or None,
-        models_per_stage=(
-            (st.session_state.get("result") or {}).get("models")
-            or st.session_state.get("models")
-        ),
+        models_per_stage=_display_models,
     )
 
 
@@ -1928,6 +2940,13 @@ def _resolve_tickets(selected, options: dict, uploaded) -> list[dict]:
 _main_canvas_run = bool(st.session_state.pop("_pending_run", False))
 
 if run_clicked or _main_canvas_run:
+    # ---- Rate limit check ----
+    try:
+        check_rate_limit(_current_user)
+    except RateLimitError as _rle:
+        st.error(f"**Rate limit reached:** {_rle}")
+        st.stop()
+
     # ---- Resolve inputs ----
     # Each picker is multi-select: combine every chosen sample (+ uploads)
     # into one source. Transcripts/wikis are concatenated; backlogs merged.
@@ -1952,6 +2971,20 @@ if run_clicked or _main_canvas_run:
     except InputError as e:
         st.error(f"Could not load inputs: {e}")
         st.stop()
+
+    # ---- Default-on PII redaction for uploaded content ----
+    # Any user-uploaded file may contain real customer/employee PII.
+    # Regardless of the sidebar toggle, force redaction when the user
+    # uploaded files rather than selecting bundled samples.
+    # Admins can override by setting redact_pii=False in the sidebar
+    # (the toggle is disabled for non-admins so they always land here).
+    _has_user_uploads = bool(
+        _as_upload_list(transcript_upload)
+        or _as_upload_list(constraints_upload)
+        or _as_upload_list(backlog_upload)
+    )
+    if _has_user_uploads and not _is_admin():
+        redact_pii = True  # enforce for contributor + viewer uploads
 
     # ---- Dry-run branch ----
     if dry_run:
@@ -2002,7 +3035,6 @@ if run_clicked or _main_canvas_run:
         orch = Orchestrator()
     except Exception as e:
         _progress_placeholder.error(f"Orchestrator init failed: {e}")
-        _cancel_placeholder.empty()
         st.stop()
 
     # Per-stage start timestamps so completed/failed events can report
@@ -2012,6 +3044,10 @@ if run_clicked or _main_canvas_run:
     # overwriting the placeholder per event) so each agent's lines stay
     # visible as the next stage runs.
     progress_log: list[str] = []
+
+    # Data source info is shown inline in each stage that actually fetches data
+    # (Constraint Extractor for Confluence, Gap Detector for Jira + GitHub).
+    # No pre-pipeline "Data sources" banner — only show it when it's used.
     # Track failovers / failures so we can show an end-of-run summary, a toast,
     # and a persistent badge — nothing changes provider silently.
     _events_seen = {"failover": [], "failed": []}
@@ -2061,9 +3097,10 @@ if run_clicked or _main_canvas_run:
             f'{(" · " + _esc(detail)) if detail else ""}{elapsed_suffix}</div>'
         )
         progress_log.append(entry)
-        with _pipeline_placeholder.container():
-            _render_pipeline(stage_states=stage_states)
-        _render_log()
+        # NOTE: no UI calls here — the main thread polls and renders every
+        # 300 ms via the loop below. Calling st.* from a background thread
+        # works inconsistently across Streamlit versions; the polling loop
+        # is the reliable approach that actually live-streams to the browser.
 
         # Check for user-initiated cancel between stages. Only interrupt on
         # "completed" or "skipped" events so we never cut a stage mid-call.
@@ -2130,7 +3167,12 @@ if run_clicked or _main_canvas_run:
     # Capture all session-state values NOW (main thread) before starting
     # the background thread. st.session_state is NOT thread-safe — reading
     # it from a daemon thread causes "has no attribute 'models'" errors.
-    _thread_models       = dict(st.session_state.get("models") or {})
+    # Apply any admin-configured stage model locks for this role.
+    # e.g. if story_writer is locked to "claude-sonnet-4-5", that overrides
+    # whatever preset the contributor selected.
+    _thread_models = _ff.apply_stage_locks(
+        _current_role, dict(st.session_state.get("models") or {})
+    )
     _thread_is_compare   = bool(st.session_state.get("compare_enabled"))
     _thread_compare_pset = st.session_state.get("compare_with_preset", "free")
     _thread_active_pset  = (st.session_state.get("active_preset") or "balanced").title()
@@ -2180,6 +3222,13 @@ if run_clicked or _main_canvas_run:
                     live_jira=_use_live_jira,
                     vision_attachments=_vision_atts,
                     auto_switch=_thread_auto_switch,
+                    run_metadata={
+                        "user_id":      _current_user,
+                        "role":         _current_role,
+                        "preset":       st.session_state.get("active_preset", "unknown"),
+                        "source_label": source_label,
+                        "auth_disabled": _auth_disabled,
+                    },
                 )
                 _result_q.put(("ok", r))
         except _PipelineCancelled:
@@ -2187,15 +3236,43 @@ if run_clicked or _main_canvas_run:
         except Exception as exc:  # noqa: BLE001
             _result_q.put(("error", exc))
 
-    # The native Streamlit "Stop" button (top-right during a run) cancels
-    # the script immediately. For a graceful between-stage cancel, the
-    # _cancel_event is also wired — set it via the progress callback check.
-    # We show a small hint so the user knows where to click.
-    st.caption("💡 Click **Stop** (top-right) to cancel the run.")
+    # Cancel button — visible during the run above the progress log.
+    # Graceful cancel: sets _cancel_event which the progress callback checks
+    # between stages. The run thread raises _PipelineCancelled on the next
+    # completed/skipped event so the current stage always finishes cleanly.
+    _cancel_col1, _cancel_col2 = st.columns([3, 1])
+    with _cancel_col2:
+        _cancel_placeholder = st.empty()
+        if _cancel_placeholder.button(
+            "✕  Cancel run",
+            key="cancel_run_btn",
+            use_container_width=True,
+            type="secondary",
+            help="Stops the pipeline between stages. Results up to this point are preserved.",
+        ):
+            _cancel_event.set()
 
     _thread = threading.Thread(target=_run_pipeline, daemon=True)
     _thread.start()
-    _thread.join()   # block main thread; UI updates come from the callback thread
+
+    # Live-stream the progress log to the browser.
+    # _thread.join() was used before but it blocks the main Streamlit thread,
+    # preventing the browser from receiving any WebSocket updates until the
+    # entire run finishes. The polling loop below lets the main thread render
+    # every 300 ms so each stage appears as it completes.
+    while _thread.is_alive():
+        with _pipeline_placeholder.container():
+            _render_pipeline(
+                stage_states=list(stage_states),  # snapshot to avoid race
+                model=st.session_state.get("model_used") or None,
+                token_usage=None,
+                models_per_stage=_thread_models,
+            )
+        _render_log()
+        time.sleep(0.3)
+
+    _thread.join()  # ensure thread is fully done before reading results
+    _cancel_placeholder.empty()  # remove cancel button once run finishes
 
     _status, _payload = _result_q.get()
     if _status == "cancelled":
@@ -2257,7 +3334,9 @@ if run_clicked or _main_canvas_run:
 
     # ---- Persist outputs ----
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = ROOT / "outputs" / stamp
+    # Scope outputs to the current user — outputs/<user_id>/<timestamp>/
+    _safe_uid = "".join(c if c.isalnum() or c in "-_." else "_" for c in (_current_user or "anonymous"))
+    run_dir = ROOT / "outputs" / _safe_uid / stamp
     # `result` from the orchestrator now includes `token_usage` and `model`.
     # write_outputs reads the synthesis content fields; the extras are
     # carried through to the JSON dump as well — useful downstream.
@@ -2297,6 +3376,7 @@ if run_clicked or _main_canvas_run:
     history_summary = {
         "run_id": f"{stamp}_{uuid.uuid4().hex[:6]}",
         "timestamp": stamp,
+        "user_id": _current_user,
         "source_label": source_label,
         "elapsed_seconds": elapsed,
         "epic_count": len(epics),
@@ -2531,6 +3611,19 @@ else:
     if n_stories > 0:
         actions.append(("edit", "✎  Edit stories", "secondary"))
     actions.append(("export", "↓  Export JSON / MD", "secondary"))
+    # Jira push — most important CTA, shown as primary button when ready
+    _jira_cta_ready = bool(
+        _can_push_jira()
+        and os.environ.get("JIRA_BASE_URL")
+        and os.environ.get("JIRA_API_TOKEN")
+        and os.environ.get("JIRA_PROJECT_KEY")
+    )
+    if _jira_cta_ready and n_stories > 0:
+        actions.append((
+            "push_jira",
+            f"⤴  Push to Jira ({os.environ.get('JIRA_PROJECT_KEY')})",
+            "primary",
+        ))
 
     st.markdown(
         '<div class="next-strip-label-row">WHAT&rsquo;S NEXT</div>',
@@ -2556,6 +3649,8 @@ else:
                     st.toast("Stories are in the Epics tab below", icon="📋")
                 elif akey == "export":
                     st.toast("Download buttons are inside each tab", icon="⬇️")
+                elif akey == "push_jira":
+                    show_jira_dialog()
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ---- Cost / token panel (expander) ----

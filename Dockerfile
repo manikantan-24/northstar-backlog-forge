@@ -58,8 +58,11 @@ COPY src/ ./src/
 COPY prompts/ ./prompts/
 COPY samples/ ./samples/
 COPY evaluation/ ./evaluation/
+COPY config/ ./config/
 
 # Pre-create runtime dirs so they exist with non-root ownership.
+# In production these are mounted as Azure File Share volumes — the dirs
+# ensure the app starts cleanly even without the mount.
 RUN mkdir -p outputs logs
 
 # Non-root user. Streamlit doesn't need root, and root-in-a-container is a

@@ -105,10 +105,13 @@ class GeminiTool(Tool):
     )
     def _call_with_retry(self, user_message: str, max_tokens: int) -> tuple[str, dict[str, Any]]:
         try:
-            # response_mime_type="application/json" lets us reliably get
-            # back a JSON-shaped response so the extractor doesn't have to
-            # peel prose off. The system prompt still tells the model
-            # *what* JSON to emit.
+            from telemetry import child_span as _cs
+        except ImportError:
+            from contextlib import nullcontext as _cs  # type: ignore[assignment]
+
+        with _cs("llm.call", **{"llm.provider": "google", "llm.model": self.model,
+                                "llm.max_tokens": max_tokens}) as _llm_span:
+          try:
             response = self._client.models.generate_content(
                 model=self.model,
                 contents=user_message,
@@ -118,7 +121,7 @@ class GeminiTool(Tool):
                     "response_mime_type": "application/json",
                 },
             )
-        except Exception as e:  # noqa: BLE001 — Gemini's exception taxonomy is wide
+          except Exception as e:  # noqa: BLE001 — Gemini's exception taxonomy is wide
             msg = str(e).lower()
             # Classify: transient (quota / rate / 5xx / network) vs permanent (auth, invalid).
             if any(t in msg for t in (
@@ -129,13 +132,18 @@ class GeminiTool(Tool):
                 raise _TransientGeminiError(f"Gemini transient error: {e}") from e
             raise ToolError(f"Gemini API error: {e}") from e
 
-        # New SDK exposes the joined text on `response.text`.
-        text = getattr(response, "text", "") or ""
-        usage = {"input_tokens": None, "output_tokens": None}
-        um = getattr(response, "usage_metadata", None)
-        if um is not None:
-            usage = {
-                "input_tokens": getattr(um, "prompt_token_count", None),
-                "output_tokens": getattr(um, "candidates_token_count", None),
-            }
-        return text, usage
+          # New SDK exposes the joined text on `response.text`.
+          text = getattr(response, "text", "") or ""
+          usage = {"input_tokens": None, "output_tokens": None}
+          um = getattr(response, "usage_metadata", None)
+          if um is not None:
+              usage = {
+                  "input_tokens": getattr(um, "prompt_token_count", None),
+                  "output_tokens": getattr(um, "candidates_token_count", None),
+              }
+          try:
+              _llm_span.set_attribute("llm.tokens_in",  usage.get("input_tokens")  or 0)
+              _llm_span.set_attribute("llm.tokens_out", usage.get("output_tokens") or 0)
+          except Exception:  # noqa: BLE001
+              pass
+          return text, usage

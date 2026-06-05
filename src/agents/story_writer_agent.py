@@ -64,13 +64,34 @@ class StoryWriterAgent(Agent):
 
         stories = parsed.get("stories", [])
         # Build a lookup from topic id → topic so we can attach the source
-        # quote as evidence on every story. Reviewers (and downstream Jira
-        # publishing) get a click-through from the story to the customer
-        # words that motivated it, without re-prompting the LLM.
+        # quote as evidence on every story.
         topics_by_id = {t.get("id"): t for t in topics if isinstance(t, dict)}
+        repaired: list[dict] = []
         for i, s in enumerate(stories):
             s.setdefault("id", f"ST-{i + 1:02d}")
+            _sid_before = (s.get("source_topic_id") or "").strip()
+            self._repair_source_topic_id(s, topics, topics_by_id)
+            _sid_after = (s.get("source_topic_id") or "").strip()
+            if _sid_before != _sid_after:
+                repaired.append({"story_id": s.get("id"), "from": _sid_before, "to": _sid_after})
             self._attach_evidence(s, topics_by_id)
+
+        if repaired:
+            try:
+                from telemetry import child_span as _cs
+                with _cs("story.repair", **{"repair.count": len(repaired)}):
+                    pass  # span records the event; detail goes to audit log below
+            except Exception:  # noqa: BLE001
+                pass
+            self.emit(
+                "story_repair",
+                payload={"repaired_count": len(repaired), "repairs": repaired},
+                reasoning=(
+                    f"{len(repaired)} story(ies) had invalid source_topic_id values "
+                    f"(e.g. '...' or unknown IDs). Auto-repaired by matching story text "
+                    f"against topic summaries. Check these stories if grounding accuracy is critical."
+                ),
+            )
 
         self.memory.put("stories", stories)
 
@@ -92,23 +113,96 @@ class StoryWriterAgent(Agent):
         )
 
     @staticmethod
+    def _repair_source_topic_id(
+        story: dict,
+        topics: list[dict],
+        topics_by_id: dict,
+    ) -> None:
+        """Fix invalid source_topic_id values produced by weaker LLMs.
+
+        Weaker models sometimes output "..." or an id that doesn't match any
+        parsed topic. This method replaces the bad value with the best-matching
+        topic found by word-overlap between the story text and each topic's
+        theme/summary/quote. Falls back to the first unmatched topic.
+        """
+        _PLACEHOLDERS = {"...", "null", "", "none", "n/a", "tbd"}
+        sid = (story.get("source_topic_id") or "").strip()
+
+        # Already valid — nothing to do.
+        if sid and sid not in _PLACEHOLDERS and sid in topics_by_id:
+            return
+
+        if not topics:
+            return
+
+        # Score each topic by word overlap with the story text.
+        story_text = " ".join(filter(None, [
+            story.get("title", ""),
+            story.get("description", ""),
+            story.get("user_story", ""),
+        ])).lower()
+        story_words = set(story_text.split())
+
+        best_topic_id: str | None = None
+        best_score = -1
+        for t in topics:
+            if not isinstance(t, dict):
+                continue
+            topic_text = " ".join(filter(None, [
+                t.get("theme", ""),
+                t.get("summary", ""),
+                t.get("raw_quote", ""),
+            ])).lower()
+            score = len(story_words & set(topic_text.split()))
+            if score > best_score:
+                best_score = score
+                best_topic_id = t.get("id")
+
+        if best_topic_id:
+            story["source_topic_id"] = best_topic_id
+
+    # Placeholder values the LLM sometimes emits instead of real content.
+    _PLACEHOLDERS: frozenset[str] = frozenset({
+        "...", "…", "null", "none", "n/a", "tbd", "unknown", "—", "-", ""
+    })
+
+    @staticmethod
     def _attach_evidence(story: dict, topics_by_id: dict) -> None:
         """Add an `evidence` block to a story citing the source topic.
 
-        Evidence is the parser-extracted raw_quote plus speaker / sentiment
-        metadata, plus the topic id. If the story has no source_topic_id
-        (or it doesn't match any parsed topic) evidence is set to an empty
-        list — never None — so downstream code can iterate safely.
+        Evidence is the parser-extracted raw_quote plus speaker / sentiment.
+        Placeholder values ("...", "null", etc.) produced by weaker LLMs are
+        treated as missing — the evidence block is left empty so the UI shows
+        nothing rather than displaying a meaningless "..." quote.
         """
         sid = story.get("source_topic_id")
         topic = topics_by_id.get(sid) if sid else None
         if not topic:
             story.setdefault("evidence", [])
             return
+
+        raw_quote = (topic.get("raw_quote") or "").strip()
+        speaker   = (topic.get("speaker")   or "").strip()
+        sentiment = (topic.get("sentiment") or "").strip()
+
+        # Strip placeholder values so they never reach the UI.
+        _ph = StoryWriterAgent._PLACEHOLDERS
+        if raw_quote.lower() in _ph:
+            raw_quote = ""
+        if speaker.lower() in _ph:
+            speaker = ""
+        if sentiment.lower() in _ph:
+            sentiment = ""
+
+        # Only attach evidence when there is a real quote to show.
+        if not raw_quote:
+            story.setdefault("evidence", [])
+            return
+
         story["evidence"] = [{
-            "topic_id": sid,
-            "theme": topic.get("theme", ""),
-            "raw_quote": topic.get("raw_quote", ""),
-            "speaker": topic.get("speaker", ""),
-            "sentiment": topic.get("sentiment", ""),
+            "topic_id":  sid,
+            "theme":     topic.get("theme", ""),
+            "raw_quote": raw_quote,
+            "speaker":   speaker,
+            "sentiment": sentiment,
         }]

@@ -295,6 +295,55 @@ class JiraTool(Tool):
             "base_url": self._base_url,
         }
 
+    # ----------------------------------------------------- two-way sync
+
+    def sync_published_stories(self, publish_result: dict) -> list[dict]:
+        """Read back current status of previously published stories from live Jira.
+
+        Given a `publish_result` dict (from `publish_synthesis()`), fetches
+        the current status, assignee, and priority for each created story/epic
+        so the UI can show live Jira state without the user leaving the app.
+
+        Returns a list of status records:
+            [{key, summary, status, assignee, priority, url}, ...]
+        """
+        self._require_live_credentials()
+        created = publish_result.get("created") or []
+        keys = [c["key"] for c in created if c.get("key") and c.get("level") in ("epic", "story")]
+        if not keys:
+            return []
+
+        try:
+            import requests
+        except ImportError as e:
+            raise ToolError("'requests' required for Jira sync") from e
+
+        # Batch fetch via JQL — much faster than one call per issue.
+        jql = f'key in ({",".join(keys)})'
+        url = f"{self._base_url}/rest/api/3/search/jql"
+        resp = requests.get(
+            url,
+            params={"jql": jql, "fields": "summary,status,assignee,priority", "maxResults": 200},
+            auth=(self._email, self._api_token),
+            headers={"Accept": "application/json"},
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            raise ToolError(f"Jira sync failed ({resp.status_code}): {resp.text[:200]}")
+
+        statuses = []
+        for issue in resp.json().get("issues") or []:
+            fields = issue.get("fields") or {}
+            statuses.append({
+                "key":      issue.get("key", ""),
+                "summary":  fields.get("summary", ""),
+                "status":   (fields.get("status") or {}).get("name", "Unknown"),
+                "assignee": (fields.get("assignee") or {}).get("displayName", "Unassigned"),
+                "priority": (fields.get("priority") or {}).get("name", ""),
+                "url":      f"{self._base_url}/browse/{issue.get('key', '')}",
+            })
+        return statuses
+
     # ----------------------------------------------------- mock
 
     def _load_fixture(self) -> list[dict]:

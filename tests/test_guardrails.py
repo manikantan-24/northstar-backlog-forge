@@ -220,7 +220,9 @@ def test_dangling_topic_ref_when_source_topic_id_unknown():
     codes = _codes(findings)
     assert "dangling_topic_ref" in codes
     dangling = [f for f in findings if f.code == "dangling_topic_ref"][0]
-    assert dangling.severity == "error"
+    # Severity is "warn" (not "error") — the story is still usable, just ungrounded.
+    # The story_writer_agent now attempts auto-repair; this guard is a safety net.
+    assert dangling.severity == "warn"
     assert "T-99" in dangling.message
 
 

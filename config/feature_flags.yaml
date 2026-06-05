@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Backlog Synthesizer — Admin-configurable feature flags
+#
+# Edit this file (or use the in-app Admin Settings panel) to control what
+# contributors can do. Changes take effect on the next page load.
+# Admins always have full access — only contributor and viewer are configured here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+contributor:
+
+  # ── Model presets available in the sidebar preset selector ────────────────
+  # Valid values: "free", "balanced", "premium", "local"
+  # "premium" and "local" are typically admin-only (cost / infra concerns).
+  allowed_presets:
+    - free
+    - balanced
+
+  # ── Per-stage model locks ─────────────────────────────────────────────────
+  # Set a stage to a specific model ID to lock it for contributor runs.
+  # null (or leave blank) means the contributor picks freely within allowed_presets.
+  # Example: lock story_writer to claude-sonnet-4-5 even on the Free preset:
+  #   story_writer: "claude-sonnet-4-5"
+  stage_model_locks:
+    parser: null
+    constraint: null
+    story_writer: null
+    epic_decomposer: null
+    gap_detector: null
+
+  # ── Rate limits ───────────────────────────────────────────────────────────
+  max_runs_per_hour: 10
+  max_cost_per_day_usd: 5.00
+
+  # ── Feature toggles ───────────────────────────────────────────────────────
+  # compare_mode:     A-B comparison of two presets (doubles cost + time)
+  compare_mode: true
+  # vision_input:     Allow whiteboard photo uploads
+  vision_input: true
+  # dry_run_allowed:  Allow prompt preview without LLM calls
+  dry_run_allowed: true
+  # jira_write_back:  Allow pushing synthesized backlog to live Jira
+  #                   (always gated by the human approval dialog regardless)
+  jira_write_back: true
+  # live_jira_read:   Allow pulling live Jira backlog as input
+  live_jira_read: false
+  # pii_override:     Allow turning off PII masking for uploaded content
+  pii_override: false
+
+viewer:
+  # Viewers are read-only — all capabilities off.
+  # These values are informational; the code enforces viewer = no synthesis.
+  allowed_presets: []
+  stage_model_locks: {}
+  max_runs_per_hour: 0
+  max_cost_per_day_usd: 0.00
+  compare_mode: false
+  vision_input: false
+  dry_run_allowed: false
+  jira_write_back: false
+  live_jira_read: false
+  pii_override: false
