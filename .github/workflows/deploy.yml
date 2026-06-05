@@ -136,17 +136,16 @@ jobs:
 
       - name: Deploy new revision to Container Apps
         run: |
+          IMAGE="${{ needs.build-and-push.outputs.full-image }}"
+          echo "Deploying image: $IMAGE"
+          echo "App: ${{ env.CONTAINERAPP_NAME }}"
+          echo "RG:  ${{ env.AZURE_RESOURCE_GROUP }}"
+
+          # Update image only — env vars already set via Terraform/Key Vault
           az containerapp update \
             --name "${{ env.CONTAINERAPP_NAME }}" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --container-name "${{ env.CONTAINERAPP_NAME }}" \
-            --image "${{ needs.build-and-push.outputs.full-image }}" \
-            --set-env-vars \
-              "AUTH_DISABLED=0" \
-              "OTEL_ENABLED=1" \
-              "OTEL_SERVICE_NAME=backlog-synthesizer" \
-              "ATLASSIAN_MCP_ENABLED=1" \
-              "GITHUB_MCP_ENABLED=1"
+            --image "$IMAGE"
 
       - name: Wait for revision to be active
         run: |
