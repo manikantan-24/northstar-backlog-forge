@@ -148,6 +148,20 @@ resource "azurerm_key_vault_secret" "acr_password" {
   depends_on    = [time_sleep.kv_policy_propagation]
 }
 
+resource "azurerm_key_vault_secret" "auth_cookie_secret" {
+  name         = "AUTH-COOKIE-SECRET"
+  value        = var.auth_cookie_secret
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
+}
+
+resource "azurerm_key_vault_secret" "slack_webhook_url" {
+  name         = "SLACK-WEBHOOK-URL"
+  value        = var.slack_webhook_url
+  key_vault_id  = azurerm_key_vault.main.id
+  depends_on    = [time_sleep.kv_policy_propagation]
+}
+
 # ── Storage Account + Azure Files ─────────────────────────────────────────────
 resource "azurerm_storage_account" "main" {
   name                     = var.storage_account_name
@@ -242,6 +256,16 @@ resource "azurerm_container_app" "app" {
   secret {
     name                = "otel-headers"
     key_vault_secret_id = azurerm_key_vault_secret.otel_headers.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
+  }
+  secret {
+    name                = "auth-cookie-secret"
+    key_vault_secret_id = azurerm_key_vault_secret.auth_cookie_secret.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
+  }
+  secret {
+    name                = "slack-webhook-url"
+    key_vault_secret_id = azurerm_key_vault_secret.slack_webhook_url.versionless_id
     identity            = azurerm_user_assigned_identity.app.id
   }
 
@@ -362,6 +386,14 @@ resource "azurerm_container_app" "app" {
       env {
         name        = "OTEL_EXPORTER_OTLP_HEADERS"
         secret_name = "otel-headers"
+      }
+      env {
+        name        = "AUTH_COOKIE_SECRET"
+        secret_name = "auth-cookie-secret"
+      }
+      env {
+        name        = "SLACK_WEBHOOK_URL"
+        secret_name = "slack-webhook-url"
       }
 
       volume_mounts {

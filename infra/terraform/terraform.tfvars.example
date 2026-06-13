@@ -31,3 +31,5 @@ jira_api_token       = "ATATT3x..."           # from JIRA_API_TOKEN in .env
 github_token         = "ghp_..."              # from GITHUB_TOKEN in .env
 entra_client_secret  = "QWC8Q~..."            # from ENTRA_CLIENT_SECRET in .env
 otel_headers         = "Authorization=Basic MTY3..."  # from OTEL_EXPORTER_OTLP_HEADERS in .env
+auth_cookie_secret   = "..."                  # from AUTH_COOKIE_SECRET in .env
+slack_webhook_url    = "https://hooks.slack.com/services/..."  # from SLACK_WEBHOOK_URL in .env

@@ -139,3 +139,17 @@ variable "otel_headers" {
   sensitive   = true
   default     = ""
 }
+
+variable "auth_cookie_secret" {
+  description = "Secret key for signing auth session cookies"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for run notifications"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
