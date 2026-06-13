@@ -154,9 +154,9 @@ jobs:
               "JIRA_EMAIL=${{ secrets.JIRA_EMAIL }}" \
               "JIRA_API_TOKEN=secretref:jira-api-token" \
               "JIRA_PROJECT_KEY=${{ secrets.JIRA_PROJECT_KEY }}" \
-              "GITHUB_TOKEN=secretref:github-token" \
-              "GITHUB_OWNER=${{ secrets.GITHUB_OWNER }}" \
-              "GITHUB_REPO=${{ secrets.GITHUB_REPO }}" \
+              "GITHUB_TOKEN=${{ secrets.GH_TOKEN }}" \
+              "GITHUB_OWNER=${{ secrets.GH_OWNER }}" \
+              "GITHUB_REPO=${{ secrets.GH_REPO }}" \
               "GITHUB_MCP_ENABLED=1" \
               "ATLASSIAN_MCP_ENABLED=1" \
               "ENTRA_TENANT_ID=${{ secrets.ENTRA_TENANT_ID }}" \
