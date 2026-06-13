@@ -138,6 +138,28 @@ jobs:
       - name: Install Container Apps CLI extension
         run: az extension add --name containerapp --upgrade --yes
 
+      - name: Ensure Container App secrets are registered
+        run: |
+          # Register auth-cookie-secret and slack-webhook-url as KV-backed secrets
+          # via the managed identity. Idempotent — safe to re-run.
+          MI_ID=$(az identity show \
+            --name id-backlog-synthesizer \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --query id -o tsv 2>/dev/null || echo "")
+
+          if [ -n "$MI_ID" ]; then
+            KV_BASE="https://kv-backlog-synth.vault.azure.net/secrets"
+            az containerapp secret set \
+              --name "${{ env.CONTAINERAPP_NAME }}" \
+              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+              --secrets \
+                "auth-cookie-secret=keyvaultref:${KV_BASE}/AUTH-COOKIE-SECRET,identityref:${MI_ID}" \
+                "slack-webhook-url=keyvaultref:${KV_BASE}/SLACK-WEBHOOK-URL,identityref:${MI_ID}" \
+              2>&1 || echo "Warning: secret registration failed — secrets may already exist or KV not ready"
+          else
+            echo "Warning: managed identity not found, skipping KV secret registration"
+          fi
+
       - name: Deploy new revision to Container Apps
         run: |
           IMAGE="${{ secrets.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
