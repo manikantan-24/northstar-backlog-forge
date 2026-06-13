@@ -355,7 +355,7 @@ class OutputScanner:
 # redact/restore round-trip in one place so PII handling has a single owner.
 
 from dataclasses import dataclass as _dc, field as _field
-from typing import Iterable as _Iterable, Optional as _Optional
+from typing import Optional as _Optional
 
 _PII_REDACT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),

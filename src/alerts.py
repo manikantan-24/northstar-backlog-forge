@@ -203,7 +203,7 @@ def post_synthesis_notification(
 
 def _slack_synthesis_message(p: dict) -> dict:
     lines = [
-        f":white_check_mark: *Backlog Synthesizer — run complete*",
+        ":white_check_mark: *Backlog Synthesizer — run complete*",
         f"*Source:* {p['source_label'] or '—'}   *User:* `{p['user']}`",
         f"*Epics:* {p['epic_count']}   *Stories:* {p['story_count']}   "
         f"*Gaps:* {p['gap_count']}   *Conflicts:* {p['conflict_count']}",

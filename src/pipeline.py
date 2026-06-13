@@ -482,7 +482,7 @@ def initialize_node(state: PipelineState, config: RunnableConfig) -> dict:
     # ---- PII redaction (pre-LLM) — active when strict_redact=True ----
     _redaction_map = None
     if state.get("strict_redact"):
-        from security import redact_pii, redact_backlog_pii, RedactionMap
+        from security import redact_pii, redact_backlog_pii
         transcript_clean, _rmap = redact_pii(transcript_clean)
         constraint_clean, _rmap = redact_pii(constraint_clean, rmap=_rmap)
         existing_tickets, _rmap = redact_backlog_pii(existing_tickets, rmap=_rmap)
