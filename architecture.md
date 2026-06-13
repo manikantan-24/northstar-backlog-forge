@@ -83,7 +83,7 @@ flowchart TB
 
     %% ── Deployment ────────────────────────────────────────────────
     subgraph Deploy["Deployment (Azure)"]
-        GHA["GitHub Actions\nCI: 210 tests + lint\nCD: build→push→deploy"]:::deploy
+        GHA["GitHub Actions\nCI: 205 tests + lint\nPython 3.11 + 3.13 matrix\nCD: build→push→deploy"]:::deploy
         ACR["Azure Container\nRegistry"]:::deploy
         ACA["Azure Container Apps\npython:3.11-slim\nscale-to-zero"]:::deploy
         KV["Azure Key Vault\nAnthropicKey\nJiraToken\nGoogleKey"]:::deploy
@@ -165,6 +165,28 @@ sequenceDiagram
     U->>J: Sync status from Jira
     J-->>U: {status, assignee, priority}
 ```
+
+---
+
+## Authentication & Security Layer
+
+### Microsoft Entra ID SSO (`src/entra_auth.py`)
+
+| Concern | Implementation |
+|---|---|
+| Token verification | RS256 signature via Microsoft JWKS endpoint (`PyJWKClient` + PyJWT) |
+| CSRF protection | Server-side state nonce store — UUID per request, 600s TTL, single-use |
+| Config freshness | `_cfg()` reads env vars dynamically on every call (no Streamlit module-cache stale values) |
+| HTTP errors | `raise_for_status()` on token exchange — 4xx/5xx surfaces immediately |
+| Issuer trust | Accepts both `login.microsoftonline.com/{tid}/v2.0` and `sts.windows.net/{tid}/` |
+| Misconfiguration guard | Hard-fail if `AUTH_DISABLED=1` and `ENTRA_TENANT_ID` are both set |
+
+### Jira Security (`src/tools/jira_tool.py`)
+
+| Concern | Implementation |
+|---|---|
+| Project key injection | Regex `^[A-Z][A-Z0-9]{1,9}$` validated at init — raises `ToolError` on mismatch |
+| JQL injection | Full escaping of `\`, `"`, `'` in all search strings before JQL interpolation |
 
 ---
 

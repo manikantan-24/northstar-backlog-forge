@@ -12,7 +12,7 @@ completed in June 2026.
 | Severity | Items open |
 |---|---|
 | P0 — must close before any production user | **0 open (all done)** |
-| P1 — close in month one | 2 remaining |
+| P1 — close in month one | **1 remaining** (output directory scoping) |
 | P2 — quality of life | 3 remaining |
 
 ---
@@ -64,12 +64,16 @@ Admins can override. Strict-redact mode halts the pipeline on violation.
 
 ## P1 — Close in month one
 
-### 6. Enterprise SSO (Azure AD / SAML)
-**Status:** Not implemented. Current auth is username/password with bcrypt.
-**Path forward:** Replace `streamlit-authenticator` with `msal-streamlit-authentication`
-for Azure AD OAuth. The 3-role structure (viewer/contributor/admin) maps directly
-to Azure AD app roles. The `auth.yaml` role config remains as a fallback.
-**Effort:** 1-2 days.
+### 6. Enterprise SSO (Azure AD / SAML) ✅
+**Status:** Implemented. `src/entra_auth.py` fully rewritten with:
+- RS256 JWT signature verification via Microsoft JWKS endpoint (PyJWT + `PyJWKClient`) — replaces the previous insecure base64-decode-only path
+- Server-side state nonce store with 600-second TTL and single-use consumption (CSRF protection)
+- Dynamic `_cfg()` reads env vars on every call — no stale Streamlit module-cache values
+- `raise_for_status()` on token exchange — HTTP errors surface immediately
+- Supports both tenant-ID and tenant-domain OIDC issuer formats
+- AUTH_DISABLED misconfiguration guard in `app.py` prevents accidental bypass when Entra is also configured
+
+The 3-role RBAC (viewer / contributor / admin) maps directly to Azure AD app roles. The `auth.yaml` fallback is preserved for local dev.
 
 ### 7. Output directory scoped per user
 **Status:** `user_id` is recorded in every run log but `outputs/` is not

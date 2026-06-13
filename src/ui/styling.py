@@ -75,100 +75,190 @@ button[title="View app in Streamlit Community Cloud"],
 button[aria-label="Open app in Streamlit Community Cloud"],
 .stDeployButton { display: none !important; visibility: hidden !important; height: 0 !important; }
 
-/* ── Enterprise login page ─────────────────────────────────────── */
+/* ── Enterprise login page — Premium Dark ────────────────────────── */
 .login-wrap {
-    display:flex; flex-direction:column; align-items:center;
-    justify-content:center; min-height:100vh; width:100%;
-    /* Background handled by .stApp override injected on login page */
-    padding:2rem 1rem;
+    position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:9999;
+    display:flex; flex-direction:row; align-items:stretch;
+    overflow:hidden; background:#060c1e;
 }
 
-/* Top brand bar */
-.login-acc-bar {
-    font-size:0.78rem; font-weight:700; letter-spacing:0.18em;
-    text-transform:uppercase; color:#5e6a8a;
-    margin-bottom:2.5rem; display:flex; align-items:center; gap:8px;
+/* Animated ambient orbs */
+.login-orb { position:absolute; border-radius:50%; pointer-events:none; filter:blur(95px); }
+.login-orb-1 {
+    width:700px; height:700px; top:-250px; left:-130px;
+    background:radial-gradient(circle,rgba(109,40,217,0.72),transparent 62%);
+    animation:lorb1 22s ease-in-out infinite alternate;
 }
-.login-acc-bar .acc-purple { color:#a100ff; font-size:1rem; }
+.login-orb-2 {
+    width:580px; height:580px; bottom:-220px; right:320px;
+    background:radial-gradient(circle,rgba(30,58,175,0.62),transparent 62%);
+    animation:lorb2 29s ease-in-out infinite alternate;
+}
+.login-orb-3 {
+    width:400px; height:400px; top:36%; right:22%;
+    background:radial-gradient(circle,rgba(161,0,255,0.38),transparent 62%);
+    animation:lorb3 19s ease-in-out infinite alternate;
+}
+@keyframes lorb1 { 0%{transform:translate(0,0)} 100%{transform:translate(58px,40px)} }
+@keyframes lorb2 { 0%{transform:translate(0,0)} 100%{transform:translate(-44px,-30px)} }
+@keyframes lorb3 { 0%{transform:translate(0,-50%)scale(1)} 100%{transform:translate(-24px,-50%)scale(1.2)} }
+/* Dot-grid overlay */
+.login-wrap::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background-image:radial-gradient(rgba(99,60,255,0.11) 1px, transparent 1px);
+    background-size:30px 30px;
+}
 
-/* Main card */
+/* ── LEFT PANEL ──────────────────────────────────────────────── */
+.login-left {
+    flex:0 0 56%; position:relative; z-index:1;
+    display:flex; flex-direction:column;
+    padding:3rem 3.5rem 0;
+    border-right:1px solid rgba(99,60,255,0.1);
+}
+/* NorthStar logo — login large */
+.ns-logo-lg { display:flex; align-items:center; gap:12px; margin-bottom:3.2rem; }
+.ns-logo-lg-mark {
+    width:46px; height:46px; border-radius:12px;
+    background:rgba(8,16,42,0.95); border:1.5px solid rgba(245,198,66,0.32);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.ns-logo-lg-text { display:flex; flex-direction:column; line-height:1.05; }
+.ns-logo-lg-name { font-size:1.2rem; font-weight:800; color:#f0f4ff; letter-spacing:-0.02em; }
+.ns-logo-lg-sub {
+    font-size:0.55rem; font-weight:700; letter-spacing:0.28em;
+    text-transform:uppercase; color:rgba(245,198,66,0.72); margin-top:2px;
+}
+/* Hero block wrapper */
+.login-hero-block { display:flex; flex-direction:column; }
+
+/* Badge */
+.login-badge {
+    display:inline-flex; align-items:center; gap:7px;
+    font-size:0.67rem; font-weight:700; letter-spacing:0.16em; text-transform:uppercase;
+    color:#a78bfa; background:rgba(109,40,217,0.15); border:1px solid rgba(109,40,217,0.28);
+    border-radius:999px; padding:0.28rem 0.85rem; margin-bottom:1.4rem;
+}
+.login-badge-dot {
+    width:5px; height:5px; border-radius:50%; background:#a78bfa;
+    animation:bdot 2.2s ease-in-out infinite;
+}
+@keyframes bdot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
+/* Hero */
+.login-h1 {
+    font-size:3.5rem; font-weight:900; color:#f0f4ff;
+    line-height:0.97; letter-spacing:-0.05em; margin-bottom:0.12rem;
+}
+.login-h1 span {
+    background:linear-gradient(128deg,#c084fc 0%,#818cf8 52%,#60a5fa 100%);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+}
+.login-h2 {
+    font-size:3.5rem; font-weight:900; color:rgba(240,244,255,0.17);
+    line-height:0.97; letter-spacing:-0.05em; margin-bottom:1.3rem;
+}
+.login-pitch {
+    font-size:0.84rem; color:rgba(175,185,220,0.62); line-height:1.74;
+    max-width:350px; margin-bottom:2.2rem;
+}
+/* Stats */
+.login-stats {
+    display:flex; gap:2.5rem; margin-bottom:2.6rem;
+    padding-top:1.2rem; border-top:1px solid rgba(255,255,255,0.06);
+}
+.login-stat-num {
+    font-size:1.55rem; font-weight:900; color:#f0f4ff;
+    letter-spacing:-0.04em; line-height:1;
+}
+.login-stat-label {
+    font-size:0.59rem; font-weight:600; letter-spacing:0.13em;
+    text-transform:uppercase; color:rgba(175,185,220,0.42); margin-top:4px;
+}
+/* Neural network viz */
+.login-viz { flex:0 0 auto; margin:0 -3.5rem; }
+.login-viz svg { width:100%; height:auto; display:block; }
+/* Node pulse animations */
+.node-pulse   { animation:npulse 3.4s ease-in-out infinite; transform-origin:center; }
+.node-pulse-2 { animation:npulse 3.4s ease-in-out 1.2s infinite; transform-origin:center; }
+.hub-ring     { animation:hring 3.6s ease-in-out infinite; transform-origin:280px 100px; }
+.hub-ring-2   { animation:hring 3.6s ease-in-out 1.7s infinite; transform-origin:280px 100px; }
+@keyframes npulse { 0%,100%{opacity:0.55;transform:scale(1)} 50%{opacity:0.06;transform:scale(2.1)} }
+@keyframes hring  { 0%,100%{opacity:0.22;transform:scale(1)} 50%{opacity:0.03;transform:scale(1.9)} }
+/* Accenture footer */
+.login-acc-footer {
+    padding:1.1rem 0 1.6rem; font-size:0.63rem; font-weight:700;
+    letter-spacing:0.18em; text-transform:uppercase; color:rgba(156,163,175,0.38);
+    display:flex; align-items:center; gap:7px;
+}
+.login-acc-footer .login-acc-sep { color:rgba(161,0,255,0.55); }
+
+/* ── RIGHT PANEL ─────────────────────────────────────────────── */
+.login-right {
+    flex:1; position:relative; z-index:1;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:2.5rem;
+}
 .login-card {
-    background:rgba(17,22,42,0.96);
-    border:1px solid rgba(255,255,255,0.07);
-    border-top:1px solid rgba(161,0,255,0.35);
-    border-radius:16px; padding:3rem 3.5rem 2.5rem;
-    max-width:460px; width:100%;
-    box-shadow:
-        0 1px 0 0 rgba(161,0,255,0.4) inset,
-        0 24px 64px rgba(0,0,0,0.55),
-        0 4px 16px rgba(161,0,255,0.08);
-    text-align:center;
+    width:100%; max-width:358px;
+    background:rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.1);
+    border-radius:22px; padding:2.6rem 2.2rem 2.2rem;
+    box-shadow:0 0 80px rgba(109,40,217,0.1), 0 24px 64px rgba(0,0,0,0.5);
+    backdrop-filter:blur(28px); -webkit-backdrop-filter:blur(28px);
 }
-
-/* Client name */
-.login-client {
-    font-size:0.7rem; font-weight:700; letter-spacing:0.2em;
-    text-transform:uppercase; color:#a100ff;
-    margin-bottom:1rem;
-}
-
-/* Product mark */
-.login-product-mark {
+.login-card-icon {
+    width:52px; height:52px; border-radius:14px;
+    background:linear-gradient(135deg,rgba(109,40,217,0.28),rgba(161,0,255,0.16));
+    border:1px solid rgba(109,40,217,0.32);
     display:flex; align-items:center; justify-content:center;
-    gap:10px; margin-bottom:0.6rem;
+    margin-bottom:1.6rem; box-shadow:0 0 26px rgba(109,40,217,0.2);
 }
-.login-product-diamond {
-    width:28px; height:28px; background:#a100ff;
-    transform:rotate(45deg); border-radius:4px;
-    flex-shrink:0;
-    box-shadow:0 0 16px rgba(161,0,255,0.5);
+.login-card-client {
+    font-size:0.61rem; font-weight:700; letter-spacing:0.2em;
+    text-transform:uppercase; color:#a78bfa; margin-bottom:0.3rem;
 }
-.login-product-name {
-    font-size:1.65rem; font-weight:800; color:#e6ebf5;
-    letter-spacing:-0.03em; line-height:1;
+.login-card-title {
+    font-size:1.7rem; font-weight:800; color:#f0f4ff;
+    letter-spacing:-0.035em; margin-bottom:0.45rem; line-height:1.1;
 }
-
-/* Tagline pills */
-.login-pills {
-    display:flex; align-items:center; justify-content:center;
-    gap:6px; flex-wrap:wrap; margin:1.4rem 0 2rem;
+.login-card-sub {
+    font-size:0.78rem; color:rgba(175,185,220,0.48); line-height:1.62;
 }
-.login-pill {
-    font-size:0.68rem; font-weight:600; letter-spacing:0.06em;
-    color:#64748b; border:1px solid rgba(255,255,255,0.07);
-    border-radius:20px; padding:3px 10px; background:rgba(255,255,255,0.03);
-}
-.login-pill-dot {
-    width:4px; height:4px; border-radius:50%;
-    background:rgba(161,0,255,0.4); display:inline-block;
-}
-
-/* Sign-in button */
+.login-card-divider { height:1px; background:rgba(255,255,255,0.07); margin:1.8rem 0; }
+/* MS sign-in button */
 .ms-signin-btn {
-    display:flex; align-items:center; justify-content:center; gap:10px;
-    width:100%; padding:0.8rem 1.5rem;
-    background:#0078d4; color:white !important;
-    border-radius:8px; font-size:0.95rem; font-weight:600;
-    text-decoration:none !important;
-    box-shadow:0 2px 12px rgba(0,120,212,0.35);
-    letter-spacing:0.01em; transition:background 0.15s, box-shadow 0.15s;
-    border:1px solid rgba(255,255,255,0.12);
+    display:flex; align-items:center; justify-content:center; gap:11px;
+    width:100%; padding:0.92rem 1.4rem;
+    background:#0078d4; color:#fff !important;
+    border-radius:12px; font-size:0.93rem; font-weight:600;
+    text-decoration:none !important; border:none;
+    box-shadow:0 4px 22px rgba(0,120,212,0.32); letter-spacing:0.01em;
+    transition:background 0.14s, box-shadow 0.14s, transform 0.1s;
+    margin-bottom:1rem; position:relative; overflow:hidden;
 }
-.ms-signin-btn:hover { background:#106ebe; box-shadow:0 4px 20px rgba(0,120,212,0.5); }
+.ms-signin-btn::after {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,0.13) 50%,transparent 62%);
+    transform:translateX(-100%); transition:transform 0.48s ease;
+}
+.ms-signin-btn:hover { background:#106ebe; transform:translateY(-1px); box-shadow:0 8px 30px rgba(0,120,212,0.44); }
+.ms-signin-btn:hover::after { transform:translateX(100%); }
 .ms-logo { width:18px; height:18px; flex-shrink:0; }
-
-/* Access note */
-.login-access-note {
-    margin-top:1.4rem; font-size:0.72rem; color:#3d4a6a;
-    line-height:1.5;
+.login-card-note { font-size:0.65rem; color:rgba(175,185,220,0.32); text-align:center; }
+.login-sec-strip {
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    margin-top:1.6rem; font-size:0.62rem; color:rgba(175,185,220,0.28); letter-spacing:0.04em;
 }
+.login-sec-dot { width:3px; height:3px; border-radius:50%; background:rgba(175,185,220,0.2); flex-shrink:0; }
 
-/* Global footer */
-.login-global-footer {
-    margin-top:2rem; font-size:0.65rem; color:#2d3555;
-    letter-spacing:0.06em; text-align:center;
+/* Responsive */
+@media (max-width:900px) {
+    .login-wrap { flex-direction:column; }
+    .login-left { flex:none; padding:2rem 2rem 0; }
+    .login-right { padding:2rem 2rem 2.5rem; }
+    .login-h1, .login-h2 { font-size:2.3rem; }
+    .login-viz { max-height:200px; }
+    .login-card { max-width:100%; }
 }
-.login-global-footer span { color:#3d4a6a; }
 
 /* Header gets squashed to zero height but kept in the DOM so the
    sidebar collapse/expand chevron (which lives inside it in modern
@@ -650,7 +740,7 @@ _EMPTY_CSS = """
     background: var(--bg-elev-1);
     border: 1px dashed var(--border-strong);
     border-radius: 14px;
-    text-align: center;
+    text-align: center;  /* overridden to left by the explainer-card variant below */
 }
 .empty-eyebrow {
     font-size: 0.7rem; font-weight: 700;
@@ -697,14 +787,14 @@ _EMPTY_CSS = """
    These classes intentionally use the `empty-state-*` namespace so they
    don't collide with the legacy `.empty-step*` rules above; both ship
    so either layout can be invoked from app.py. */
-.empty-state {
+.empty-state.explainer-card {
     margin-top: 0.5rem;
     margin-bottom: 1.5rem;
     padding: 1.6rem 1.8rem 1.4rem;
     background: linear-gradient(135deg, var(--bg-elev-1) 0%, var(--bg-elev-2) 100%);
     border: 1px solid var(--border);
     border-radius: 16px;
-    text-align: left;   /* override the centered legacy `.empty-state` */
+    text-align: left;
 }
 .empty-state-eyebrow {
     font-size: 0.7rem;

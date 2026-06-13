@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT / "src"))
 class TestEntraAuth:
 
     def _make_id_token(self, claims: dict) -> str:
-        """Encode a fake JWT with the given payload claims."""
+        """Encode a fake JWT with the given payload (no real signature)."""
         import base64, json
         header  = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode()
         payload = base64.urlsafe_b64encode(
@@ -38,18 +38,26 @@ class TestEntraAuth:
         ).rstrip(b"=").decode()
         return f"{header}.{payload}.fakesig"
 
+    # ── parse_user + role mapping ──────────────────────────────────────────────
+    # parse_user now calls _verify_id_token() which performs RS256/JWKS
+    # verification — fake tokens with "fakesig" would fail. We patch
+    # _verify_id_token to return the claims dict directly, isolating the
+    # role-mapping logic from the network-dependent signature check.
+
     def test_admin_role_case_insensitive(self, monkeypatch):
         monkeypatch.setenv("ENTRA_TENANT_ID",     "fake-tenant")
         monkeypatch.setenv("ENTRA_CLIENT_ID",     "fake-client")
         monkeypatch.setenv("ENTRA_CLIENT_SECRET", "fake-secret")
-        from entra_auth import parse_user
-        id_token = self._make_id_token({
+        import entra_auth as ea
+        claims = {
             "name": "Admin User",
             "preferred_username": "admin@corp.onmicrosoft.com",
             "oid": "abc123",
             "roles": ["Admin"],   # capital A — must still map to "admin"
-        })
-        user = parse_user({"id_token": id_token})
+        }
+        id_token = self._make_id_token(claims)
+        with patch.object(ea, "_verify_id_token", return_value=claims):
+            user = ea.parse_user({"id_token": id_token})
         assert user["role"] == "admin"
         assert user["name"] == "Admin User"
 
@@ -57,40 +65,49 @@ class TestEntraAuth:
         monkeypatch.setenv("ENTRA_TENANT_ID",     "fake-tenant")
         monkeypatch.setenv("ENTRA_CLIENT_ID",     "fake-client")
         monkeypatch.setenv("ENTRA_CLIENT_SECRET", "fake-secret")
-        from entra_auth import parse_user
-        id_token = self._make_id_token({"roles": ["Contributor"], "preferred_username": "pm@corp.com"})
-        user = parse_user({"id_token": id_token})
+        import entra_auth as ea
+        claims = {"roles": ["Contributor"], "preferred_username": "pm@corp.com"}
+        with patch.object(ea, "_verify_id_token", return_value=claims):
+            user = ea.parse_user({"id_token": self._make_id_token(claims)})
         assert user["role"] == "contributor"
 
     def test_viewer_role_maps_correctly(self, monkeypatch):
         monkeypatch.setenv("ENTRA_TENANT_ID",     "fake-tenant")
         monkeypatch.setenv("ENTRA_CLIENT_ID",     "fake-client")
         monkeypatch.setenv("ENTRA_CLIENT_SECRET", "fake-secret")
-        from entra_auth import parse_user
-        id_token = self._make_id_token({"roles": ["Viewer"], "preferred_username": "v@corp.com"})
-        user = parse_user({"id_token": id_token})
+        import entra_auth as ea
+        claims = {"roles": ["Viewer"], "preferred_username": "v@corp.com"}
+        with patch.object(ea, "_verify_id_token", return_value=claims):
+            user = ea.parse_user({"id_token": self._make_id_token(claims)})
         assert user["role"] == "viewer"
 
-    def test_no_roles_defaults_to_viewer(self, monkeypatch):
+    def test_no_roles_defaults_to_contributor(self, monkeypatch):
+        """Authenticated tenant users with no explicit app role default to contributor."""
         monkeypatch.setenv("ENTRA_TENANT_ID",     "fake-tenant")
         monkeypatch.setenv("ENTRA_CLIENT_ID",     "fake-client")
         monkeypatch.setenv("ENTRA_CLIENT_SECRET", "fake-secret")
-        from entra_auth import parse_user
-        id_token = self._make_id_token({"preferred_username": "unknown@corp.com"})
-        user = parse_user({"id_token": id_token})
-        assert user["role"] == "viewer"
+        import entra_auth as ea
+        claims = {"preferred_username": "unknown@corp.com"}
+        with patch.object(ea, "_verify_id_token", return_value=claims):
+            user = ea.parse_user({"id_token": self._make_id_token(claims)})
+        assert user["role"] == "contributor"
 
     def test_admin_takes_priority_over_viewer(self, monkeypatch):
         monkeypatch.setenv("ENTRA_TENANT_ID",     "fake-tenant")
         monkeypatch.setenv("ENTRA_CLIENT_ID",     "fake-client")
         monkeypatch.setenv("ENTRA_CLIENT_SECRET", "fake-secret")
-        from entra_auth import parse_user
-        id_token = self._make_id_token({"roles": ["Viewer", "Admin"], "preferred_username": "x@c.com"})
-        user = parse_user({"id_token": id_token})
+        import entra_auth as ea
+        claims = {"roles": ["Viewer", "Admin"], "preferred_username": "x@c.com"}
+        with patch.object(ea, "_verify_id_token", return_value=claims):
+            user = ea.parse_user({"id_token": self._make_id_token(claims)})
         assert user["role"] == "admin"
 
+    def test_parse_user_raises_on_empty_id_token(self):
+        from entra_auth import parse_user
+        with pytest.raises(ValueError, match="no id_token"):
+            parse_user({})
+
     def test_get_auth_url_contains_client_id(self, monkeypatch):
-        # entra_auth reads env vars at import time — reload after patching
         monkeypatch.setenv("ENTRA_TENANT_ID",     "tenant-abc")
         monkeypatch.setenv("ENTRA_TENANT_DOMAIN", "corp.onmicrosoft.com")
         monkeypatch.setenv("ENTRA_CLIENT_ID",     "fake-client-id")
@@ -103,15 +120,81 @@ class TestEntraAuth:
         assert "response_type=code" in url
         assert "prompt=login" in url
 
+    def test_get_auth_url_auto_generates_state_nonce(self, monkeypatch):
+        monkeypatch.setenv("ENTRA_TENANT_ID",     "tenant-abc")
+        monkeypatch.setenv("ENTRA_CLIENT_ID",     "fake-client-id")
+        monkeypatch.setenv("ENTRA_CLIENT_SECRET", "secret")
+        import entra_auth as ea
+        url = ea.get_auth_url()
+        assert "state=" in url
+        # The auto-generated nonce must be registered in the server-side store
+        import urllib.parse
+        qs = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+        nonce = qs["state"][0]
+        assert ea.consume_state(nonce) is True   # registered and consumable once
+
     def test_is_enabled_returns_false_when_vars_missing(self, monkeypatch):
         monkeypatch.delenv("ENTRA_TENANT_ID", raising=False)
         monkeypatch.delenv("ENTRA_CLIENT_ID", raising=False)
         monkeypatch.delenv("ENTRA_CLIENT_SECRET", raising=False)
-        # Re-import to pick up missing env
-        import importlib
         import entra_auth as ea
-        importlib.reload(ea)
         assert ea.is_enabled() is False
+
+    def test_is_enabled_returns_true_when_all_vars_set(self, monkeypatch):
+        monkeypatch.setenv("ENTRA_TENANT_ID",     "t")
+        monkeypatch.setenv("ENTRA_CLIENT_ID",     "c")
+        monkeypatch.setenv("ENTRA_CLIENT_SECRET", "s")
+        import entra_auth as ea
+        assert ea.is_enabled() is True
+
+    # ── OAuth state nonce ──────────────────────────────────────────────────────
+
+    def test_register_and_consume_state_single_use(self):
+        from entra_auth import register_state, consume_state
+        nonce = "test-nonce-single-use"
+        register_state(nonce)
+        assert consume_state(nonce) is True
+        assert consume_state(nonce) is False   # consumed — second call must return False
+
+    def test_consume_state_unknown_returns_false(self):
+        from entra_auth import consume_state
+        assert consume_state("totally-unknown-nonce") is False
+
+    def test_generate_state_nonce_is_registered_and_consumable(self):
+        from entra_auth import generate_state_nonce, consume_state
+        nonce = generate_state_nonce()
+        assert len(nonce) > 20
+        assert consume_state(nonce) is True
+        assert consume_state(nonce) is False   # single-use
+
+    def test_register_state_evicts_expired(self, monkeypatch):
+        import entra_auth as ea, time
+        old_ttl = ea._STATE_TTL
+        try:
+            ea._STATE_TTL = 0.01   # 10ms TTL so the nonce expires immediately
+            ea.register_state("expiring-nonce")
+            time.sleep(0.05)
+            ea.register_state("trigger-eviction")   # triggers cleanup loop
+            assert ea.consume_state("expiring-nonce") is False
+        finally:
+            ea._STATE_TTL = old_ttl
+            ea.consume_state("trigger-eviction")    # cleanup
+
+    # ── exchange_code_for_token ────────────────────────────────────────────────
+
+    def test_exchange_code_raises_on_http_error(self, monkeypatch):
+        """raise_for_status() must propagate HTTP 4xx/5xx as HTTPError."""
+        import requests as req
+        from unittest.mock import MagicMock
+        import entra_auth as ea
+        monkeypatch.setenv("ENTRA_TENANT_ID",     "t")
+        monkeypatch.setenv("ENTRA_CLIENT_ID",     "c")
+        monkeypatch.setenv("ENTRA_CLIENT_SECRET", "s")
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.side_effect = req.HTTPError("401 Unauthorized")
+        with patch.object(ea._requests, "post", return_value=mock_resp):
+            with pytest.raises(req.HTTPError):
+                ea.exchange_code_for_token("bad-code")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -164,6 +247,37 @@ class TestAgentLevelTraces:
         src = inspect.getsource(guardrails.run_guardrails)
         assert "child_span" in src or "_cs" in src
 
+    def test_pipeline_node_span_noop_when_otel_disabled(self, monkeypatch):
+        monkeypatch.setenv("OTEL_ENABLED", "0")
+        import importlib, telemetry as tel
+        importlib.reload(tel)
+        with tel.pipeline_node_span("parse", run_id="r1") as span:
+            span.set_attribute("x", 1)   # must not raise on NoopSpan
+
+    def test_pipeline_node_span_propagates_exception(self, monkeypatch):
+        monkeypatch.setenv("OTEL_ENABLED", "0")
+        import importlib, telemetry as tel
+        importlib.reload(tel)
+        with pytest.raises(ValueError, match="boom"):
+            with tel.pipeline_node_span("failing.node"):
+                raise ValueError("boom")
+
+    def test_record_stage_tokens_with_explicit_stage(self, monkeypatch):
+        monkeypatch.setenv("OTEL_ENABLED", "0")
+        import importlib, telemetry as tel
+        importlib.reload(tel)
+        span = tel._NoopSpan()
+        # New signature — stage kwarg must not raise
+        tel.record_stage_tokens(span, 100, 200, stage="story_writer")
+
+    def test_record_stage_tokens_default_stage(self, monkeypatch):
+        monkeypatch.setenv("OTEL_ENABLED", "0")
+        import importlib, telemetry as tel
+        importlib.reload(tel)
+        span = tel._NoopSpan()
+        # Old call-site style (no stage) must remain backward-compatible
+        tel.record_stage_tokens(span, 50, 150)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MemoryStore — ChromaDB routing
@@ -207,13 +321,10 @@ class TestMemoryStoreChromaRouting:
 class TestMCPServer:
 
     def test_all_five_tools_registered(self):
-        import asyncio, sys
+        import sys
         sys.path.insert(0, str(ROOT / "src"))
         import mcp_server
-        async def get_tools():
-            return await mcp_server.mcp._tool_manager.get_tools()
-        tools = asyncio.run(get_tools())
-        names = set(tools.keys())
+        names = set(mcp_server.mcp._tool_manager._tools.keys())
         assert "synthesize_backlog" in names
         assert "preview_prompts"    in names
         assert "get_run_history"    in names

@@ -217,8 +217,17 @@ def stage_span(
                 hist.record(elapsed, {"stage": stage_name, "model": model})
 
 
-def record_stage_tokens(span: Any, input_tokens: int, output_tokens: int) -> None:
-    """Attach token counts to span + increment stage_tokens_total counter."""
+def record_stage_tokens(
+    span: Any,
+    input_tokens: int,
+    output_tokens: int,
+    stage: str = "",
+) -> None:
+    """Attach token counts to span + increment stage_tokens_total counter.
+
+    Pass `stage` explicitly — avoids accessing the private `span._name` attribute
+    which is not part of the OTel SDK public API.
+    """
     if not _ENABLED:
         return
     try:
@@ -231,11 +240,6 @@ def record_stage_tokens(span: Any, input_tokens: int, output_tokens: int) -> Non
     counter = _instrument("stage_tokens_total", "counter",
                           "Total LLM tokens consumed across all stages")
     if counter:
-        stage = ""
-        try:
-            stage = span._name.replace("stage.", "") if hasattr(span, "_name") else ""
-        except Exception:  # noqa: BLE001
-            pass
         counter.add(input_tokens,  {"type": "input",  "stage": stage})
         counter.add(output_tokens, {"type": "output", "stage": stage})
 
@@ -270,6 +274,46 @@ def child_span(name: str, **attributes) -> Generator[Any, None, None]:
             yield span
         except Exception as exc:  # noqa: BLE001
             span.record_exception(exc)
+            raise
+
+
+@contextmanager
+def pipeline_node_span(node_name: str, run_id: str = "", **attributes: Any) -> Generator[Any, None, None]:
+    """OTel span for a single LangGraph pipeline node.
+
+    No-op when OTEL_ENABLED is not "1".
+    Records exception and marks span ERROR so traces show exactly which node failed.
+    """
+    if not _ENABLED:
+        yield _NoopSpan()
+        return
+
+    tracer, _ = _get_tracer_and_meter()
+    if tracer is None:
+        yield _NoopSpan()
+        return
+
+    try:
+        from opentelemetry.trace import StatusCode
+    except Exception:  # noqa: BLE001
+        yield _NoopSpan()
+        return
+
+    with tracer.start_as_current_span(f"pipeline.node.{node_name}") as span:
+        span.set_attribute("pipeline.node", node_name)
+        if run_id:
+            span.set_attribute("pipeline.run_id", run_id)
+        for k, v in attributes.items():
+            try:
+                span.set_attribute(k, v)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            yield span
+            span.set_status(StatusCode.OK)
+        except Exception as exc:
+            span.record_exception(exc)
+            span.set_status(StatusCode.ERROR, description=str(exc)[:200])
             raise
 
 

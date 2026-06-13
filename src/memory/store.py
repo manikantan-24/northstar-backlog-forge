@@ -93,10 +93,13 @@ class MemoryStore:
 
     def _persist_kv(self, key: str, value: Any) -> None:
         path = self._cache_dir / "kv" / f"{key}.json"
+        tmp = path.with_suffix(".tmp")
         try:
-            path.write_text(json.dumps(value, indent=2, default=str), encoding="utf-8")
+            tmp.write_text(json.dumps(value, indent=2, default=str), encoding="utf-8")
+            os.replace(tmp, path)  # atomic on POSIX and Windows
         except (TypeError, OSError) as e:
             logger.warning("Could not persist KV key %r: %s", key, e)
+            tmp.unlink(missing_ok=True)
 
     def hydrate_from_disk(self) -> int:
         """Reload KV state from `<cache_dir>/kv/*.json`. Returns count loaded.

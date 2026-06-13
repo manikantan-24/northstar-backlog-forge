@@ -134,6 +134,14 @@ class GeminiTool(Tool):
 
           # New SDK exposes the joined text on `response.text`.
           text = getattr(response, "text", "") or ""
+          # Warn when finish_reason signals truncation so logs show why JSON may be partial.
+          try:
+              candidate = (getattr(response, "candidates", None) or [None])[0]
+              finish_reason = getattr(candidate, "finish_reason", None)
+              if finish_reason and str(finish_reason) not in ("FinishReason.STOP", "STOP", "1"):
+                  logger.warning("Gemini finish_reason=%s — response may be truncated", finish_reason)
+          except Exception:  # noqa: BLE001
+              pass
           usage = {"input_tokens": None, "output_tokens": None}
           um = getattr(response, "usage_metadata", None)
           if um is not None:

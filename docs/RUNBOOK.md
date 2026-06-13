@@ -335,3 +335,69 @@ init time. Updating a prompt is a real code change:
 5. If still stuck, capture: the failing `audit_trail.md`, the input
    files, and the exact error / traceback. File an issue with all three.
    Do NOT paste raw `.env` content into an issue.
+
+---
+
+## Future Enhancements
+
+The items below are known gaps agreed during the v3 demo build. Prioritised by business impact. None block the demo; all block a production multi-tenant rollout.
+
+---
+
+### P1 — Required before any production customer
+
+**1. Approval chain (contributor submits → lead approves → Jira push)**
+Today any contributor can push AI-generated stories directly to Jira after ticking a checkbox. Enterprise governance requires a two-step gate: contributor submits for review → assigned lead/PM approves → push fires.
+_Implementation path:_ Add a `pending_approval` run state, email/Slack notification to approver, approval action (accept/reject with comment), audit logged.
+
+**2. Iterative refinement loop**
+The pipeline is one-shot. Gap Detector finds conflicts but there is no "re-draft affected stories" loop.
+_Implementation path:_ After Gap Detector completes, surface conflicts per-story; add "Re-draft this story" button that calls Story Writer agent in isolation with constraint feedback injected into the prompt.
+
+**3. Two-way Jira sync / duplicate-push guard**
+Re-running synthesis on an already-pushed backlog creates near-duplicate stories in Jira.
+_Implementation path:_ Before Jira push, run a JQL query to check if epics/stories with the `backlog-synth` label already exist; surface a "already pushed — update or skip?" choice.
+
+**4. Project / workspace isolation**
+All runs share a single Jira project and Confluence space. Large organisations have 10–20 product squads running synthesis concurrently, each with their own backlog.
+_Implementation path:_ Add a `workspace` concept: workspace = `{jira_project, confluence_space, team_members, feature_flags, run_history}`. Per-workspace admin role.
+
+---
+
+### P2 — Close within the first month of production
+
+**5. Story quality scores surfaced per-story in UI**
+The LLM-as-judge can score acceptance criteria quality but the score is only in the evaluation harness, not the live UI.
+_Implementation path:_ Run a lightweight AC quality check (completeness heuristic, no LLM call) per story post-synthesis and render a quality badge next to each story card in the Epics tab.
+
+**6. Conflict resolution workflow**
+Conflicts surface (story X violates constraint C-04) but there is no resolution path — no assign, no resolve, no audit note.
+_Implementation path:_ Add a "Resolve" action per conflict: opens a dialog for resolution note + assignee + mark-resolved. Audit logged with resolver identity and justification.
+
+**7. Triggered / scheduled ingestion**
+All runs are manual. Enterprise teams want auto-trigger: meeting ends → Teams/Zoom transcript webhook → synthesis → notification → ready for review.
+_Implementation path:_ Add an inbound HTTP endpoint (FastAPI sidecar or Streamlit `/webhook` route) that accepts a transcript payload and queues a synthesis run. The MCP server's `synthesize_backlog` tool is halfway there.
+
+**8. Audit trail export to compliance systems**
+The SHA-256 hash chain is solid for tamper-evidence but lives in a local SQLite file. Compliance teams need to push audit events to a SIEM (Splunk, Azure Sentinel) or attach to a ServiceNow change record.
+_Implementation path:_ Add an `/audit/export?run_id=<id>` endpoint returning the full event chain as JSON/CSV. Add an optional SIEM webhook (`SIEM_WEBHOOK_URL`) that fires per-run alongside the existing Slack notification.
+
+---
+
+### P3 — Quality of life
+
+**9. Run-to-run diff (compare current vs. last synthesis on same backlog)**
+A/B mode compares two model presets but cannot compare "this sprint vs. last sprint" for the same backlog.
+_Implementation path:_ Add a "Compare with previous run" picker in run history that loads two `synthesis.json` files and renders a structural diff (added/removed stories, gap delta, conflict delta).
+
+**10. ChromaDB in server mode for multi-replica**
+ChromaDB embedded mode is fine for single-replica. Multi-replica Azure Container Apps each get their own in-process ChromaDB with no shared state.
+_Implementation path:_ Add a `chromadb-server` container to the Terraform config; switch `USE_CHROMADB=1` to point at the server URL instead of the local embed.
+
+**11. Append-only cloud audit store**
+SQLite is a single-host file. Multi-replica deployments produce disconnected audit chains.
+_Implementation path:_ Write audit events to Azure Blob with immutable storage policy (or Sigstore Rekor). Keep SQLite as local cache; cloud store as compliance record.
+
+---
+
+_Last updated: 2026-06-13 during v3 demo hardening pass._

@@ -1,0 +1,25 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@yourcompany.com
+      name: Admin User
+      password: "$2b$12$v2pWz2FCLif2l13p3ZTCCuFYuQ/uZ/aYEfdIfILwGbIIwGtob1xT2"
+      role: admin
+    contributor:
+      email: pm@yourcompany.com
+      name: Product Manager
+      password: "$2b$12$SLUrmr3CoXH19i8NL.WdkeUWy2wRfE0Nh.Pmgzn2OQRs1vkFL9ZSO"
+      role: contributor
+    viewer:
+      email: stakeholder@yourcompany.com
+      name: Stakeholder
+      password: "$2b$12$l77l1ZcBZcAuR8vCENA9juUFakjW3AIOEtkCf1fFbAGFtlooFxnl6"
+      role: viewer
+
+cookie:
+  expiry_days: 1
+  key: "${AUTH_COOKIE_SECRET}"
+  name: backlog_synth_auth
+
+pre-authorized:
+  emails: []

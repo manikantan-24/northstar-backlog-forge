@@ -1,0 +1,32 @@
+# config/auth.yaml — username/password fallback auth (Entra ID SSO is preferred).
+#
+# SETUP:
+#   1. Copy this file to config/auth.yaml (gitignored — never commit the real file).
+#   2. Replace the placeholder password hash with a real bcrypt hash:
+#        python -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt(12)).decode())"
+#   3. Set the AUTH_COOKIE_SECRET environment variable to a random secret:
+#        python -c "import secrets; print(secrets.token_hex(32))"
+#      Do NOT use the demo value below in production.
+#
+# For production, use Microsoft Entra ID SSO instead (set ENTRA_TENANT_ID etc.):
+#   AUTH_DISABLED is for local development only.
+
+credentials:
+  usernames:
+    contributor:
+      email: pm@yourcompany.com
+      name: Product Manager
+      # Replace with: python -c "import bcrypt; print(bcrypt.hashpw(b'YOURPASSWORD', bcrypt.gensalt(12)).decode())"
+      password: "CHANGE_ME_replace_with_bcrypt_hash"
+      role: contributor
+
+cookie:
+  expiry_days: 1
+  # The key value here is overridden at runtime by the AUTH_COOKIE_SECRET env var.
+  # Set AUTH_COOKIE_SECRET to a random 32-byte hex string in your deployment secrets.
+  # For local dev only you may set AUTH_ALLOW_DEMO_SECRET=1 to bypass the check.
+  key: "CHANGE_ME_set_AUTH_COOKIE_SECRET_env_var"
+  name: backlog_synth_auth
+
+pre-authorized:
+  emails: []
