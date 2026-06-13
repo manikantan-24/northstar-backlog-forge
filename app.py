@@ -3786,6 +3786,16 @@ if run_clicked or _main_canvas_run:
     audit_path = run_dir / "audit_trail.md"
     audit_path.write_text(result["audit_trail"], encoding="utf-8")
 
+    # Persist original uploaded files so every run has a complete input→output record.
+    inputs_dir = run_dir / "inputs"
+    inputs_dir.mkdir(exist_ok=True)
+    for _uf in _as_upload_list(transcript_upload):
+        (inputs_dir / _uf.name).write_bytes(_uf.getvalue())
+    for _uf in _as_upload_list(constraints_upload):
+        (inputs_dir / _uf.name).write_bytes(_uf.getvalue())
+    for _uf in _as_upload_list(backlog_upload):
+        (inputs_dir / _uf.name).write_bytes(_uf.getvalue())
+
     # ---- Token + cost tally (from orchestrator's structured token_usage) ----
     # With per-stage model selection, we can no longer use a single model
     # rate for the whole run. Instead, walk the per-agent token usage and
