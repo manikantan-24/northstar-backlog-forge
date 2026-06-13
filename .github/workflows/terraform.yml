@@ -27,13 +27,14 @@ env:
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
   ARM_USE_CLI:         "false"
+  STATE_SA:            "stbacklogstate"
+  STATE_RG:            "rg-backlog-synthesizer"
+  STATE_CONTAINER:     "tfstate"
 
 jobs:
   terraform:
     name: Terraform ${{ github.event.inputs.action || 'plan' }}
     runs-on: ubuntu-latest
-    # Environment-scoped secrets: staging or production.
-    # Production environment requires reviewer approval before secrets unlock.
     environment: ${{ github.event.inputs.environment || 'staging' }}
     defaults:
       run:
@@ -47,21 +48,55 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Register Azure providers
+      - name: Azure CLI login
         run: |
           az login --service-principal \
             --username "${{ secrets.AZURE_CLIENT_ID }}" \
             --password "${{ secrets.AZURE_CLIENT_SECRET }}" \
             --tenant  "${{ secrets.AZURE_TENANT_ID }}"
           az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: Register Azure providers
+        run: |
           for ns in Microsoft.App Microsoft.ContainerRegistry Microsoft.KeyVault \
                     Microsoft.Storage Microsoft.OperationalInsights \
                     Microsoft.ContainerService Microsoft.ManagedIdentity; do
             az provider register --namespace "$ns" --wait || true
           done
 
+      # ── Bootstrap: ensure remote state storage exists ──────────────────────
+      # stbacklogstate is NOT managed by Terraform — it's bootstrap infra.
+      # Created once; idempotent (|| true on all commands).
+      - name: Bootstrap Terraform state storage
+        run: |
+          az storage account create \
+            --name "${{ env.STATE_SA }}" \
+            --resource-group "${{ env.STATE_RG }}" \
+            --sku Standard_LRS \
+            --kind StorageV2 \
+            --allow-blob-public-access false \
+            --min-tls-version TLS1_2 2>&1 | grep -v "already exists" || true
+
+          az storage container create \
+            --name "${{ env.STATE_CONTAINER }}" \
+            --account-name "${{ env.STATE_SA }}" \
+            --auth-mode login 2>&1 | grep -v "already exists" || true
+
+          # Export access key for Terraform backend auth
+          KEY=$(az storage account keys list \
+            --account-name "${{ env.STATE_SA }}" \
+            --resource-group "${{ env.STATE_RG }}" \
+            --query "[0].value" -o tsv)
+          echo "ARM_ACCESS_KEY=${KEY}" >> "$GITHUB_ENV"
+
       - name: Terraform Init
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ env.STATE_RG }}" \
+            -backend-config="storage_account_name=${{ env.STATE_SA }}" \
+            -backend-config="container_name=${{ env.STATE_CONTAINER }}" \
+            -backend-config="key=backlog-synthesizer.tfstate" \
+            -backend-config="access_key=${ARM_ACCESS_KEY}"
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
@@ -69,6 +104,70 @@ jobs:
 
       - name: Terraform Validate
         run: terraform validate
+
+      # ── Import existing Azure resources (first run with new state) ──────────
+      # safe_import: skips if already in state; ignores "not found" errors for
+      # resources that haven't been created yet (they'll be created by apply).
+      - name: Import existing Azure resources into state
+        run: |
+          SUB="${ARM_SUBSCRIPTION_ID}"
+          RG="rg-backlog-synthesizer"
+          KV="kv-backlog-synth"
+
+          safe_import() {
+            local addr="$1" id="$2"
+            if terraform state show "$addr" > /dev/null 2>&1; then
+              echo "  ⏭  already in state: $addr"
+              return 0
+            fi
+            echo "  ⬆️  importing: $addr"
+            terraform import -no-color \
+              -var="anthropic_api_key=${{ secrets.TF_VAR_ANTHROPIC_API_KEY }}" \
+              "$addr" "$id" 2>&1 \
+              | grep -v "^$" || echo "  ⚠️  import skipped for $addr (will be created)"
+          }
+
+          safe_import azurerm_resource_group.main \
+            "/subscriptions/${SUB}/resourceGroups/${RG}"
+
+          safe_import azurerm_user_assigned_identity.app \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-backlog-synthesizer"
+
+          safe_import azurerm_container_registry.acr \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/backlogsynth"
+
+          safe_import azurerm_key_vault.main \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV}"
+
+          safe_import azurerm_storage_account.main \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/stbacklogsynth"
+
+          safe_import azurerm_storage_share.data \
+            "https://stbacklogsynth.file.core.windows.net/backlog-data"
+
+          safe_import azurerm_log_analytics_workspace.main \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/microsoft.operationalinsights/workspaces/law-backlog-synthesizer"
+
+          safe_import azurerm_container_app_environment.main \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.App/managedEnvironments/cae-backlog-synthesizer"
+
+          safe_import azurerm_container_app_environment_storage.data \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.App/managedEnvironments/cae-backlog-synthesizer/storages/backlog-data"
+
+          safe_import azurerm_container_app.app \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.App/containerApps/backlog-synthesizer"
+
+          # Key Vault secrets
+          KV_URI="https://${KV}.vault.azure.net/secrets"
+          safe_import azurerm_key_vault_secret.anthropic_key  "${KV_URI}/ANTHROPIC-API-KEY"
+          safe_import azurerm_key_vault_secret.google_key     "${KV_URI}/GOOGLE-API-KEY"
+          safe_import azurerm_key_vault_secret.jira_token     "${KV_URI}/JIRA-API-TOKEN"
+          safe_import azurerm_key_vault_secret.github_token   "${KV_URI}/GITHUB-TOKEN"
+          safe_import azurerm_key_vault_secret.entra_client_secret "${KV_URI}/ENTRA-CLIENT-SECRET"
+          safe_import azurerm_key_vault_secret.otel_headers   "${KV_URI}/OTEL-EXPORTER-OTLP-HEADERS"
+          safe_import azurerm_key_vault_secret.acr_password   "${KV_URI}/ACR-ADMIN-PASSWORD"
+          safe_import azurerm_key_vault_secret.auth_cookie_secret "${KV_URI}/AUTH-COOKIE-SECRET"
+          safe_import azurerm_key_vault_secret.slack_webhook_url  "${KV_URI}/SLACK-WEBHOOK-URL"
 
       # ── Plan (always runs — shows what will change) ──────────────────────
       - name: Terraform Plan
@@ -88,8 +187,11 @@ jobs:
             -var="entra_client_id=${{ secrets.TF_VAR_ENTRA_CLIENT_ID }}" \
             -var="entra_tenant_domain=${{ secrets.TF_VAR_ENTRA_TENANT_DOMAIN }}" \
             -var="entra_client_secret=${{ secrets.TF_VAR_ENTRA_CLIENT_SECRET }}" \
+            -var="entra_redirect_uri=${{ secrets.TF_VAR_ENTRA_REDIRECT_URI }}" \
             -var="otel_endpoint=${{ secrets.TF_VAR_OTEL_ENDPOINT }}" \
             -var="otel_headers=${{ secrets.TF_VAR_OTEL_HEADERS }}" \
+            -var="auth_cookie_secret=${{ secrets.TF_VAR_AUTH_COOKIE_SECRET }}" \
+            -var="slack_webhook_url=${{ secrets.TF_VAR_SLACK_WEBHOOK_URL }}" \
             -out=tfplan \
             -no-color 2>&1 | tee plan-output.txt
 
@@ -120,4 +222,6 @@ jobs:
             -var="jira_api_token=${{ secrets.TF_VAR_JIRA_API_TOKEN }}" \
             -var="github_token=${{ secrets.TF_VAR_GITHUB_TOKEN }}" \
             -var="entra_client_secret=${{ secrets.TF_VAR_ENTRA_CLIENT_SECRET }}" \
-            -var="otel_headers=${{ secrets.TF_VAR_OTEL_HEADERS }}"
+            -var="otel_headers=${{ secrets.TF_VAR_OTEL_HEADERS }}" \
+            -var="auth_cookie_secret=${{ secrets.TF_VAR_AUTH_COOKIE_SECRET }}" \
+            -var="slack_webhook_url=${{ secrets.TF_VAR_SLACK_WEBHOOK_URL }}"

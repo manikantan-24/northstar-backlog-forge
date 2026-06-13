@@ -13,13 +13,14 @@ terraform {
     # azuread removed — SP created manually, not via Terraform (free tier lacks AD perms)
   }
 
-  # Uncomment after running `az storage account create` for state:
-  # backend "azurerm" {
-  #   resource_group_name  = "rg-tfstate"
-  #   storage_account_name = "stbacklogsynth"
-  #   container_name       = "tfstate"
-  #   key                  = "backlog-synthesizer.tfstate"
-  # }
+  # Remote state — backend config values passed via terraform init -backend-config in CI.
+  # Storage account (stbacklogstate) is bootstrap infra, created by the workflow before init.
+  backend "azurerm" {
+    resource_group_name  = "rg-backlog-synthesizer"
+    storage_account_name = "stbacklogstate"
+    container_name       = "tfstate"
+    key                  = "backlog-synthesizer.tfstate"
+  }
 }
 
 provider "azurerm" {
