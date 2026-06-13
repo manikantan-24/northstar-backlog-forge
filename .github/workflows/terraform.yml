@@ -89,6 +89,17 @@ jobs:
             --query "[0].value" -o tsv)
           echo "ARM_ACCESS_KEY=${KEY}" >> "$GITHUB_ENV"
 
+      - name: Break stale state lock
+        run: |
+          # A cancelled run can leave a blob lease on the state file.
+          # Break it so the next plan/apply is not blocked.
+          az storage blob lease break \
+            --account-name "${{ env.STATE_SA }}" \
+            --container-name "${{ env.STATE_CONTAINER }}" \
+            --blob-name "backlog-synthesizer.tfstate" \
+            --account-key "${ARM_ACCESS_KEY}" 2>/dev/null \
+            && echo "Stale lock broken." || echo "No active lock."
+
       - name: Terraform Init
         run: |
           terraform init \
@@ -194,6 +205,8 @@ jobs:
             -var="slack_webhook_url=${{ secrets.TF_VAR_SLACK_WEBHOOK_URL }}" \
             -out=tfplan \
             -no-color 2>&1 | tee plan-output.txt
+          # Propagate Terraform's exit code through the pipe
+          exit ${PIPESTATUS[0]}
 
       - name: Upload Plan
         uses: actions/upload-artifact@v4
