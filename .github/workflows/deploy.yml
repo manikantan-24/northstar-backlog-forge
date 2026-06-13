@@ -140,7 +140,7 @@ jobs:
 
       - name: Deploy new revision to Container Apps
         run: |
-          IMAGE="${{ needs.build-and-push.outputs.full-image }}"
+          IMAGE="${{ secrets.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           echo "Deploying image: $IMAGE"
           echo "App: ${{ env.CONTAINERAPP_NAME }}"
           echo "RG:  ${{ env.AZURE_RESOURCE_GROUP }}"
