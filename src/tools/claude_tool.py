@@ -184,7 +184,7 @@ class ClaudeTool(Tool):
 
     @staticmethod
     def _repair_truncated_json(candidate: str) -> str:
-        """Close unclosed brackets/braces in a truncated JSON string."""
+        """Close unclosed strings, brackets, and braces in a truncated JSON string."""
         stack = []
         in_string = False
         escape = False
@@ -204,7 +204,10 @@ class ClaudeTool(Tool):
                 stack.append("}" if ch == "{" else "]")
             elif ch in "}]" and stack and stack[-1] == ch:
                 stack.pop()
-        return candidate + "".join(reversed(stack))
+        # If truncated mid-string, close the string before closing containers.
+        suffix = '"' if in_string else ""
+        suffix += "".join(reversed(stack))
+        return candidate + suffix
 
     @staticmethod
     def _extract_json_block(text: str) -> dict:
