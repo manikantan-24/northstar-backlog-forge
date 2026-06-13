@@ -6,6 +6,41 @@ The format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ---
 
+## [Unreleased] — v3 enterprise security & reliability hardening (June 2026)
+
+### Security — Entra ID SSO (complete rewrite of `src/entra_auth.py`)
+- **RS256/JWKS signature verification** — replaced insecure base64-decode-only token parsing with full JWT signature verification via `PyJWKClient` + PyJWT. Tokens are now cryptographically verified against Microsoft's JWKS endpoint.
+- **CSRF protection via server-side state nonce store** — replaced the fixed `"backlog-synth"` OAuth state string with a per-request UUID nonce stored in a thread-safe in-memory dict (`_STATE_STORE`) with 600-second TTL and single-use consumption.
+- **Dynamic config reads** — replaced module-level constants (evaluated once at import time, before `load_dotenv()`) with a `_cfg()` function that reads env vars on every call, preventing Streamlit's module-cache from returning stale empty values.
+- **`raise_for_status()`** added to the token exchange HTTP call — HTTP 4xx/5xx responses now surface immediately instead of silently parsing an empty dict.
+- **AUTH_DISABLED + ENTRA_TENANT_ID guard** in `app.py` — the app now hard-fails with a clear error if both env vars are set simultaneously (misconfiguration).
+- **Missing dependency hard-fail** — `ImportError` on `streamlit-authenticator` now shows a user-facing error and stops the app instead of silently falling through to an admin session.
+
+### Security — Jira tool (`src/tools/jira_tool.py`)
+- **Project key validation** — regex `^[A-Z][A-Z0-9]{1,9}$` on startup; invalid `JIRA_PROJECT_KEY` raises `ToolError` immediately rather than producing malformed JQL at query time.
+- **Full JQL injection prevention** — search strings now escape `\`, `"`, and `'` before interpolation into JQL queries.
+
+### Reliability
+- **Atomic KV writes** (`src/memory/store.py`) — replaced direct `write_text()` with a temp-file + `os.replace()` pattern (POSIX-safe, also works on Windows) preventing partial writes or torn reads on crash.
+- **`pipeline_node_span` added to `src/telemetry.py`** — this context manager was referenced by `src/pipeline.py` but missing; the app raised `AttributeError` on any telemetry-instrumented run.
+- **`record_stage_tokens` stage param** (`src/telemetry.py`) — removed private `span._name` attribute access (OTel SDK implementation detail); callers now pass `stage` explicitly.
+- **`entrypoint.sh` POSIX fix** — removed `exec ... &` (undefined POSIX behavior — `exec` replaces the shell process, `&` forks it); replaced with explicit background fork + `STREAMLIT_PID` tracking. Also removed duplicate warmup step already baked into the Docker image layer.
+
+### Configuration
+- **`jira_write_back` default corrected** (`src/feature_flags.py`) — contributor default was `True` but `config/feature_flags.yaml` set it `False`; the in-code default now matches, eliminating silent write-back to Jira for contributor accounts.
+- **`requirements-lock.txt` created** — generated via `pip-compile` from `requirements.txt`; all 714 transitive dependencies are pinned for reproducible installs and supply-chain auditability.
+
+### CI / Quality
+- **Python version matrix** (`.github/workflows/ci.yml`) — unit tests now run against Python **3.11** and **3.13** in parallel (`fail-fast: false`), catching version-specific incompatibilities before they reach production.
+- **Test suite expanded to 205 tests** — 11 new tests in `test_final_round.py` (state nonce lifecycle, HTTP error on token exchange, `pipeline_node_span`, `record_stage_tokens`), 9 new tests in `test_jira_live.py` (project key validation + JQL escaping), 3 new tests in `test_new_modules.py` (atomic KV write). All existing tests updated to mock `_verify_id_token` rather than calling the removed base64 decode path.
+
+### UI / Branding
+- **Accenture + NorthStar dual branding** — sidebar shows both the Accenture wordmark and the NorthStar Retail star logo; login page carries the Accenture banner.
+- **Demo disclaimer footer** — login page bottom shows "Demo environment — NorthStar Retail Corp is a fictional client created for demonstration purposes only."
+- **Duplicate `.empty-state` CSS resolved** (`src/ui/styling.py`) — second definition renamed to `.empty-state.explainer-card`; `app.py` updated to emit both classes, preventing the silent CSS override.
+
+---
+
 ## [Unreleased] — submission build
 
 ### Added

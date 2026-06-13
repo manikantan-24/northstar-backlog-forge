@@ -459,3 +459,84 @@ def test_publish_synthesis_partial_failure_is_recorded(monkeypatch):
     out = _live_writer().publish_synthesis(result, create_subtasks=False)
     assert out["counts"]["stories"] == 1
     assert any("epic" in e.lower() for e in out["errors"])
+
+
+# ── Project key validation ─────────────────────────────────────────────────────
+
+def test_invalid_project_key_lowercase_raises():
+    with pytest.raises(ToolError, match="Invalid JIRA_PROJECT_KEY"):
+        JiraTool(mode="mock", project_key="ns")
+
+def test_invalid_project_key_starts_with_digit_raises():
+    with pytest.raises(ToolError, match="Invalid JIRA_PROJECT_KEY"):
+        JiraTool(mode="mock", project_key="1NS")
+
+def test_invalid_project_key_too_long_raises():
+    with pytest.raises(ToolError, match="Invalid JIRA_PROJECT_KEY"):
+        JiraTool(mode="mock", project_key="TOOLONGKEY1")
+
+def test_valid_project_key_two_chars():
+    jt = JiraTool(mode="mock", project_key="AB")
+    assert jt._project_key == "AB"
+
+def test_valid_project_key_alphanumeric():
+    jt = JiraTool(mode="mock", project_key="NS2")
+    assert jt._project_key == "NS2"
+
+def test_empty_project_key_is_allowed():
+    jt = JiraTool(mode="mock", project_key="")
+    assert jt._project_key == ""
+
+
+# ── JQL text escaping ─────────────────────────────────────────────────────────
+
+def test_search_live_escapes_single_quote(monkeypatch):
+    """Single quotes in query text must be escaped in the emitted JQL."""
+    captured = []
+
+    def responder(url, params, **kw):
+        captured.append(params.get("jql", ""))
+        return _FakeResponse(200, {"issues": []})
+
+    _patch_get(monkeypatch, responder)
+    jt = JiraTool(
+        mode="live", base_url="https://demo.atlassian.net",
+        email="me@example.com", api_token="tok", project_key="NS",
+    )
+    jt._search_live("O'Brien's feature")
+    assert captured, "no JQL was captured"
+    assert "O\\'Brien\\'s" in captured[0], f"single quote not escaped in: {captured[0]}"
+
+def test_search_live_escapes_backslash(monkeypatch):
+    """Backslashes in query text must be double-escaped in the emitted JQL."""
+    captured = []
+
+    def responder(url, params, **kw):
+        captured.append(params.get("jql", ""))
+        return _FakeResponse(200, {"issues": []})
+
+    _patch_get(monkeypatch, responder)
+    jt = JiraTool(
+        mode="live", base_url="https://demo.atlassian.net",
+        email="me@example.com", api_token="tok", project_key="NS",
+    )
+    jt._search_live("path\\to\\file")
+    assert captured, "no JQL was captured"
+    assert "\\\\" in captured[0], f"backslash not escaped in: {captured[0]}"
+
+def test_search_live_escapes_double_quote(monkeypatch):
+    """Double quotes must still be escaped (regression guard)."""
+    captured = []
+
+    def responder(url, params, **kw):
+        captured.append(params.get("jql", ""))
+        return _FakeResponse(200, {"issues": []})
+
+    _patch_get(monkeypatch, responder)
+    jt = JiraTool(
+        mode="live", base_url="https://demo.atlassian.net",
+        email="me@example.com", api_token="tok", project_key="NS",
+    )
+    jt._search_live('say "hello"')
+    assert captured, "no JQL was captured"
+    assert '\\"' in captured[0], f"double quote not escaped in: {captured[0]}"

@@ -169,7 +169,7 @@ class GapDetectorAgent(Agent):
         )
 
         try:
-            parsed, usage = self.claude.call_for_json(prompt, max_tokens=4000)
+            parsed, usage = self.claude.call_for_json(prompt, max_tokens=8000)
         except ToolError as e:
             raise AgentError(f"Gap Detector LLM call failed: {e}") from e
 

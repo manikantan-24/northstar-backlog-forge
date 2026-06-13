@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -65,7 +66,10 @@ class JiraTool(Tool):
         self._base_url = (base_url or os.environ.get("JIRA_BASE_URL") or "").rstrip("/")
         self._email = email or os.environ.get("JIRA_EMAIL") or ""
         self._api_token = api_token or os.environ.get("JIRA_API_TOKEN") or ""
-        self._project_key = project_key or os.environ.get("JIRA_PROJECT_KEY") or ""
+        raw_key = project_key if project_key is not None else (os.environ.get("JIRA_PROJECT_KEY") or "")
+        if raw_key and not re.match(r'^[A-Z][A-Z0-9]{1,9}$', raw_key):
+            raise ToolError(f"Invalid JIRA_PROJECT_KEY {raw_key!r}: must match [A-Z][A-Z0-9]{{1,9}}")
+        self._project_key = raw_key
         self._page_size = int(page_size)
         self._max_results = int(max_results)
 
@@ -390,11 +394,10 @@ class JiraTool(Tool):
         if looks_like_jql:
             jql = q
         elif self._project_key:
-            # `text ~` is Jira's full-text search across summary + description.
-            escaped = q.replace('"', '\\"')
+            escaped = q.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
             jql = f'project = "{self._project_key}" AND text ~ "{escaped}"'
         else:
-            escaped = q.replace('"', '\\"')
+            escaped = q.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
             jql = f'text ~ "{escaped}"'
         return self._jql_search(jql)
 

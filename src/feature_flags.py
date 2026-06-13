@@ -51,7 +51,7 @@ _DEFAULT_CONTRIBUTOR: dict[str, Any] = {
     "compare_mode": True,
     "vision_input": True,
     "dry_run_allowed": True,
-    "jira_write_back": True,
+    "jira_write_back": False,
     "live_jira_read": False,
     "pii_override": False,
     "stage_model_locks": {

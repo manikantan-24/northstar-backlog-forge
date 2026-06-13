@@ -57,7 +57,7 @@ class TestFeatureFlags:
         try:
             ff = FeatureFlags.load()
             assert ff.allowed_presets("contributor") == ["free", "balanced"]
-            assert ff.is_enabled("contributor", "jira_write_back") is True
+            assert ff.is_enabled("contributor", "jira_write_back") is False
             assert ff.is_enabled("viewer", "jira_write_back") is False
         finally:
             ff_mod.FLAGS_PATH = FLAGS_PATH
@@ -630,3 +630,39 @@ class TestGuardrailSeverities:
         ungrounded = [f for f in findings if f.code == "ungrounded_story"]
         assert ungrounded
         assert ungrounded[0].severity == "error"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MemoryStore — atomic KV persistence
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestMemoryStoreAtomicWrite:
+
+    def test_persist_kv_writes_correct_value(self, tmp_path):
+        import json
+        from memory.store import MemoryStore
+        store = MemoryStore(cache_dir=tmp_path, persistent=True)
+        store.put("mykey", {"data": "hello"})
+        kv_file = tmp_path / "kv" / "mykey.json"
+        assert kv_file.exists(), f"KV file not found at {kv_file}"
+        stored = json.loads(kv_file.read_text())
+        assert stored["data"] == "hello"
+
+    def test_persist_kv_no_tmp_file_left_behind(self, tmp_path):
+        """Atomic write via os.replace must not leave .tmp files."""
+        from memory.store import MemoryStore
+        store = MemoryStore(cache_dir=tmp_path, persistent=True)
+        store.put("cleankey", "cleanvalue")
+        tmp_files = list(tmp_path.rglob("*.tmp"))
+        assert tmp_files == [], f"Stale .tmp files found: {tmp_files}"
+
+    def test_persist_kv_second_write_overwrites_first(self, tmp_path):
+        """Overwriting a key must reflect the latest value."""
+        import json
+        from memory.store import MemoryStore
+        store = MemoryStore(cache_dir=tmp_path, persistent=True)
+        store.put("k", "v1")
+        store.put("k", "v2")
+        kv_file = tmp_path / "kv" / "k.json"
+        stored = json.loads(kv_file.read_text())
+        assert stored == "v2"

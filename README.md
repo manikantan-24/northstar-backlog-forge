@@ -104,7 +104,7 @@ See [architecture.md](architecture.md) for the detailed diagram + agent contract
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.11+ (3.13 recommended; both are tested in CI)
 - An Anthropic API key
 
 ### Installation
@@ -113,6 +113,11 @@ See [architecture.md](architecture.md) for the detailed diagram + agent contract
 cd backlog-synthesizer
 python3 -m venv venv
 source venv/bin/activate
+
+# Use pinned deps for reproducible installs (recommended):
+pip install -r requirements-lock.txt
+
+# Or unpinned for faster dev iteration:
 pip install -r requirements.txt
 ```
 
@@ -147,12 +152,16 @@ spending API credit.
 pytest tests/ -v
 ```
 
-**128 tests across 9 files**, all mocked end-to-end (zero API credit, ~1s):
+**205 tests across 9 files**, all mocked end-to-end (zero API credit, ~1s):
 - `test_agents.py` — per-agent unit tests + `MemoryStore` / `AuditLog`
 - `test_orchestrator.py` — five-agent handoff + output formatter
 - `test_redactor.py`, `test_guardrails.py`, `test_compare_mode.py`
-- `test_jira_live.py` — live JQL **and Jira write-back** (`create_issue` / `publish_synthesis`)
+- `test_jira_live.py` — live JQL, Jira write-back, project key validation, JQL injection escaping
 - `test_confluence_live.py`, `test_vision.py`, `test_evaluation_runner.py`
+- `test_final_round.py` — Entra SSO state nonce, RS256 verification, `pipeline_node_span`, `record_stage_tokens`
+- `test_new_modules.py` — atomic KV write, circuit breaker, GDPR purge, metrics
+
+CI runs the full suite on Python 3.11 and 3.13 in parallel (`fail-fast: false`).
 
 ### Run the evaluation harness
 
@@ -188,6 +197,28 @@ python evaluation/ab_compare.py \
 Runs the full golden suite twice (once with the prompt currently on disk,
 once with the candidate), reports per-case deltas, and writes a `report.json`
 under `evaluation/results/ab/`.
+
+---
+
+## Enterprise SSO (Microsoft Entra ID)
+
+Set the following env vars in `.env` to enable Entra ID authentication:
+
+```bash
+ENTRA_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ENTRA_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ENTRA_CLIENT_SECRET=your-client-secret
+ENTRA_REDIRECT_URI=http://localhost:8501/
+```
+
+When all four are set, `src/entra_auth.py` handles the full OAuth2 authorization code flow:
+- RS256 JWT verification via Microsoft JWKS endpoint (cryptographic signature check)
+- Per-request state nonces with 600-second TTL (CSRF protection)
+- Role mapping from Azure AD app roles → viewer / contributor / admin
+
+Leave these vars unset to fall back to the local `config/auth.yaml` username/password auth.
+
+> **Security note:** Never commit real credentials. `config/auth.yaml` and `infra/terraform/terraform.tfvars` are excluded from version control via `.gitignore`. Use `.env.example` as the template.
 
 ---
 

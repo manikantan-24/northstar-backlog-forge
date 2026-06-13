@@ -74,9 +74,9 @@ class ParserAgent(Agent):
             # different provider doesn't blow up on an unexpected kwarg.
             call = getattr(self.claude, "call_for_json")
             if vision_attachments and "images" in call.__code__.co_varnames:
-                parsed, usage = call(prompt, max_tokens=4000, images=vision_attachments)
+                parsed, usage = call(prompt, max_tokens=8000, images=vision_attachments)
             else:
-                parsed, usage = call(prompt, max_tokens=4000)
+                parsed, usage = call(prompt, max_tokens=8000)
         except ToolError as e:
             raise AgentError(f"Parser LLM call failed: {e}") from e
 

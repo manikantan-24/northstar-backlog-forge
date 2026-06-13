@@ -113,6 +113,15 @@ st.markdown(get_css(), unsafe_allow_html=True)
 #   3. config/auth.yaml exists      → streamlit-authenticator (username/password fallback)
 
 _auth_disabled = os.environ.get("AUTH_DISABLED", "").strip() == "1"
+
+# Guard: AUTH_DISABLED must never be set alongside real Entra credentials —
+# that combination would leave a production deployment fully open.
+if _auth_disabled and os.environ.get("ENTRA_TENANT_ID", "").strip():
+    st.error(
+        "**Misconfiguration:** `AUTH_DISABLED=1` cannot be set when "
+        "`ENTRA_TENANT_ID` is also present. Remove `AUTH_DISABLED` in production."
+    )
+    st.stop()
 _current_user: str = "local"
 _current_role: str = "admin"
 _authenticator = None
@@ -151,84 +160,347 @@ if not _auth_disabled:
 
         if "entra_user" not in st.session_state:
             _login_url = get_auth_url()
-            # Override the full page background + hide sidebar for login screen
             st.markdown("""
             <style>
-            /* Full-page midnight blue takeover for login */
             .stApp, [data-testid="stAppViewContainer"] {
-                background-color: #010c1f !important;
-                background-image:
-                    radial-gradient(ellipse 800px 550px at 50% -5%, rgba(0,120,212,0.13), transparent 58%),
-                    radial-gradient(ellipse 400px 300px at 92% 95%, rgba(0,80,160,0.06), transparent 50%),
-                    radial-gradient(circle, rgba(0,120,212,0.055) 1px, transparent 1px) !important;
-                background-size: auto, auto, 28px 28px !important;
+                background-color: #060c1e !important;
+                background-image: none !important;
             }
-            /* Hide sidebar entirely on login page */
             section[data-testid="stSidebar"] { display:none !important; }
-            /* Remove default padding so login-wrap can fill the viewport */
-            .main .block-container,
-            [data-testid="stMainBlockContainer"] {
+            header[data-testid="stHeader"] { display:none !important; }
+            .main .block-container, [data-testid="stMainBlockContainer"] {
                 padding:0 !important; max-width:100% !important;
+            }
+            @keyframes card-border {
+                0%,100% { background-position:0% 50%; }
+                50%      { background-position:100% 50%; }
             }
             </style>
             """, unsafe_allow_html=True)
 
+            _ns_star_sm = (
+                '<svg viewBox="0 0 28 28" fill="none" width="18" height="18">'
+                '<polygon points="14,2 17.2,10.4 26,10.8 19.4,15.8 21.6,24.4 14,19.8 6.4,24.4 8.6,15.8 2,10.8 10.8,10.4"'
+                ' fill="none" stroke="#F5A623" stroke-width="1.8" stroke-linejoin="round"/>'
+                '</svg>'
+            )
+            _ns_star_card = (
+                '<svg viewBox="0 0 28 28" fill="none" width="24" height="24">'
+                '<polygon points="14,2 17.2,10.4 26,10.8 19.4,15.8 21.6,24.4 14,19.8 6.4,24.4 8.6,15.8 2,10.8 10.8,10.4"'
+                ' fill="none" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round"/>'
+                '</svg>'
+            )
+
+            # ── radial neural-brain SVG (3 rings, center 170,170, viewBox 340x340) ─
+            # Inline transform-origin on animation elements so they use this SVG's centre.
+            _brain = (
+                '<svg viewBox="0 0 340 340" fill="none" xmlns="http://www.w3.org/2000/svg" '
+                'style="width:min(75%,440px);height:auto;display:block;">'
+                '<defs>'
+                '<filter id="bf-g" x="-60%" y="-60%" width="220%" height="220%">'
+                '<feGaussianBlur stdDeviation="6" result="b"/>'
+                '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>'
+                '</filter>'
+                '<filter id="bf-gs" x="-80%" y="-80%" width="260%" height="260%">'
+                '<feGaussianBlur stdDeviation="2.8" result="b"/>'
+                '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>'
+                '</filter>'
+                '<radialGradient id="bf-hub" cx="50%" cy="50%" r="50%">'
+                '<stop offset="0%" stop-color="#f0f4ff"/><stop offset="100%" stop-color="#c084fc"/>'
+                '</radialGradient>'
+                '</defs>'
+                # outer-ring adjacents (faint, dim purple)
+                '<line x1="325" y1="170" x2="304" y2="248" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="248" y1="304" x2="170" y2="325" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="93" y1="304" x2="36" y2="248" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="15" y1="170" x2="36" y2="92" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="93" y1="36" x2="170" y2="15" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="248" y1="36" x2="304" y2="92" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                # mid→outer
+                '<line x1="267" y1="210" x2="325" y2="170" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="267" y1="210" x2="304" y2="248" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="210" y1="267" x2="304" y2="248" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="210" y1="267" x2="248" y2="304" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="130" y1="267" x2="170" y2="325" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="130" y1="267" x2="93" y2="304" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="73" y1="210" x2="93" y2="304" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="73" y1="210" x2="36" y2="248" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="73" y1="130" x2="15" y2="170" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="73" y1="130" x2="36" y2="92" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="130" y1="73" x2="36" y2="92" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="130" y1="73" x2="93" y2="36" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="210" y1="73" x2="170" y2="15" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="210" y1="73" x2="248" y2="36" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="267" y1="130" x2="304" y2="92" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                '<line x1="267" y1="130" x2="325" y2="170" stroke="rgba(109,40,217,0.22)" stroke-width="0.8"/>'
+                # mid-ring adjacents
+                '<line x1="267" y1="210" x2="210" y2="267" stroke="rgba(167,139,250,0.25)" stroke-width="0.9"/>'
+                '<line x1="130" y1="267" x2="73" y2="210" stroke="rgba(167,139,250,0.25)" stroke-width="0.9"/>'
+                '<line x1="73" y1="130" x2="130" y2="73" stroke="rgba(167,139,250,0.25)" stroke-width="0.9"/>'
+                '<line x1="210" y1="73" x2="267" y2="130" stroke="rgba(167,139,250,0.25)" stroke-width="0.9"/>'
+                # inner→mid
+                '<line x1="225" y1="170" x2="267" y2="130" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="225" y1="170" x2="267" y2="210" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="198" y1="218" x2="267" y2="210" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="198" y1="218" x2="210" y2="267" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="143" y1="218" x2="210" y2="267" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="143" y1="218" x2="130" y2="267" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="115" y1="170" x2="73" y2="210" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="115" y1="170" x2="73" y2="130" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="143" y1="122" x2="73" y2="130" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="143" y1="122" x2="130" y2="73" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="198" y1="122" x2="210" y2="73" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                '<line x1="198" y1="122" x2="267" y2="130" stroke="rgba(167,139,250,0.32)" stroke-width="1"/>'
+                # inner hexagon ring
+                '<line x1="225" y1="170" x2="198" y2="218" stroke="rgba(167,139,250,0.48)" stroke-width="1.1"/>'
+                '<line x1="198" y1="218" x2="143" y2="218" stroke="rgba(167,139,250,0.48)" stroke-width="1.1"/>'
+                '<line x1="143" y1="218" x2="115" y2="170" stroke="rgba(167,139,250,0.48)" stroke-width="1.1"/>'
+                '<line x1="115" y1="170" x2="143" y2="122" stroke="rgba(167,139,250,0.48)" stroke-width="1.1"/>'
+                '<line x1="143" y1="122" x2="198" y2="122" stroke="rgba(167,139,250,0.48)" stroke-width="1.1"/>'
+                '<line x1="198" y1="122" x2="225" y2="170" stroke="rgba(167,139,250,0.48)" stroke-width="1.1"/>'
+                # hub spokes (brightest)
+                '<line x1="170" y1="170" x2="225" y2="170" stroke="rgba(167,139,250,0.7)" stroke-width="1.4"/>'
+                '<line x1="170" y1="170" x2="198" y2="218" stroke="rgba(167,139,250,0.7)" stroke-width="1.4"/>'
+                '<line x1="170" y1="170" x2="143" y2="218" stroke="rgba(167,139,250,0.7)" stroke-width="1.4"/>'
+                '<line x1="170" y1="170" x2="115" y2="170" stroke="rgba(167,139,250,0.7)" stroke-width="1.4"/>'
+                '<line x1="170" y1="170" x2="143" y2="122" stroke="rgba(167,139,250,0.7)" stroke-width="1.4"/>'
+                '<line x1="170" y1="170" x2="198" y2="122" stroke="rgba(167,139,250,0.7)" stroke-width="1.4"/>'
+                # outer ring nodes
+                '<circle cx="325" cy="170" r="2.5" fill="rgba(109,40,217,0.48)"/>'
+                '<circle cx="304" cy="248" r="2.5" fill="rgba(109,40,217,0.42)"/>'
+                '<circle cx="248" cy="304" r="2.5" fill="rgba(109,40,217,0.42)"/>'
+                '<circle cx="170" cy="325" r="2.5" fill="rgba(109,40,217,0.42)"/>'
+                '<circle cx="93" cy="304" r="2.5" fill="rgba(109,40,217,0.42)"/>'
+                '<circle cx="36" cy="248" r="2.5" fill="rgba(109,40,217,0.42)"/>'
+                '<circle cx="15" cy="170" r="2.5" fill="rgba(109,40,217,0.48)"/>'
+                '<circle cx="36" cy="92" r="2.5" fill="rgba(109,40,217,0.42)"/>'
+                '<circle cx="93" cy="36" r="2.5" fill="rgba(109,40,217,0.42)"/>'
+                '<circle cx="170" cy="15" r="2.5" fill="rgba(109,40,217,0.48)"/>'
+                '<circle cx="248" cy="36" r="2.5" fill="rgba(109,40,217,0.42)"/>'
+                '<circle cx="304" cy="92" r="2.5" fill="rgba(109,40,217,0.48)"/>'
+                # mid ring nodes
+                '<circle cx="267" cy="210" r="3.5" fill="rgba(109,40,217,0.8)" filter="url(#bf-gs)"/>'
+                '<circle cx="210" cy="267" r="3.5" fill="rgba(109,40,217,0.78)" filter="url(#bf-gs)"/>'
+                '<circle cx="130" cy="267" r="3.5" fill="rgba(109,40,217,0.75)" filter="url(#bf-gs)"/>'
+                '<circle cx="73" cy="210" r="3.5" fill="rgba(109,40,217,0.75)" filter="url(#bf-gs)"/>'
+                '<circle cx="73" cy="130" r="3.5" fill="rgba(109,40,217,0.75)" filter="url(#bf-gs)"/>'
+                '<circle cx="130" cy="73" r="3.5" fill="rgba(109,40,217,0.75)" filter="url(#bf-gs)"/>'
+                '<circle cx="210" cy="73" r="3.5" fill="rgba(109,40,217,0.78)" filter="url(#bf-gs)"/>'
+                '<circle cx="267" cy="130" r="3.5" fill="rgba(109,40,217,0.8)" filter="url(#bf-gs)"/>'
+                # inner ring nodes (bright violet, larger)
+                '<circle cx="225" cy="170" r="5.5" fill="rgba(167,139,250,0.95)" filter="url(#bf-gs)"/>'
+                '<circle cx="198" cy="218" r="5.5" fill="rgba(167,139,250,0.92)" filter="url(#bf-gs)"/>'
+                '<circle cx="143" cy="218" r="5.5" fill="rgba(167,139,250,0.92)" filter="url(#bf-gs)"/>'
+                '<circle cx="115" cy="170" r="5.5" fill="rgba(167,139,250,0.95)" filter="url(#bf-gs)"/>'
+                '<circle cx="143" cy="122" r="5.5" fill="rgba(167,139,250,0.92)" filter="url(#bf-gs)"/>'
+                '<circle cx="198" cy="122" r="5.5" fill="rgba(167,139,250,0.92)" filter="url(#bf-gs)"/>'
+                # animated pulse rings (inline transform-origin so scale works from node centre)
+                '<circle cx="225" cy="170" r="5.5" fill="none" stroke="rgba(167,139,250,0.85)" stroke-width="1.2" '
+                'style="animation:npulse 3.4s ease-in-out infinite;transform-origin:225px 170px;"/>'
+                '<circle cx="115" cy="170" r="5.5" fill="none" stroke="rgba(167,139,250,0.75)" stroke-width="1.2" '
+                'style="animation:npulse 3.4s ease-in-out 1.2s infinite;transform-origin:115px 170px;"/>'
+                '<circle cx="198" cy="122" r="5.5" fill="none" stroke="rgba(167,139,250,0.7)" stroke-width="1" '
+                'style="animation:npulse 3.4s ease-in-out 0.7s infinite;transform-origin:198px 122px;"/>'
+                '<circle cx="143" cy="218" r="5.5" fill="none" stroke="rgba(167,139,250,0.65)" stroke-width="1" '
+                'style="animation:npulse 3.4s ease-in-out 1.9s infinite;transform-origin:143px 218px;"/>'
+                # hub glow rings (inline transform-origin = brain centre)
+                '<circle cx="170" cy="170" r="34" fill="rgba(167,139,250,0.06)" '
+                'style="animation:hring 3.6s ease-in-out infinite;transform-origin:170px 170px;"/>'
+                '<circle cx="170" cy="170" r="22" fill="rgba(167,139,250,0.1)" '
+                'style="animation:hring 3.6s ease-in-out 1.8s infinite;transform-origin:170px 170px;"/>'
+                # hub node
+                '<circle cx="170" cy="170" r="12" fill="url(#bf-hub)" filter="url(#bf-g)"/>'
+                '<circle cx="170" cy="170" r="6.5" fill="rgba(255,255,255,0.97)"/>'
+                '</svg>'
+            )
+
+            # ── Layout: ALL inline styles on position:fixed wrapper + children ─────
+            # Inline styles on position:fixed bypass Streamlit's block container,
+            # guaranteeing the flex row renders correctly.
+            _PAGE = ('position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;'
+                     'background:#060c1e;overflow:hidden;'
+                     'display:flex;flex-direction:row;align-items:stretch;')
+            _LEFT = ('flex:0 0 58%;display:flex;flex-direction:column;'
+                     'padding:40px 40px 28px 60px;position:relative;'
+                     'border-right:1px solid rgba(167,139,250,0.09);')
+            _RIGHT = 'flex:1;display:flex;align-items:center;justify-content:center;padding:0 48px;'
+            # gradient-border wrapper: 1.5px animated gradient + inner solid card
+            _CARD_WRAP = ('width:100%;max-width:400px;padding:1.5px;border-radius:22px;'
+                          'background:linear-gradient(135deg,#6d28d9,#818cf8,#a78bfa,#4f46e5,#6d28d9);'
+                          'background-size:300% 300%;'
+                          'animation:card-border 5s ease infinite;'
+                          'box-shadow:0 8px 64px rgba(109,40,217,0.28);')
+            _CARD  = ('width:100%;padding:38px 38px 34px;'
+                      'background:rgba(7,13,32,0.97);backdrop-filter:blur(32px);'
+                      'border-radius:21px;')
+            _BTN   = ('display:flex;align-items:center;justify-content:center;gap:10px;'
+                      'width:100%;padding:13px 0;margin:4px 0 0;border-radius:10px;'
+                      'background:linear-gradient(135deg,#6d28d9,#4f46e5);'
+                      'color:#fff;font-size:14px;font-weight:600;letter-spacing:0.02em;'
+                      'text-decoration:none;cursor:pointer;'
+                      'box-shadow:0 4px 18px rgba(109,40,217,0.45);')
+            _DOT   = 'display:inline-block;width:3px;height:3px;border-radius:50%;background:rgba(167,139,250,0.4);'
+
             st.markdown(
-                f'<div class="login-wrap">'
+                f'<div style="{_PAGE}">'
 
-                # ── Accenture brand bar ──────────────────────────────────
-                f'<div class="login-acc-bar">'
-                f'accenture<span class="acc-purple">&gt;</span>'
-                f'&nbsp;&nbsp;AI&#8209;First Agentic Solutions'
+                # ambient orbs — CSS animation classes work inside position:fixed
+                f'<div class="login-orb login-orb-1"></div>'
+                f'<div class="login-orb login-orb-2"></div>'
+                f'<div class="login-orb login-orb-3"></div>'
+
+                # ── LEFT PANEL ─────────────────────────────────────────────────────
+                f'<div style="{_LEFT}">'
+
+                # logo row
+                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;">'
+                f'{_ns_star_sm}'
+                f'<span style="color:#fff;font-size:14px;font-weight:700;letter-spacing:0.02em;">NorthStar Retail</span>'
+                f'<span style="color:rgba(255,255,255,0.18);margin:0 6px;font-size:13px;">|</span>'
+                f'<span style="color:#a78bfa;font-size:12px;font-weight:700;letter-spacing:0.06em;">accenture</span>'
                 f'</div>'
 
-                # ── Main card ───────────────────────────────────────────
-                f'<div class="login-card">'
-
-                # Client name
-                f'<div class="login-client">NorthStar Retail</div>'
-
-                # Product mark — diamond + name
-                f'<div class="login-product-mark">'
-                f'<div class="login-product-diamond"></div>'
-                f'<div class="login-product-name">Backlog Synthesizer</div>'
+                # AI badge
+                f'<div style="display:inline-flex;align-items:center;gap:7px;'
+                f'background:rgba(109,40,217,0.18);border:1px solid rgba(167,139,250,0.28);'
+                f'border-radius:20px;padding:5px 14px;margin-bottom:14px;width:fit-content;">'
+                f'<span style="width:6px;height:6px;border-radius:50%;background:#a78bfa;'
+                f'display:inline-block;animation:bdot 2.2s ease-in-out infinite;flex-shrink:0;"></span>'
+                f'<span style="color:#c4b5fd;font-size:11px;font-weight:600;letter-spacing:0.08em;'
+                f'text-transform:uppercase;">AI&#8209;Powered Enterprise Platform</span>'
                 f'</div>'
 
-                # Capability pills — minimal, no grid
-                f'<div class="login-pills">'
-                f'<span class="login-pill">Five-agent pipeline</span>'
-                f'<span class="login-pill-dot"></span>'
-                f'<span class="login-pill">MCP-live integrations</span>'
-                f'<span class="login-pill-dot"></span>'
-                f'<span class="login-pill">Full audit trail</span>'
+                # main title — 58px for impact
+                f'<div style="font-size:58px;font-weight:800;line-height:1.05;'
+                f'letter-spacing:-0.04em;color:#f0f4ff;margin-bottom:14px;">'
+                f'Backlog<br>'
+                f'<span style="background:linear-gradient(135deg,#a78bfa 0%,#818cf8 45%,#c084fc 100%);'
+                f'-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">'
+                f'Synthesizer</span>'
                 f'</div>'
 
-                # Sign-in button
-                f'<a href="{_login_url}" target="_self" class="ms-signin-btn">'
-                f'<svg class="ms-logo" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">'
+                # technical bullet lines — scannable by a tech architect in 5 seconds
+                f'<div style="margin-bottom:20px;display:flex;flex-direction:column;gap:9px;">'
+                f'<div style="display:flex;align-items:center;gap:10px;">'
+                f'<span style="color:#a78bfa;font-size:14px;flex-shrink:0;font-weight:700;">›</span>'
+                f'<span style="font-size:12.5px;color:rgba(255,255,255,0.52);line-height:1.4;">'
+                f'5&#8209;agent pipeline &nbsp;&middot;&nbsp; Parser &#8594; Constraint &#8594; Story &#8594; Epic &#8594; Gap'
+                f'</span></div>'
+                f'<div style="display:flex;align-items:center;gap:10px;">'
+                f'<span style="color:#a78bfa;font-size:14px;flex-shrink:0;font-weight:700;">›</span>'
+                f'<span style="font-size:12.5px;color:rgba(255,255,255,0.52);line-height:1.4;">'
+                f'MCP&#8209;native &nbsp;&middot;&nbsp; Jira + Confluence + GitHub live sync'
+                f'</span></div>'
+                f'<div style="display:flex;align-items:center;gap:10px;">'
+                f'<span style="color:#a78bfa;font-size:14px;flex-shrink:0;font-weight:700;">›</span>'
+                f'<span style="font-size:12.5px;color:rgba(255,255,255,0.52);line-height:1.4;">'
+                f'RS256 Entra SSO &nbsp;&middot;&nbsp; OTel traces &nbsp;&middot;&nbsp; SHA&#8209;256 audit chain'
+                f'</span></div>'
+                f'</div>'
+
+                # stats
+                f'<div style="display:flex;align-items:center;gap:0;margin-bottom:0;">'
+                f'<div style="padding-right:24px;">'
+                f'<div style="font-size:26px;font-weight:700;color:#a78bfa;line-height:1;">10x</div>'
+                f'<div style="font-size:10px;color:rgba(255,255,255,0.38);letter-spacing:0.07em;'
+                f'text-transform:uppercase;margin-top:3px;">Faster Backlog</div></div>'
+                f'<div style="width:1px;height:36px;background:rgba(167,139,250,0.18);flex-shrink:0;"></div>'
+                f'<div style="padding:0 24px;">'
+                f'<div style="font-size:26px;font-weight:700;color:#a78bfa;line-height:1;">5</div>'
+                f'<div style="font-size:10px;color:rgba(255,255,255,0.38);letter-spacing:0.07em;'
+                f'text-transform:uppercase;margin-top:3px;">AI Agents</div></div>'
+                f'<div style="width:1px;height:36px;background:rgba(167,139,250,0.18);flex-shrink:0;"></div>'
+                f'<div style="padding-left:24px;">'
+                f'<div style="font-size:26px;font-weight:700;color:#a78bfa;line-height:1;">100%</div>'
+                f'<div style="font-size:10px;color:rgba(255,255,255,0.38);letter-spacing:0.07em;'
+                f'text-transform:uppercase;margin-top:3px;">Auditable</div></div>'
+                f'</div>'
+
+                # neural brain SVG — fills remaining space, centred horizontally
+                f'<div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding-top:16px;">'
+                f'{_brain}'
+                f'</div>'
+
+                # bottom footer
+                f'<div style="font-size:11px;color:rgba(255,255,255,0.25);'
+                f'letter-spacing:0.04em;padding-top:16px;flex-shrink:0;">'
+                f'accenture &rsaquo; AI&#8209;First Agentic Solutions'
+                f'</div>'
+
+                f'</div>'  # end left panel
+
+                # vertical divider line
+                f'<div style="width:1px;flex-shrink:0;align-self:stretch;'
+                f'background:linear-gradient(180deg,transparent 5%,rgba(167,139,250,0.14) 30%,'
+                f'rgba(167,139,250,0.14) 70%,transparent 95%);"></div>'
+
+                # ── RIGHT PANEL ────────────────────────────────────────────────────
+                f'<div style="{_RIGHT}">'
+                # animated gradient border wrapper
+                f'<div style="{_CARD_WRAP}">'
+                f'<div style="{_CARD}">'
+
+                f'<div style="text-align:center;margin-bottom:8px;">{_ns_star_card}</div>'
+                f'<div style="text-align:center;font-size:11px;font-weight:600;letter-spacing:0.14em;'
+                f'color:rgba(167,139,250,0.7);text-transform:uppercase;margin-bottom:18px;">NorthStar Retail</div>'
+                f'<div style="text-align:center;font-size:26px;font-weight:700;color:#f0f4ff;'
+                f'letter-spacing:-0.02em;margin-bottom:8px;">Welcome back</div>'
+                f'<div style="text-align:center;font-size:13px;color:rgba(255,255,255,0.44);'
+                f'line-height:1.6;margin-bottom:24px;">'
+                f'Sign in with your NorthStar Retail account<br>to access the backlog intelligence workspace.'
+                f'</div>'
+                f'<div style="height:1px;background:linear-gradient(90deg,transparent,'
+                f'rgba(167,139,250,0.2),transparent);margin-bottom:22px;"></div>'
+
+                f'<a href="{_login_url}" target="_self" style="{_BTN}">'
+                f'<svg width="18" height="18" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">'
                 f'<rect x="1" y="1" width="9" height="9" fill="#f25022"/>'
                 f'<rect x="11" y="1" width="9" height="9" fill="#7fba00"/>'
                 f'<rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>'
                 f'<rect x="11" y="11" width="9" height="9" fill="#ffb900"/>'
-                f'</svg>'
-                f'Sign in with Microsoft'
+                f'</svg>Continue with Microsoft'
                 f'</a>'
 
-                # Access note
-                f'<div class="login-access-note">'
-                f'For authorised NorthStar Retail Corp employees only.'
+                f'<div style="text-align:center;margin-top:14px;font-size:11px;'
+                f'color:rgba(255,255,255,0.26);">For authorised NorthStar Retail employees only</div>'
+
+                f'<div style="display:flex;align-items:center;justify-content:center;gap:8px;'
+                f'margin-top:14px;font-size:11px;color:rgba(167,139,250,0.5);letter-spacing:0.03em;">'
+                f'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                f'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'
+                f'<path d="M12 2L20 7V12C20 17 16 21.4 12 23C8 21.4 4 17 4 12V7Z"/></svg>'
+                f'Microsoft Entra ID<span style="{_DOT}"></span>Enterprise SSO<span style="{_DOT}"></span>Zero Trust'
                 f'</div>'
 
-                f'</div>'  # end card
-
-                # Global footer — demo disclaimer
-                f'<div class="login-global-footer">'
-                f'DEMO ENVIRONMENT &nbsp;&middot;&nbsp; '
-                f'<span>Fictional client &mdash; NorthStar Retail Corp</span>'
-                f' &nbsp;&middot;&nbsp; Secured by Microsoft Entra ID'
+                # tech stack badges — the things a tech architect immediately notices
+                f'<div style="margin-top:20px;padding-top:16px;'
+                f'border-top:1px solid rgba(167,139,250,0.08);">'
+                f'<div style="text-align:center;font-size:10px;color:rgba(255,255,255,0.2);'
+                f'letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">Powered by</div>'
+                f'<div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">'
+                f'<span style="background:rgba(109,40,217,0.18);border:1px solid rgba(167,139,250,0.22);'
+                f'border-radius:6px;padding:3px 9px;font-size:10px;font-weight:600;color:#c4b5fd;'
+                f'letter-spacing:0.03em;">Claude</span>'
+                f'<span style="background:rgba(109,40,217,0.18);border:1px solid rgba(167,139,250,0.22);'
+                f'border-radius:6px;padding:3px 9px;font-size:10px;font-weight:600;color:#c4b5fd;'
+                f'letter-spacing:0.03em;">Gemini</span>'
+                f'<span style="background:rgba(109,40,217,0.18);border:1px solid rgba(167,139,250,0.22);'
+                f'border-radius:6px;padding:3px 9px;font-size:10px;font-weight:600;color:#c4b5fd;'
+                f'letter-spacing:0.03em;">MCP Protocol</span>'
+                f'</div>'
                 f'</div>'
 
-                f'</div>',  # end wrap
+                f'</div>'  # end inner card
+                f'</div>'  # end gradient border wrapper
+                f'</div>'  # end right panel
+
+                # demo disclaimer
+                f'<div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;'
+                f'font-size:11px;color:rgba(255,255,255,0.2);letter-spacing:0.02em;">'
+                f'Demo environment &mdash; NorthStar Retail Corp is a fictional client created for demonstration purposes only.'
+                f'</div>'
+
+                f'</div>',  # end page wrapper
                 unsafe_allow_html=True,
             )
             st.stop()
@@ -291,8 +563,11 @@ if not _auth_disabled:
             _current_role = _user_config.get("role", "viewer")
 
         except ImportError:
-            st.warning("streamlit-authenticator not installed — running as admin.")
-            _current_role = "admin"
+            st.error(
+                "**Dependency missing:** `streamlit-authenticator` is not installed. "
+                "Run `pip install streamlit-authenticator` or configure Entra ID SSO."
+            )
+            st.stop()
 
 
 def _is_admin() -> bool:
@@ -1054,6 +1329,42 @@ def _render_guardrails_tab(result: dict) -> None:
         )
 
 
+def _gap_to_story(gap: dict) -> None:
+    """Convert a gap into a user story and inject it into the session result."""
+    res = st.session_state.get("result")
+    if not res:
+        return
+    title = gap.get("title") or gap.get("description") or "Untitled gap"
+    desc  = gap.get("description") or ""
+    evid  = gap.get("evidence") or ""
+    new_story = {
+        "id":    f"ST-gap-{uuid.uuid4().hex[:4]}",
+        "title": title,
+        "user_story": f"As a product team, I want to address the identified gap — {title} — so that the product is complete and competitive.",
+        "acceptance_criteria": [
+            f"The gap is resolved: {desc}" if desc else f"Story addresses: {title}",
+            "Acceptance criteria reviewed and approved by the squad lead.",
+        ],
+        "priority":       "Medium",
+        "tags":           ["gap-identified"],
+        "source_topic_id": "",
+        "evidence":       [{"raw_quote": evid}] if evid else [],
+    }
+    epics = res.get("epics") or []
+    gap_epic = next((e for e in epics if e.get("title") == "Gaps & Improvements"), None)
+    if gap_epic is None:
+        gap_epic = {
+            "title":       "Gaps & Improvements",
+            "description": "Stories created from detected gaps — capabilities implied by requirements but not in the existing backlog.",
+            "stories":     [],
+        }
+        epics.append(gap_epic)
+        res["epics"] = epics
+    gap_epic.setdefault("stories", []).append(new_story)
+    st.session_state.result = res
+    st.session_state.epics_original = json.loads(json.dumps(res.get("epics") or []))
+
+
 def _render_findings_tab(result: dict, kind: str) -> None:
     items = result.get(kind, []) or []
     if not items:
@@ -1062,7 +1373,7 @@ def _render_findings_tab(result: dict, kind: str) -> None:
         return
     css = {"gaps": "finding-gap", "conflicts": "finding-conflict", "duplicates": "finding-dup"}[kind]
     kind_label = {"gaps": "GAP", "conflicts": "CONFLICT", "duplicates": "DUPLICATE"}[kind]
-    for item in items:
+    for idx, item in enumerate(items):
         parts = [f'<div class="finding-card {css}">']
         parts.append('<div class="finding-head">')
         parts.append(f'<span class="finding-kind">{kind_label}</span>')
@@ -1089,6 +1400,20 @@ def _render_findings_tab(result: dict, kind: str) -> None:
             parts.append(f'<div class="finding-evidence">↳ {_esc(item["evidence"])}</div>')
         parts.append("</div>")
         st.markdown("".join(parts), unsafe_allow_html=True)
+
+        if kind == "gaps" and _can_run():
+            _gap_key = f"gap_to_story_{idx}_{item.get('id') or idx}"
+            _already = any(
+                s.get("id", "").startswith("ST-gap-") and
+                (item.get("title") or item.get("description") or "") in (s.get("title") or "")
+                for e in (st.session_state.get("result") or {}).get("epics", [])
+                for s in e.get("stories", [])
+            )
+            if _already:
+                st.caption("✓ Story created from this gap")
+            elif st.button("＋ Create Story from this gap", key=_gap_key, use_container_width=False):
+                _gap_to_story(item)
+                st.rerun()
 
 
 # ----- word-diff for duplicate compare modal --------------------------
@@ -1322,11 +1647,15 @@ def show_run_history_dialog() -> None:
             pass
         total_stories += int(h.get("story_count") or h.get("n_stories") or 0)
 
+    _cost_chip = (
+        f'<div class="rh-summary-chip"><span>Total est. cost</span>${total_cost:.4f}</div>'
+        if _is_admin() else ""
+    )
     st.markdown(
         '<div style="display:flex;gap:0.6rem;margin-bottom:0.85rem;">'
         f'<div class="rh-summary-chip"><span>Runs</span>{len(history)}</div>'
         f'<div class="rh-summary-chip"><span>Stories drafted</span>{total_stories}</div>'
-        f'<div class="rh-summary-chip"><span>Total est. cost</span>${total_cost:.4f}</div>'
+        f'{_cost_chip}'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -1413,12 +1742,13 @@ def _render_history_row(entry: dict, current_run_id: str) -> None:
             ("model", entry.get("model") or "—"),
         ):
             chips.append(f'<span class="rh-chip">{_esc(label)}={_esc(val)}</span>')
-        cost = entry.get("cost_usd")
-        if cost is not None:
-            try:
-                chips.append(f'<span class="rh-chip rh-chip-accent">${float(cost):.4f}</span>')
-            except (TypeError, ValueError):
-                pass
+        if _is_admin():
+            cost = entry.get("cost_usd")
+            if cost is not None:
+                try:
+                    chips.append(f'<span class="rh-chip rh-chip-accent">${float(cost):.4f}</span>')
+                except (TypeError, ValueError):
+                    pass
         current_badge = (
             '<span class="rh-chip rh-chip-current">⌖ current</span>'
             if is_current else ""
@@ -1748,6 +2078,13 @@ def _expander_label(title: str, choices: list, empty_hint: str = "") -> str:
 with st.sidebar:
     # ── Brand ──────────────────────────────────────────────────────────────
     st.markdown(
+        '<div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">'
+        '<svg viewBox="0 0 28 28" fill="none" width="24" height="24">'
+        '<polygon points="14,2 17.2,10.4 26,10.8 19.4,15.8 21.6,24.4 14,19.8 6.4,24.4 8.6,15.8 2,10.8 10.8,10.4"'
+        ' fill="none" stroke="#F5A623" stroke-width="1.8" stroke-linejoin="round"/>'
+        '</svg>'
+        '<span style="color:#f0f4ff;font-size:16px;font-weight:700;letter-spacing:0.02em;">NorthStar Retail</span>'
+        '</div>'
         '<div class="acc-brand">'
         '<span class="acc-wordmark">accenture<span class="acc-mark">&gt;</span></span>'
         '<span class="acc-eyebrow">AI-First Agentic Solutions</span>'
@@ -1870,9 +2207,19 @@ with st.sidebar:
         try:
             _usage = get_usage_summary(_current_user)
             _hr_pct = min(100, int(100 * _usage["runs_last_hour"] / max(1, _usage["max_runs_per_hour"])))
-            _day_pct = min(100, int(100 * _usage["cost_today_usd"] / max(0.01, _usage["max_cost_per_day_usd"])))
             _hr_color = "var(--rose)" if _hr_pct >= 80 else "var(--accent)"
-            _day_color = "var(--rose)" if _day_pct >= 80 else "var(--accent)"
+            if _is_admin():
+                _day_pct = min(100, int(100 * _usage["cost_today_usd"] / max(0.01, _usage["max_cost_per_day_usd"])))
+                _day_color = "var(--rose)" if _day_pct >= 80 else "var(--accent)"
+                _cost_row = (
+                    f'<div style="display:flex;justify-content:space-between;color:var(--text-faint);">'
+                    f'<span>Cost today</span><span style="color:{_day_color};">'
+                    f'${_usage["cost_today_usd"]:.3f}/${_usage["max_cost_per_day_usd"]:.2f}</span></div>'
+                    f'<div style="height:3px;background:var(--border);border-radius:2px;margin-top:0.25rem;">'
+                    f'<div style="height:3px;width:{_day_pct}%;background:{_day_color};border-radius:2px;"></div></div>'
+                )
+            else:
+                _cost_row = ""
             st.markdown(
                 f'<div style="padding:0.4rem 0.6rem;background:var(--bg-elev-1);'
                 f'border:1px solid var(--border);border-radius:8px;margin-bottom:0.5rem;font-size:0.75rem;">'
@@ -1881,11 +2228,7 @@ with st.sidebar:
                 f'{_usage["runs_last_hour"]}/{_usage["max_runs_per_hour"]}</span></div>'
                 f'<div style="height:3px;background:var(--border);border-radius:2px;margin-bottom:0.3rem;">'
                 f'<div style="height:3px;width:{_hr_pct}%;background:{_hr_color};border-radius:2px;"></div></div>'
-                f'<div style="display:flex;justify-content:space-between;color:var(--text-faint);">'
-                f'<span>Cost today</span><span style="color:{_day_color};">'
-                f'${_usage["cost_today_usd"]:.3f}/${_usage["max_cost_per_day_usd"]:.2f}</span></div>'
-                f'<div style="height:3px;background:var(--border);border-radius:2px;margin-top:0.25rem;">'
-                f'<div style="height:3px;width:{_day_pct}%;background:{_day_color};border-radius:2px;"></div></div>'
+                f'{_cost_row}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -2427,21 +2770,22 @@ with st.sidebar:
             models=st.session_state.models,
         )
         if _transcript_ready and (_pre_in_tokens > 0 or _pre_out_tokens > 0):
-            _cost_line = (
-                f"≈ <strong style='color:var(--accent)'>${_pre_cost_usd:.4f}</strong> "
-                f"<span style='color:var(--text-faint)'>·</span> "
-                f"<span style='color:var(--text-muted)'>{_pre_in_tokens // 1000}k in, ~{_pre_out_tokens // 1000}k out</span>"
-            )
-            st.markdown(
-                "<div style='padding:0.45rem 0.8rem;background:var(--bg-elev-1);"
-                "border:1px solid var(--border);border-left:3px solid var(--accent);"
-                "border-radius:8px;font-size:0.82rem;margin-bottom:0.5rem;'>"
-                "<span style='font-size:0.62rem;font-weight:700;letter-spacing:0.12em;"
-                "text-transform:uppercase;color:var(--accent);display:block;margin-bottom:0.2rem;'>"
-                "Estimated run cost</span>"
-                f"{_cost_line}</div>",
-                unsafe_allow_html=True,
-            )
+            if _is_admin():
+                _cost_line = (
+                    f"≈ <strong style='color:var(--accent)'>${_pre_cost_usd:.4f}</strong> "
+                    f"<span style='color:var(--text-faint)'>·</span> "
+                    f"<span style='color:var(--text-muted)'>{_pre_in_tokens // 1000}k in, ~{_pre_out_tokens // 1000}k out</span>"
+                )
+                st.markdown(
+                    "<div style='padding:0.45rem 0.8rem;background:var(--bg-elev-1);"
+                    "border:1px solid var(--border);border-left:3px solid var(--accent);"
+                    "border-radius:8px;font-size:0.82rem;margin-bottom:0.5rem;'>"
+                    "<span style='font-size:0.62rem;font-weight:700;letter-spacing:0.12em;"
+                    "text-transform:uppercase;color:var(--accent);display:block;margin-bottom:0.2rem;'>"
+                    "Estimated run cost</span>"
+                    f"{_cost_line}</div>",
+                    unsafe_allow_html=True,
+                )
         else:
             _transcript_ready = False
 
@@ -2721,6 +3065,31 @@ def show_jira_dialog() -> None:
 
     _subs = st.checkbox("Also create sub-tasks", value=True, key="jira_dlg_subtasks")
 
+    # ---- Squad / team assignment ----
+    st.markdown(
+        '<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+        'color:var(--text-muted);margin:0.7rem 0 0.3rem;">Team Assignment</div>',
+        unsafe_allow_html=True,
+    )
+    _SQUADS = [
+        "— Unassigned —",
+        "Platform Engineering",
+        "Mobile",
+        "Backend",
+        "Frontend",
+        "Data & Analytics",
+        "QA / Testing",
+        "DevOps / Infrastructure",
+        "Product",
+    ]
+    col_sq, col_comp = st.columns(2)
+    with col_sq:
+        _squad = st.selectbox("Squad", _SQUADS, index=0, key="jira_dlg_squad")
+    with col_comp:
+        _component = st.text_input("Jira Component (optional)", placeholder="e.g. loyalty-api", key="jira_dlg_component")
+
+    _squad_label = _squad if _squad != "— Unassigned —" else ""
+
     st.markdown(
         f'<div style="padding:0.5rem 0.8rem;background:rgba(251,113,133,.08);'
         f'border:1px solid rgba(251,113,133,.3);border-radius:6px;margin:0.5rem 0;font-size:0.82rem;">'
@@ -2749,8 +3118,23 @@ def show_jira_dialog() -> None:
         with st.spinner(f"Creating issues in {_proj}…"):
             try:
                 from tools.jira_tool import JiraTool
-                st.session_state["jira_publish_result"] = JiraTool(mode="live").publish_synthesis(
-                    res, create_subtasks=_subs)
+                _pub_label = "-".join(filter(None, ["backlog-synth", _squad_label.lower().replace(" ", "-")])) if _squad_label else "backlog-synth"
+                _pub_result = JiraTool(mode="live").publish_synthesis(
+                    res, create_subtasks=_subs, label=_pub_label)
+                st.session_state["jira_publish_result"] = _pub_result
+                if not _pub_result.get("error"):
+                    try:
+                        from alerts import post_jira_push_notification
+                        _c = _pub_result.get("counts", {})
+                        post_jira_push_notification(
+                            user=_current_user or "",
+                            project=_proj or "",
+                            epic_count=_c.get("epics", 0),
+                            story_count=_c.get("stories", 0),
+                            subtask_count=_c.get("subtasks", 0),
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception as e:  # noqa: BLE001
                 st.session_state["jira_publish_result"] = {"error": str(e)}
 
@@ -3320,6 +3704,15 @@ if run_clicked or _main_canvas_run:
         st.stop()
     elif _status == "error":
         _progress_placeholder.error(f"Pipeline failed: {_payload}")
+        try:
+            from alerts import post_pipeline_failure_notification
+            post_pipeline_failure_notification(
+                user=_current_user or "",
+                source_label=source_label,
+                error=str(_payload),
+            )
+        except Exception:  # noqa: BLE001
+            pass
         st.stop()
 
     result = _payload
@@ -3358,6 +3751,16 @@ if run_clicked or _main_canvas_run:
             '<div class="log-line log-failed"><span class="log-icon">✗</span>'
             f'<strong>Failed</strong> · {len(_fl)} stage(s): {_esc(", ".join(_fl))}</div>'
         )
+        try:
+            from alerts import post_pipeline_failure_notification
+            post_pipeline_failure_notification(
+                user=_current_user or "",
+                source_label=source_label,
+                error=f"{len(_fl)} stage(s) failed: {', '.join(_fl)}",
+                partial=True,
+            )
+        except Exception:  # noqa: BLE001
+            pass
     _render_log()
     try:
         if _fl:
@@ -3431,6 +3834,23 @@ if run_clicked or _main_canvas_run:
     }
     _save_run_to_disk(history_summary)
 
+    # Fire Slack/Teams synthesis-complete notification (SLACK_WEBHOOK_URL).
+    try:
+        from alerts import post_synthesis_notification
+        post_synthesis_notification(
+            run_id=history_summary["run_id"],
+            user=_current_user or "anonymous",
+            source_label=source_label,
+            epic_count=len(epics),
+            story_count=n_stories,
+            gap_count=len(result.get("gaps") or []),
+            conflict_count=len(result.get("conflicts") or []),
+            elapsed_seconds=elapsed,
+            cost_usd=cost_usd,
+        )
+    except Exception:  # noqa: BLE001 — notification must never fail a run
+        pass
+
 
 # -------------------------------------------------------- results / empty state
 
@@ -3494,7 +3914,7 @@ elif result is None:
     # button.
     st.markdown(
         """
-        <div class="empty-state">
+        <div class="empty-state explainer-card">
             <div class="empty-state-eyebrow">Backlog Synthesizer · multi-agent</div>
             <div class="empty-state-title">Five specialized agents turn raw input into a structured, audited backlog</div>
             <div class="empty-state-subtitle">
@@ -3550,7 +3970,15 @@ else:
     tokens = st.session_state.tokens_total or 0
     cost = st.session_state.cost_usd or 0.0
     model = st.session_state.model_used or "—"
-    cost_label = f"${cost:.4f}" if cost > 0 else "—"
+
+    _cost_meta = ""
+    if _is_admin():
+        cost_label = f"${cost:.4f}" if cost > 0 else "—"
+        _cost_meta = (
+            '<span class="run-meta-sep">·</span>'
+            f'<span class="run-meta-item"><span class="run-meta-icon">$</span>'
+            f'<span class="run-meta-label">Cost</span>{cost_label}</span>'
+        )
 
     st.markdown(
         '<div class="run-meta">'
@@ -3565,9 +3993,7 @@ else:
         '<span class="run-meta-sep">·</span>'
         f'<span class="run-meta-item"><span class="run-meta-icon">⊕</span>'
         f'<span class="run-meta-label">Tokens</span>{tokens:,}</span>'
-        '<span class="run-meta-sep">·</span>'
-        f'<span class="run-meta-item"><span class="run-meta-icon">$</span>'
-        f'<span class="run-meta-label">Cost</span>{cost_label}</span>'
+        f'{_cost_meta}'
         '</div>',
         unsafe_allow_html=True,
     )

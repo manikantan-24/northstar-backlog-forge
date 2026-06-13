@@ -183,6 +183,30 @@ class ClaudeTool(Tool):
     # ---------------------------------------------- JSON extraction
 
     @staticmethod
+    def _repair_truncated_json(candidate: str) -> str:
+        """Close unclosed brackets/braces in a truncated JSON string."""
+        stack = []
+        in_string = False
+        escape = False
+        for ch in candidate:
+            if escape:
+                escape = False
+                continue
+            if ch == "\\" and in_string:
+                escape = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch in "{[":
+                stack.append("}" if ch == "{" else "]")
+            elif ch in "}]" and stack and stack[-1] == ch:
+                stack.pop()
+        return candidate + "".join(reversed(stack))
+
+    @staticmethod
     def _extract_json_block(text: str) -> dict:
         """Pull a JSON object out of model output. Handles fences and prose."""
         # Try fenced block first
@@ -196,5 +220,11 @@ class ClaudeTool(Tool):
             candidate = brace_match.group(0)
         try:
             return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+        # Attempt to repair truncated JSON (e.g. model hit token limit mid-output)
+        repaired = ClaudeTool._repair_truncated_json(candidate)
+        try:
+            return json.loads(repaired)
         except json.JSONDecodeError as e:
             raise ToolError(f"Model produced invalid JSON: {e}\nGot:\n{candidate[:500]}")
