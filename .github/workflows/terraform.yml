@@ -28,7 +28,7 @@ env:
   ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
   ARM_USE_CLI:         "false"
   STATE_SA:            "stbacklogstate"
-  STATE_RG:            "rg-backlog-synthesizer"
+  STATE_RG:            "rg-tfstate"
   STATE_CONTAINER:     "tfstate"
 
 jobs:
@@ -69,18 +69,27 @@ jobs:
       # Created once; idempotent (|| true on all commands).
       - name: Bootstrap Terraform state storage
         run: |
+          # rg-tfstate is independent of the app RG — created here, never by Terraform.
+          # This avoids the chicken-and-egg problem where the app RG doesn't exist yet.
+          az group create \
+            --name "${{ env.STATE_RG }}" \
+            --location eastus \
+            --output none 2>/dev/null || echo "State RG already exists."
+
           az storage account create \
             --name "${{ env.STATE_SA }}" \
             --resource-group "${{ env.STATE_RG }}" \
             --sku Standard_LRS \
             --kind StorageV2 \
             --allow-blob-public-access false \
-            --min-tls-version TLS1_2 2>&1 | grep -v "already exists" || true
+            --min-tls-version TLS1_2 \
+            --output none 2>/dev/null || echo "State SA already exists."
 
           az storage container create \
             --name "${{ env.STATE_CONTAINER }}" \
             --account-name "${{ env.STATE_SA }}" \
-            --auth-mode login 2>&1 | grep -v "already exists" || true
+            --auth-mode login \
+            --output none 2>/dev/null || echo "State container already exists."
 
           # Export access key for Terraform backend auth
           KEY=$(az storage account keys list \

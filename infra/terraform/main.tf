@@ -16,7 +16,7 @@ terraform {
   # Remote state — backend config values passed via terraform init -backend-config in CI.
   # Storage account (stbacklogstate) is bootstrap infra, created by the workflow before init.
   backend "azurerm" {
-    resource_group_name  = "rg-backlog-synthesizer"
+    resource_group_name  = "rg-tfstate"
     storage_account_name = "stbacklogstate"
     container_name       = "tfstate"
     key                  = "backlog-synthesizer.tfstate"
