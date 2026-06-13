@@ -141,14 +141,36 @@ jobs:
           echo "App: ${{ env.CONTAINERAPP_NAME }}"
           echo "RG:  ${{ env.AZURE_RESOURCE_GROUP }}"
 
-          # Update image — revision-suffix forces a new revision even when
-          # the image digest matches the current one (avoids no-op deploys).
           SHORT_SHA="${{ github.sha }}"
           az containerapp update \
             --name "${{ env.CONTAINERAPP_NAME }}" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --image "$IMAGE" \
-            --revision-suffix "${SHORT_SHA:0:7}"
+            --revision-suffix "${SHORT_SHA:0:7}" \
+            --set-env-vars \
+              "ANTHROPIC_API_KEY=secretref:anthropic-api-key" \
+              "GOOGLE_API_KEY=secretref:google-api-key" \
+              "JIRA_BASE_URL=${{ secrets.JIRA_BASE_URL }}" \
+              "JIRA_EMAIL=${{ secrets.JIRA_EMAIL }}" \
+              "JIRA_API_TOKEN=secretref:jira-api-token" \
+              "JIRA_PROJECT_KEY=${{ secrets.JIRA_PROJECT_KEY }}" \
+              "GITHUB_TOKEN=secretref:github-token" \
+              "GITHUB_OWNER=${{ secrets.GITHUB_OWNER }}" \
+              "GITHUB_REPO=${{ secrets.GITHUB_REPO }}" \
+              "GITHUB_MCP_ENABLED=1" \
+              "ATLASSIAN_MCP_ENABLED=1" \
+              "ENTRA_TENANT_ID=${{ secrets.ENTRA_TENANT_ID }}" \
+              "ENTRA_TENANT_DOMAIN=${{ secrets.ENTRA_TENANT_DOMAIN }}" \
+              "ENTRA_CLIENT_ID=${{ secrets.ENTRA_CLIENT_ID }}" \
+              "ENTRA_CLIENT_SECRET=secretref:entra-client-secret" \
+              "ENTRA_REDIRECT_URI=${{ secrets.ENTRA_REDIRECT_URI }}" \
+              "AUTH_COOKIE_SECRET=${{ secrets.AUTH_COOKIE_SECRET }}" \
+              "SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}" \
+              "OTEL_ENABLED=1" \
+              "OTEL_SERVICE_NAME=backlog-synthesizer" \
+              "OTEL_EXPORTER_OTLP_ENDPOINT=${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}" \
+              "OTEL_EXPORTER_OTLP_HEADERS=${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}" \
+              "AUTH_DISABLED=0"
 
       - name: Wait for revision to be active
         run: |
