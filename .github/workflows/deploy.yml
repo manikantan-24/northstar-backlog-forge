@@ -138,21 +138,6 @@ jobs:
       - name: Install Container Apps CLI extension
         run: az extension add --name containerapp --upgrade --yes
 
-      - name: Seed missing Key Vault secrets
-        run: |
-          # Write AUTH-COOKIE-SECRET and SLACK-WEBHOOK-URL into Key Vault so the
-          # Container App's KV-backed secret references can resolve at startup.
-          # Idempotent — az keyvault secret set upserts.
-          az keyvault secret set \
-            --vault-name kv-backlog-synth \
-            --name AUTH-COOKIE-SECRET \
-            --value "${{ secrets.AUTH_COOKIE_SECRET }}" --output none
-          az keyvault secret set \
-            --vault-name kv-backlog-synth \
-            --name SLACK-WEBHOOK-URL \
-            --value "${{ secrets.SLACK_WEBHOOK_URL }}" --output none
-          echo "Key Vault secrets seeded."
-
       - name: Deploy new revision to Container Apps
         run: |
           IMAGE="${{ secrets.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
