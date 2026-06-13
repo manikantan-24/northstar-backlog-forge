@@ -58,7 +58,7 @@ class StoryWriterAgent(Agent):
             .replace("{{CONSTRAINTS_JSON}}", json.dumps(constraints, indent=2))
         )
         try:
-            parsed, usage = self.claude.call_for_json(prompt, max_tokens=8000)
+            parsed, usage = self.claude.call_for_json(prompt, max_tokens=16000)
         except ToolError as e:
             raise AgentError(f"Story Writer LLM call failed: {e}") from e
 
