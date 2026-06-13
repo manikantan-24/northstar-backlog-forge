@@ -13,10 +13,10 @@ import streamlit as st
 # Three levels up: src/ui/ → src/ → project root
 ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Respect LOGS_DIR env var so Azure deployments write to the mounted
-# Azure Files share (/app/backlog-data/logs) instead of the ephemeral
-# container layer.  Falls back to ROOT/logs for local development.
-_LOGS_BASE = Path(os.environ.get("LOGS_DIR", str(ROOT / "logs")))
+# Respect LOGS_DIR / OUTPUTS_DIR env vars so Azure deployments write to
+# mounted Azure Files shares instead of the ephemeral container layer.
+_LOGS_BASE    = Path(os.environ.get("LOGS_DIR",    str(ROOT / "logs")))
+_OUTPUTS_BASE = Path(os.environ.get("OUTPUTS_DIR", str(ROOT / "outputs")))
 RUNS_DIR = _LOGS_BASE / "runs"
 
 # Per-user hard daily spend cap (USD). Override via env var DAILY_BUDGET_USD.
@@ -344,12 +344,12 @@ def _load_history_into_state(entry: dict[str, Any]) -> None:
     if synth_path:
         p = Path(synth_path)
         # Absolute paths from a different machine won't exist here; try to find
-        # the file relative to ROOT/outputs as a fallback before giving up.
+        # the file relative to OUTPUTS_BASE as a fallback before giving up.
         if not p.exists():
-            relative_candidate = ROOT / "outputs" / p.name
+            relative_candidate = _OUTPUTS_BASE / p.name
             if not relative_candidate.exists():
-                # Walk outputs/ for any file with the same name.
-                matches = list((ROOT / "outputs").rglob(p.name)) if (ROOT / "outputs").exists() else []
+                # Walk outputs base for any file with the same name.
+                matches = list(_OUTPUTS_BASE.rglob(p.name)) if _OUTPUTS_BASE.exists() else []
                 if matches:
                     p = matches[0]
                 else:

@@ -36,6 +36,9 @@ from dotenv import load_dotenv
 # -------------------------------------------------------- bootstrap
 
 ROOT = Path(__file__).resolve().parent
+# Respect OUTPUTS_DIR env var so Azure deployments write synthesis outputs
+# to the mounted Azure Files share instead of the ephemeral container layer.
+OUTPUTS_BASE = Path(os.environ.get("OUTPUTS_DIR", str(ROOT / "outputs")))
 # .env is for local development only. In production, set env vars via the
 # deployment platform (Fly.io secrets, AWS Secrets Manager, etc.).
 load_dotenv(ROOT / ".env")
@@ -3774,7 +3777,7 @@ if run_clicked or _main_canvas_run:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     # Scope outputs to the current user — outputs/<user_id>/<timestamp>/
     _safe_uid = "".join(c if c.isalnum() or c in "-_." else "_" for c in (_current_user or "anonymous"))
-    run_dir = ROOT / "outputs" / _safe_uid / stamp
+    run_dir = OUTPUTS_BASE / _safe_uid / stamp
     # `result` from the orchestrator now includes `token_usage` and `model`.
     # write_outputs reads the synthesis content fields; the extras are
     # carried through to the JSON dump as well — useful downstream.

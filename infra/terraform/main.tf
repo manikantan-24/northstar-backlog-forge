@@ -179,6 +179,12 @@ resource "azurerm_storage_share" "data" {
   quota                = 10
 }
 
+resource "azurerm_storage_share" "outputs" {
+  name                 = "backlog-outputs"
+  storage_account_name = azurerm_storage_account.main.name
+  quota                = 50
+}
+
 # ── Log Analytics ──────────────────────────────────────────────────────────────
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "law-backlog-synthesizer"
@@ -203,6 +209,15 @@ resource "azurerm_container_app_environment_storage" "data" {
   container_app_environment_id = azurerm_container_app_environment.main.id
   account_name                 = azurerm_storage_account.main.name
   share_name                   = azurerm_storage_share.data.name
+  access_key                   = azurerm_storage_account.main.primary_access_key
+  access_mode                  = "ReadWrite"
+}
+
+resource "azurerm_container_app_environment_storage" "outputs" {
+  name                         = "backlog-outputs"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  account_name                 = azurerm_storage_account.main.name
+  share_name                   = azurerm_storage_share.outputs.name
   access_key                   = azurerm_storage_account.main.primary_access_key
   access_mode                  = "ReadWrite"
 }
@@ -295,6 +310,12 @@ resource "azurerm_container_app" "app" {
       storage_name = "backlog-data"
     }
 
+    volume {
+      name         = "backlog-outputs"
+      storage_type = "AzureFile"
+      storage_name = "backlog-outputs"
+    }
+
     container {
       name   = "backlog-synthesizer"
       image  = "${azurerm_container_registry.acr.login_server}/backlog-synthesizer:latest"
@@ -305,6 +326,14 @@ resource "azurerm_container_app" "app" {
       env {
         name  = "AUTH_DISABLED"
         value = "0"
+      }
+      env {
+        name  = "LOGS_DIR"
+        value = "/app/logs"
+      }
+      env {
+        name  = "OUTPUTS_DIR"
+        value = "/app/outputs"
       }
       env {
         name  = "OTEL_ENABLED"
@@ -402,6 +431,11 @@ resource "azurerm_container_app" "app" {
         path = "/app/logs"
       }
 
+      volume_mounts {
+        name = "backlog-outputs"
+        path = "/app/outputs"
+      }
+
       liveness_probe {
         transport               = "HTTP"
         port                    = 8501
@@ -422,7 +456,12 @@ resource "azurerm_container_app" "app" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].container[0].image]
+    # image — managed by deploy.yml, not Terraform
+    # secret — az containerapp secret set in deploy may add/update secrets out-of-band
+    ignore_changes = [
+      template[0].container[0].image,
+      secret,
+    ]
   }
 }
 

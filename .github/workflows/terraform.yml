@@ -168,17 +168,27 @@ jobs:
           safe_import azurerm_container_app.app \
             "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.App/containerApps/backlog-synthesizer"
 
-          # Key Vault secrets
-          KV_URI="https://${KV}.vault.azure.net/secrets"
-          safe_import azurerm_key_vault_secret.anthropic_key  "${KV_URI}/ANTHROPIC-API-KEY"
-          safe_import azurerm_key_vault_secret.google_key     "${KV_URI}/GOOGLE-API-KEY"
-          safe_import azurerm_key_vault_secret.jira_token     "${KV_URI}/JIRA-API-TOKEN"
-          safe_import azurerm_key_vault_secret.github_token   "${KV_URI}/GITHUB-TOKEN"
-          safe_import azurerm_key_vault_secret.entra_client_secret "${KV_URI}/ENTRA-CLIENT-SECRET"
-          safe_import azurerm_key_vault_secret.otel_headers   "${KV_URI}/OTEL-EXPORTER-OTLP-HEADERS"
-          safe_import azurerm_key_vault_secret.acr_password   "${KV_URI}/ACR-ADMIN-PASSWORD"
-          safe_import azurerm_key_vault_secret.auth_cookie_secret "${KV_URI}/AUTH-COOKIE-SECRET"
-          safe_import azurerm_key_vault_secret.slack_webhook_url  "${KV_URI}/SLACK-WEBHOOK-URL"
+          # Key Vault secrets — must use versioned ID (includes the version GUID)
+          # az keyvault secret show returns the versioned URI; skip if secret doesn't exist yet.
+          import_kv_secret() {
+            local tf_addr="$1" secret_name="$2"
+            local versioned_id
+            versioned_id=$(az keyvault secret show \
+              --vault-name "$KV" --name "$secret_name" \
+              --query id -o tsv 2>/dev/null || echo "")
+            [ -z "$versioned_id" ] && echo "  ⏭  $secret_name not in KV yet, will be created" && return 0
+            safe_import "$tf_addr" "$versioned_id"
+          }
+
+          import_kv_secret azurerm_key_vault_secret.anthropic_key      ANTHROPIC-API-KEY
+          import_kv_secret azurerm_key_vault_secret.google_key          GOOGLE-API-KEY
+          import_kv_secret azurerm_key_vault_secret.jira_token          JIRA-API-TOKEN
+          import_kv_secret azurerm_key_vault_secret.github_token        GITHUB-TOKEN
+          import_kv_secret azurerm_key_vault_secret.entra_client_secret ENTRA-CLIENT-SECRET
+          import_kv_secret azurerm_key_vault_secret.otel_headers        OTEL-EXPORTER-OTLP-HEADERS
+          import_kv_secret azurerm_key_vault_secret.acr_password        ACR-ADMIN-PASSWORD
+          import_kv_secret azurerm_key_vault_secret.auth_cookie_secret  AUTH-COOKIE-SECRET
+          import_kv_secret azurerm_key_vault_secret.slack_webhook_url   SLACK-WEBHOOK-URL
 
       # ── Plan (always runs — shows what will change) ──────────────────────
       - name: Terraform Plan
