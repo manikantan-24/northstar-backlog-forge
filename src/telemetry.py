@@ -11,12 +11,14 @@ Configuration (env vars):
     OTEL_EXPORTER_OTLP_HEADERS     Authorization=Basic <base64(instanceId:apiKey)>
 
 Metrics emitted (visible in Grafana dashboard):
-    pipeline_runs_total            Counter — total pipeline executions
-    pipeline_errors_total          Counter — failed pipeline runs
-    pipeline_duration_seconds      Histogram — end-to-end latency
-    stage_duration_seconds         Histogram — per-stage latency  {stage, model}
-    stage_tokens_total             Counter — LLM tokens consumed  {stage, type}
-    guardrail_findings_total       Counter — guardrail issues      {severity}
+    backlog_syntheses_total        Counter — total runs {status: ok|error}
+    backlog_synthesis_duration_seconds  Histogram — end-to-end latency
+    backlog_synthesis_cost_usd     Histogram — per-run USD cost
+    backlog_active_synthesis       UpDownCounter — currently running pipelines
+    backlog_tokens_total           Counter — LLM tokens consumed {stage, type}
+    backlog_llm_errors_total       Counter — LLM API errors {provider}
+    stage_duration_seconds         Histogram — per-stage latency {stage, model}
+    guardrail_findings_total       Counter — guardrail issues {severity}
 """
 
 from __future__ import annotations
@@ -153,12 +155,6 @@ def pipeline_span(
         yield _NoopSpan()
         return
 
-    # Increment run counter
-    counter = _instrument("pipeline_runs_total", "counter",
-                          "Total number of pipeline executions")
-    if counter:
-        counter.add(1, {"preset": preset})
-
     t0 = time.perf_counter()
     failed = False
     with tracer.start_as_current_span("pipeline.run") as span:
@@ -173,17 +169,15 @@ def pipeline_span(
             raise
         finally:
             elapsed = time.perf_counter() - t0
-            # Record duration histogram
-            hist = _instrument("pipeline_duration_seconds", "histogram",
+            status = "error" if failed else "ok"
+            counter = _instrument("backlog_syntheses_total", "counter",
+                                  "Total number of pipeline executions")
+            if counter:
+                counter.add(1, {"preset": preset, "status": status})
+            hist = _instrument("backlog_synthesis_duration_seconds", "histogram",
                                "End-to-end pipeline run duration", unit="s")
             if hist:
-                hist.record(elapsed, {"preset": preset, "status": "error" if failed else "ok"})
-            # Error counter
-            if failed:
-                err_counter = _instrument("pipeline_errors_total", "counter",
-                                          "Total number of failed pipeline runs")
-                if err_counter:
-                    err_counter.add(1, {"preset": preset})
+                hist.record(elapsed, {"preset": preset, "status": status})
 
 
 @contextmanager
@@ -237,7 +231,7 @@ def record_stage_tokens(
     except Exception:  # noqa: BLE001
         pass
 
-    counter = _instrument("stage_tokens_total", "counter",
+    counter = _instrument("backlog_tokens_total", "counter",
                           "Total LLM tokens consumed across all stages")
     if counter:
         counter.add(input_tokens,  {"type": "input",  "stage": stage})
@@ -315,6 +309,46 @@ def pipeline_node_span(node_name: str, run_id: str = "", **attributes: Any) -> G
             span.record_exception(exc)
             span.set_status(StatusCode.ERROR, description=str(exc)[:200])
             raise
+
+
+def inc_active_synthesis() -> None:
+    """Increment backlog_active_synthesis gauge (call at run start)."""
+    if not _ENABLED:
+        return
+    c = _instrument("backlog_active_synthesis", "counter",
+                    "Number of pipeline runs currently in progress")
+    if c:
+        c.add(1)
+
+
+def dec_active_synthesis() -> None:
+    """Decrement backlog_active_synthesis gauge (call at run end/error)."""
+    if not _ENABLED:
+        return
+    c = _instrument("backlog_active_synthesis", "counter",
+                    "Number of pipeline runs currently in progress")
+    if c:
+        c.add(-1)
+
+
+def record_pipeline_cost(cost_usd: float, preset: str = "") -> None:
+    """Record per-run cost to backlog_synthesis_cost_usd histogram."""
+    if not _ENABLED or cost_usd <= 0:
+        return
+    hist = _instrument("backlog_synthesis_cost_usd", "histogram",
+                       "Per-run estimated LLM cost in USD", unit="USD")
+    if hist:
+        hist.record(cost_usd, {"preset": preset})
+
+
+def record_llm_error(provider: str = "") -> None:
+    """Increment backlog_llm_errors_total (call on LLM API errors)."""
+    if not _ENABLED:
+        return
+    c = _instrument("backlog_llm_errors_total", "counter",
+                    "Total LLM API errors by provider")
+    if c:
+        c.add(1, {"provider": provider or "unknown"})
 
 
 def record_guardrail_findings(span: Any, error: int, warn: int, info: int) -> None:

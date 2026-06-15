@@ -62,6 +62,10 @@ from pricing import estimate_cost_usd  # noqa: E402
 from startup_check import check_required_secrets, get_configured_integrations, check_python_version  # noqa: E402
 from rate_limiter import check_rate_limit, get_usage_summary, RateLimitError  # noqa: E402
 from feature_flags import FeatureFlags  # noqa: E402
+try:
+    from telemetry import record_pipeline_cost  # noqa: E402
+except ImportError:
+    def record_pipeline_cost(*_a, **_kw): pass  # type: ignore[misc]
 
 # Load feature flags once per session. Cached in session_state so editing
 # them in the Admin panel and clicking Save triggers a reload via st.rerun().
@@ -3880,6 +3884,7 @@ if run_clicked or _main_canvas_run:
     model_name = result.get("model") or ""
     models_per_stage = result.get("models") or {}
     cost_usd = _compute_total_cost(token_usage, models_per_stage)
+    record_pipeline_cost(cost_usd, preset=result.get("preset", ""))
 
     st.session_state.result = result
     st.session_state.run_dir = run_dir

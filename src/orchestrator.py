@@ -82,7 +82,10 @@ from redactor import (
 )
 
 try:
-    from telemetry import pipeline_span, stage_span, record_stage_tokens, record_guardrail_findings
+    from telemetry import (
+        pipeline_span, stage_span, record_stage_tokens, record_guardrail_findings,
+        inc_active_synthesis, dec_active_synthesis, record_llm_error,
+    )
 except ImportError:  # pragma: no cover — telemetry is optional
     from contextlib import contextmanager
 
@@ -96,6 +99,9 @@ except ImportError:  # pragma: no cover — telemetry is optional
 
     def record_stage_tokens(*a, **kw): pass
     def record_guardrail_findings(*a, **kw): pass
+    def inc_active_synthesis(): pass
+    def dec_active_synthesis(): pass
+    def record_llm_error(*a, **kw): pass
 
 logger = get_logger(__name__)
 
@@ -374,6 +380,7 @@ class Orchestrator:
 
         memory = MemoryStore(persistent=persistent_memory)
         audit = AuditLog()
+        inc_active_synthesis()
 
         # ---- Record MCP tool configuration ----
         # Log which transport layer (MCP server vs. REST vs. fixture) is active
@@ -963,6 +970,7 @@ class Orchestrator:
         # Final render after pipeline_completed is appended.
         result["audit_trail"] = audit.render_markdown()
         result["audit_chain_fingerprint"] = audit.chain_fingerprint
+        dec_active_synthesis()
 
         return result
 
