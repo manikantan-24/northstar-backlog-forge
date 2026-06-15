@@ -224,8 +224,8 @@ jobs:
             -var="entra_tenant_domain=${{ secrets.TF_VAR_ENTRA_TENANT_DOMAIN }}" \
             -var="entra_client_secret=${{ secrets.TF_VAR_ENTRA_CLIENT_SECRET }}" \
             -var="entra_redirect_uri=${{ secrets.TF_VAR_ENTRA_REDIRECT_URI }}" \
-            -var="otel_endpoint=${{ secrets.TF_VAR_OTEL_ENDPOINT }}" \
-            -var="otel_headers=${{ secrets.TF_VAR_OTEL_HEADERS }}" \
+            -var="otel_endpoint=${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}" \
+            -var="otel_headers=${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}" \
             -var="auth_cookie_secret=${{ secrets.TF_VAR_AUTH_COOKIE_SECRET }}" \
             -var="slack_webhook_url=${{ secrets.TF_VAR_SLACK_WEBHOOK_URL }}" \
             -out=tfplan \
@@ -269,7 +269,7 @@ jobs:
             -var="entra_tenant_domain=${{ secrets.TF_VAR_ENTRA_TENANT_DOMAIN }}" \
             -var="entra_client_secret=${{ secrets.TF_VAR_ENTRA_CLIENT_SECRET }}" \
             -var="entra_redirect_uri=${{ secrets.TF_VAR_ENTRA_REDIRECT_URI }}" \
-            -var="otel_endpoint=${{ secrets.TF_VAR_OTEL_ENDPOINT }}" \
-            -var="otel_headers=${{ secrets.TF_VAR_OTEL_HEADERS }}" \
+            -var="otel_endpoint=${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}" \
+            -var="otel_headers=${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}" \
             -var="auth_cookie_secret=${{ secrets.TF_VAR_AUTH_COOKIE_SECRET }}" \
             -var="slack_webhook_url=${{ secrets.TF_VAR_SLACK_WEBHOOK_URL }}"
