@@ -1,10 +1,10 @@
 # Backlog Synthesizer
 
-> **Version:** V2 (`v2_ui_polish`). A frozen V1 snapshot is preserved at [versions/v1_baseline/](versions/v1_baseline/).
+> **Version:** V2. A frozen V1 snapshot is preserved at [versions/v1_baseline/](versions/v1_baseline/).
 
-A multi-agent AI system that ingests customer meeting transcripts, architecture wikis, and existing engineering backlog tickets — and synthesizes the result into a structured set of epics, user stories, and tasks. Detects gaps and conflicts. Maintains an audit trail of every agent decision.
+A multi-agent AI system that ingests customer meeting transcripts, architecture wikis, and existing engineering backlog tickets — and synthesizes the result into a structured set of epics, user stories, and tasks. Detects gaps, conflicts, and duplicates. Maintains a tamper-evident audit trail of every agent decision.
 
-Built as a demonstration of practical multi-agent AI engineering — bounded, testable, with persistent memory and an evaluation harness.
+Built as a demonstration of practical AI-First engineering — five single-responsibility agents on a **LangGraph StateGraph**, multi-provider LLM layer (Claude / Gemini / Ollama) behind a circuit breaker, vector memory, deterministic security shell, and a regression-gated evaluation harness.
 
 The bundled sample data is themed around **NorthStar Retail**, a fictional national retail giant with ~2,000 stores spanning grocery, electronics, apparel, home goods, pharmacy, and auto service.
 
@@ -12,7 +12,7 @@ The bundled sample data is themed around **NorthStar Retail**, a fictional natio
 
 ## Demo
 
-> Capture instructions for these images are in [docs/screenshots/](docs/screenshots/) — run `make ui`, synthesize the bundled sample, and save the frames. They render here automatically once added.
+> Capture instructions are in [docs/screenshots/](docs/screenshots/) — run `make ui`, synthesize the bundled sample, and save the frames.
 
 ![Backlog Synthesizer demo](docs/screenshots/demo.gif)
 
@@ -35,68 +35,83 @@ Feed it any combination of these:
 
 - **Customer / stakeholder meeting transcripts** (`.txt`, `.md`, `.pdf`)
 - **Architecture / wiki exports** describing constraints, integrations, platform limits (`.md`)
-- **Existing backlog tickets** from JIRA or GitHub Issues (real API integration optional; mocked JSON acceptable)
+- **Existing backlog tickets** from Jira or GitHub Issues (live API via MCP, or mocked JSON)
 
 Get back a structured synthesis:
 
 - **Epics** — high-level themes (e.g., "Loyalty Program Modernization")
 - **Stories** — user stories under each epic with full acceptance criteria in Given/When/Then form
 - **Tasks** — concrete implementation steps under each story
-- **System / feature tags** — `mobile-app`, `pos`, `loyalty`, `inventory`, etc.
-- **Gaps** — important capabilities the requirements imply but the existing backlog hasn't planned
+- **System / feature tags** — `mobile-app`, `pos`, `loyalty`, `inventory`, etc. (15-tag canonical vocabulary)
+- **Gaps** — capabilities the requirements imply but the existing backlog hasn't planned
 - **Conflicts** — new requests that contradict architectural constraints or existing in-flight work
-- **Duplicates** — new requests that overlap with items already in JIRA / GitHub
+- **Duplicates** — new requests that overlap with items already in Jira / GitHub (local embedding-based, $0)
 
-Outputs are written to `outputs/` as both `.json` (machine-readable) and `.md` (human-shareable). Every agent decision is captured in an audit log alongside the output.
+Outputs are written to `outputs/<timestamp>/` as `.json` (machine-readable), `.md` (human-shareable), and `audit_trail.md` (every agent decision, SHA-256 hash-chained).
 
 ---
 
 ## Why this exists (vs. the simpler single-agent version)
 
-The simpler single-agent version (extract stories → flag duplicates) works for tidy inputs. It breaks down when:
+The simpler single-agent version works for tidy inputs. It breaks down when:
 
-- Inputs come from **multiple heterogeneous sources** (a transcript, a Confluence page, a JIRA export)
+- Inputs come from **multiple heterogeneous sources** (a transcript, a Confluence page, a Jira export)
 - The output needs **hierarchy** (epics → stories → tasks), not a flat list
 - Detection has to span beyond duplicates to **gaps and constraint conflicts**
 - You need to **show your reasoning** for compliance / handoff to a human owner
+- The model must not be able to **fabricate evidence** — customer quotes must be verifiable
 
-A multi-agent design lets each agent do one thing well, write its intermediate findings to a shared memory, and let downstream agents reason from that. The audit log captures the full reasoning chain.
+A multi-agent design lets each agent do one thing well, write its intermediate findings to a shared typed state (`PipelineState`), and let downstream agents reason from that. Evidence is attached **deterministically** by `_attach_evidence()` — the model selects a topic ID, Python supplies the actual quote — so it can't be hallucinated.
 
 ---
 
 ## Architecture (at a glance)
 
-A single **Orchestrator** coordinates five specialized agents, each calling tools for I/O and the Claude API for reasoning. All agents share a memory store; every decision goes into the audit log.
+A **LangGraph StateGraph** with 7 nodes orchestrates five single-responsibility agents. `parse` and `extract_constraints` run in parallel (fan-out); all others are sequential. Every agent writes to a shared `PipelineState` (TypedDict) and the SHA-256-chained audit log.
 
 ```
-       ┌──────────────────────┐
-       │     Orchestrator     │
-       └──────────┬───────────┘
-                  │
-   ┌──────────────┼──────────────┬──────────────┬──────────────┐
-   ▼              ▼              ▼              ▼              ▼
-┌──────┐     ┌─────────┐    ┌──────────┐   ┌───────────┐   ┌──────────┐
-│Parser│ →   │Constraint│ → │  Story   │ → │   Epic    │ → │   Gap    │
-│Agent │     │Extractor │   │  Writer  │   │Decomposer │   │ Detector │
-└──────┘     └─────────┘    └──────────┘   └───────────┘   └──────────┘
-   ▲              ▲              ▲              ▲              ▲
-   └──────────────┴──────────────┴──────────────┴──────────────┘
-                  │              │              │
-                  ▼              ▼              ▼
-              ┌─────────────────────────────────────┐
-              │      Shared Memory + Audit Log      │
-              │  (vector store + structured trace)  │
-              └─────────────────────────────────────┘
-                  ▲              ▲              ▲
-                  │              │              │
-              ┌───┴────┐    ┌───┴────┐    ┌───┴────┐
-              │ JIRA   │    │Confluence│   │ GitHub │
-              │ tool   │    │  tool    │   │  tool  │
-              └────────┘    └────────┘    └────────┘
-              (mocked)       (mocked)      (mocked)
+                     ┌─────────────────────┐
+                     │     initialize      │
+                     └──────────┬──────────┘
+                                │
+               ┌────────────────┴────────────────┐
+               ▼  (parallel fan-out)              ▼
+       ┌──────────────┐                 ┌────────────────────┐
+       │    parse     │                 │ extract_constraints│
+       │ (Parser      │                 │ (Constraint        │
+       │  Agent)      │                 │  Agent)            │
+       └──────┬───────┘                 └─────────┬──────────┘
+              └──────────────┬──────────────────────┘
+                             ▼  (fan-in)
+                    ┌─────────────────┐
+                    │  write_stories  │
+                    │ (StoryWriter    │
+                    │  Agent)         │
+                    └────────┬────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │ decompose_epics │
+                    │ (EpicDecomposer │
+                    │  Agent)         │
+                    └────────┬────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │  detect_gaps    │
+                    │ (GapDetector    │
+                    │  Agent)         │
+                    └────────┬────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │    finalize     │
+                    │ (guardrails +   │
+                    │  audit chain)   │
+                    └─────────────────┘
+
+         All agents share PipelineState + AuditLog
+         All LLM calls wrapped: InputSanitizer → call → OutputScanner
 ```
 
-See [architecture.md](architecture.md) for the detailed diagram + agent contracts.
+See [architecture.md](architecture.md) for the full Mermaid diagrams (Application & AI Layer, Infrastructure & Deployment, Agent Pipeline sequence, Security data flow, Evaluation harness).
 
 ---
 
@@ -104,8 +119,8 @@ See [architecture.md](architecture.md) for the detailed diagram + agent contract
 
 ### Prerequisites
 
-- Python 3.11+ (3.13 recommended; both are tested in CI)
-- An Anthropic API key
+- Python 3.11+ (3.13 also tested in CI)
+- An Anthropic API key (`ANTHROPIC_API_KEY`)
 
 ### Installation
 
@@ -114,21 +129,23 @@ cd backlog-synthesizer
 python3 -m venv venv
 source venv/bin/activate
 
-# Use pinned deps for reproducible installs (recommended):
+# Pinned deps — reproducible installs (recommended):
 pip install -r requirements-lock.txt
 
-# Or unpinned for faster dev iteration:
+# Unpinned — faster dev iteration:
 pip install -r requirements.txt
 ```
 
-### Configure your API key
+### Configure
 
 ```bash
 cp .env.example .env
-# Edit .env and add your real key
+# Edit .env — at minimum set ANTHROPIC_API_KEY
 ```
 
-### Run the bundled sample
+All available environment variables are documented in [`.env.example`](.env.example).
+
+### Run the bundled sample (CLI)
 
 ```bash
 python src/main.py \
@@ -142,9 +159,23 @@ Outputs land in `outputs/<timestamp>/`:
 - `synthesis.md` — human-readable Markdown
 - `audit_trail.md` — every agent decision with timestamps and reasoning
 
-A canonical run on the bundled sample is already checked in under
-[`outputs/`](outputs/) so reviewers can inspect the artifacts without
-spending API credit.
+### Run the Streamlit UI
+
+```bash
+make ui        # or: streamlit run app.py
+```
+
+Open `http://localhost:8501`. The UI supports:
+- Upload transcript / wiki / backlog (file or paste)
+- Live Atlassian sources (toggle Confluence page ID + Jira project key)
+- Per-stage model selection (Claude / Gemini / Ollama)
+- Real-time pipeline progress with per-node status
+- Epics → stories → tasks with expandable evidence panel
+- Guardrail findings chips (error / warn / info)
+- Cost panel (per-stage tokens, per-agent USD, 10-run trend chart)
+- Downloadable `synthesis.json`, `synthesis.md`, `audit_trail.md`
+- Human-in-the-loop Jira push gate (admin / contributor only)
+- Two-way Jira status sync
 
 ### Run the tests
 
@@ -152,57 +183,61 @@ spending API credit.
 pytest tests/ -v
 ```
 
-**205 tests across 9 files**, all mocked end-to-end (zero API credit, ~1s):
-- `test_agents.py` — per-agent unit tests + `MemoryStore` / `AuditLog`
-- `test_orchestrator.py` — five-agent handoff + output formatter
-- `test_redactor.py`, `test_guardrails.py`, `test_compare_mode.py`
-- `test_jira_live.py` — live JQL, Jira write-back, project key validation, JQL injection escaping
-- `test_confluence_live.py`, `test_vision.py`, `test_evaluation_runner.py`
-- `test_final_round.py` — Entra SSO state nonce, RS256 verification, `pipeline_node_span`, `record_stage_tokens`
-- `test_new_modules.py` — atomic KV write, circuit breaker, GDPR purge, metrics
+**205 tests across 15 files**, all mocked end-to-end (zero API credit, ~1s):
+
+| File | What it covers |
+|---|---|
+| `test_agents.py` | Per-agent unit tests + MemoryStore / AuditLog |
+| `test_orchestrator.py` | Five-agent handoff + output formatter |
+| `test_redactor.py` | PII redaction / restoration |
+| `test_guardrails.py` | Six deterministic guardrail checks |
+| `test_compare_mode.py` | A/B prompt comparison |
+| `test_jira_live.py` | JQL injection escaping, project key validation, write-back |
+| `test_confluence_live.py` | Confluence API integration |
+| `test_vision.py` | Multimodal (image) input handling |
+| `test_evaluation_runner.py` | Evaluation harness |
+| `test_final_round.py` | Entra SSO nonce lifecycle, RS256 verification, OTel spans |
+| `test_new_modules.py` | Atomic KV write, circuit breaker, GDPR purge, metrics |
+| `test_hallucination.py` | Evidence grounding + `_repair_source_topic_id()` |
+| `test_load_soak.py` | Concurrency + stress tests |
+| `test_security_circuit_breaker.py` | InputSanitizer, OutputScanner, CircuitBreaker states |
 
 CI runs the full suite on Python 3.11 and 3.13 in parallel (`fail-fast: false`).
 
 ### Run the evaluation harness
 
 ```bash
-# Deterministic metrics only (offline-friendly, but still hits Claude unless mocked)
+# Deterministic metrics only
 python evaluation/run_evaluation.py
 
-# Add the LLM-as-judge for qualitative scoring (acceptance-criteria quality,
-# priority justification, story granularity, tag accuracy, conflict reasoning).
+# + LLM-as-judge (qualitative scoring across 5 dimensions)
 python evaluation/run_evaluation.py --use-llm-judge
 
-# Restrict to one golden case
+# Single golden case
 python evaluation/run_evaluation.py --case case_07
 
-# After running multiple times, view the trend
-python evaluation/dashboard.py
+# Regression dashboard across past runs
+python evaluation/dashboard.py --fail-on-regression --regression-threshold 0.10
 ```
 
-Result files land under `evaluation/results/<timestamp>/` (one per case + an
-aggregate `summary.json` + a human-readable `README.md`). The dashboard
-compares the latest run against the previous one and surfaces any case whose
-deterministic score dropped ≥ 0.10.
+Results land in `evaluation/results/<timestamp>/` (per-case scorecards + `summary.json`). CI fails if any case's deterministic score drops ≥ 0.10.
 
 ### A/B compare two prompt variants
 
 ```bash
 python evaluation/ab_compare.py \
-    --prompt parser_prompt.md \
+    --prompt prompts/parser_prompt.md \
     --variant prompts/experiments/parser_prompt_v2.md \
     --use-llm-judge
 ```
 
-Runs the full golden suite twice (once with the prompt currently on disk,
-once with the candidate), reports per-case deltas, and writes a `report.json`
-under `evaluation/results/ab/`.
+Runs the full golden suite twice, reports per-case deltas, writes `report.json` under `evaluation/results/ab/`.
 
 ---
 
 ## Enterprise SSO (Microsoft Entra ID)
 
-Set the following env vars in `.env` to enable Entra ID authentication:
+Set the following env vars to enable Entra ID authentication:
 
 ```bash
 ENTRA_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -211,30 +246,71 @@ ENTRA_CLIENT_SECRET=your-client-secret
 ENTRA_REDIRECT_URI=http://localhost:8501/
 ```
 
-When all four are set, `src/entra_auth.py` handles the full OAuth2 authorization code flow:
-- RS256 JWT verification via Microsoft JWKS endpoint (cryptographic signature check)
-- Per-request state nonces with 600-second TTL (CSRF protection)
-- Role mapping from Azure AD app roles → viewer / contributor / admin
+`src/entra_auth.py` handles the full OAuth2 authorization code flow:
+- RS256 JWT verification via Microsoft JWKS endpoint
+- Per-request state nonces with 600s TTL (CSRF protection)
+- Role mapping from Entra app roles → `viewer` / `contributor` / `admin`
 
-Leave these vars unset to fall back to the local `config/auth.yaml` username/password auth.
+Leave these vars unset to fall back to local `config/auth.yaml` username/password auth.
 
-> **Security note:** Never commit real credentials. `config/auth.yaml` and `infra/terraform/terraform.tfvars` are excluded from version control via `.gitignore`. Use `.env.example` as the template.
+---
+
+## MCP Server
+
+The pipeline is also exposed as a **Model Context Protocol server** (`mcp_server.py`) using FastMCP, so Claude Desktop or any MCP-capable agent can drive it as a tool:
+
+```bash
+python mcp_server.py
+```
+
+Exposes five tools: `synthesize_backlog`, `preview_prompts`, `get_run_history`, `push_to_jira`, `get_audit_trail`.
+
+---
+
+## Deployment
+
+### Azure (Container Apps)
+
+```bash
+# Provision infrastructure (first time)
+gh workflow run terraform.yml -f action=apply -f environment=staging
+
+# Deploy a new image
+git push origin main   # triggers deploy.yml automatically
+```
+
+Resources provisioned by `infra/terraform/`: Azure Container Registry, Container Apps, Key Vault (10 secrets via MSI), Azure Cache for Redis (Basic C0, atomic budget enforcement), Azure Files (logs/ 10 GB + outputs/ 50 GB), Log Analytics Workspace.
+
+See [docs/AZURE_USER_FLOW.md](docs/AZURE_USER_FLOW.md) for the full Azure end-to-end user journey.
 
 ---
 
 ## Optional capabilities
 
-- **PDF transcripts** — `python -m src.main --transcript meeting.pdf …` works out of the box; pypdf parses text-extractable PDFs (scanned/image PDFs would need OCR).
-- **Live Atlassian sources** — fill in the `JIRA_*` block in `.env` (one set of credentials covers both products). Then either:
-  - **CLI:** `python src/main.py --transcript notes.txt --confluence-page-id 65830 --live-jira`
-  - **UI:** open the sidebar "Live Atlassian sources" expander, toggle Confluence (paste the page id) and/or Jira, click Run.
-  - The Confluence path calls `GET /wiki/api/v2/pages/{id}` with storage-format → text. The Jira path calls `GET /rest/api/3/search/jql` paginated, project-scoped to `JIRA_PROJECT_KEY`, capped at 200 issues per run.
-  - Both successes/failures are recorded in `audit_trail.md` as `live_confluence_fetch_ok` / `live_jira_fetch_ok` (or `_failed`) so each run's data provenance is traceable after the fact.
-- **Seed a Confluence space** — `python scripts/seed_confluence.py` reads `samples/architecture_constraints.md` and `samples/product_strategy.md`, converts markdown to Confluence storage format, and creates two pages in the first non-personal space. Use `--space SD` to target a specific space, `--dry-run` to preview the XHTML without calling the API.
-- **Persistent vector memory** — set `MEMORY_PERSISTENT=1` to cache embeddings under `.cache/memory/` between runs. Re-runs on the same backlog skip the embed step.
-- **Strict PII redaction** — pass `strict_redact=True` to `Orchestrator.run` (alongside `redact_pii=True`) to halt the run if any PII pattern slips past the redactor at a tool boundary. Audit-logged.
-- **Cost panel** — every UI run shows per-stage tokens, per-agent cost at the active stage's model rate, and a recent-cost-trend chart across the last 10 saved runs.
-- **Story evidence** — each story carries the customer quote that motivated it (`story.evidence[0].raw_quote`), surfaced inline on the Epics tab. Evidence is attached deterministically by the system from the topic the story cites (`source_topic_id`), not produced by the model — so it can't be hallucinated.
+- **PDF transcripts** — `--transcript meeting.pdf` works out of the box (text-extractable PDFs via pypdf).
+- **Live Atlassian sources** — fill in `JIRA_*` + `CONFLUENCE_*` in `.env`. Toggle in the UI sidebar or pass `--live-jira` / `--confluence-page-id 65830` on the CLI. Successes and failures are recorded in the audit trail as `live_jira_fetch_ok` / `live_confluence_fetch_ok` (or `_failed`).
+- **Seed live sources** — `scripts/seed_jira.py`, `scripts/seed_confluence.py`, `scripts/seed_github_issues.py` populate the NorthStar Retail sample data into your real instances.
+- **Persistent vector memory** — `MEMORY_PERSISTENT=1` caches ticket embeddings under `.cache/memory/`. Re-runs on the same backlog skip the embed step entirely.
+- **Strict PII redaction** — `strict_redact=True` replaces email, phone, SSN, card numbers, and names with tokens (`[EMAIL_1]`, `[PHONE_1]` etc.) before any LLM call and restores them in the final output. Raw PII never reaches the model.
+- **Multi-provider LLM** — set `GOOGLE_API_KEY` to enable Gemini (free-tier Flash variants available). Set `OLLAMA_BASE_URL` for a local Ollama instance ($0/call). All three providers are hot-swappable per stage via `resolved_models` in `PipelineState`.
+- **Cost panel** — every UI run shows per-stage tokens, per-agent USD cost, and a 10-run trend chart.
+- **Story evidence** — each story carries the customer quote that motivated it (`story.evidence[0].raw_quote`). Evidence is attached **deterministically** from the parser's output by `_attach_evidence()` — not generated by the model — so it can't be hallucinated.
+
+---
+
+## How AI is used
+
+The LLM is called by each agent for its specific reasoning task. Outside those calls, everything is deterministic Python — input sanitization, output scanning, guardrails, duplicate detection, evidence attachment, and audit logging are all code.
+
+| Agent | What it reasons about | LLM | Other tools |
+|---|---|---|---|
+| **Parser** | Topics + customer quotes in the transcript | Claude / Gemini / Ollama | Vision (image inputs) |
+| **Constraint Extractor** | Architectural rules, limits, forbidden patterns | Claude / Gemini / Ollama | `MCPConfluenceTool` (live) |
+| **Story Writer** | User stories + GWT acceptance criteria | Claude (default) | `_attach_evidence()` (deterministic) |
+| **Epic Decomposer** | Group stories into epics + task breakdown | Claude / Gemini / Ollama | — |
+| **Gap Detector** | Conflicts + gaps (duplicates are local, $0) | Claude (default) | `MCPJiraTool`, `MCPGithubTool`, `EmbeddingTool` |
+
+Duplicate detection uses local `all-MiniLM-L6-v2` embeddings (cosine top-5, threshold 0.6) — no LLM call, no API cost.
 
 ---
 
@@ -242,79 +318,127 @@ Leave these vars unset to fall back to the local `config/auth.yaml` username/pas
 
 ```
 backlog-synthesizer/
-├── README.md                        ← you are here
+├── README.md
 ├── LICENSE
+├── Makefile
 ├── requirements.txt
+├── requirements-lock.txt
 ├── .env.example
-├── architecture.md                  ← multi-agent architecture diagram
+├── architecture.md              ← Mermaid diagrams (App+AI layer, Infra, Pipeline, Security, Eval)
+├── CHANGELOG.md
+├── PRODUCTION_READINESS.md
+├── Dockerfile
+├── .dockerignore
+├── app.py                       ← Streamlit UI entry point
+├── mcp_server.py                ← FastMCP server (5 tools)
+├── entrypoint.sh
+│
 ├── src/
-│   ├── main.py                      ← CLI entry point
-│   ├── orchestrator.py              ← multi-agent coordinator
-│   ├── input_loader.py              ← reads txt / md / pdf / json
-│   ├── output_formatter.py          ← epic / story / task hierarchy → json + md
+│   ├── pipeline.py              ← LangGraph StateGraph (7 nodes)
+│   ├── orchestrator.py          ← multi-agent coordinator
+│   ├── main.py                  ← CLI entry point
+│   ├── input_loader.py
+│   ├── output_formatter.py
+│   ├── security.py              ← InputSanitizer (8 rules) + OutputScanner (PII/toxicity/bias)
+│   ├── guardrails.py            ← 6 deterministic post-synthesis checks
+│   ├── circuit_breaker.py       ← per-provider CLOSED/OPEN/HALF_OPEN breaker
+│   ├── budget_store.py          ← Redis atomic reserve/settle + rate limiting
+│   ├── rate_limiter.py
+│   ├── entra_auth.py            ← Microsoft Entra ID OAuth2/OIDC
+│   ├── feature_flags.py
+│   ├── telemetry.py             ← OpenTelemetry spans + metrics
+│   ├── metrics.py               ← Prometheus metrics (:9090)
+│   ├── pricing.py               ← per-model cost estimates
+│   ├── alerts.py                ← Slack / MS Teams / PagerDuty
 │   ├── logger_setup.py
+│   ├── startup_check.py
+│   ├── warmup.py
 │   ├── agents/
-│   │   ├── base.py                  ← Agent base class (memory access + audit emission; retry lives in tools)
-│   │   ├── parser_agent.py          ← extracts raw content from transcripts
-│   │   ├── constraint_agent.py      ← extracts architecture constraints from wiki
-│   │   ├── story_writer_agent.py    ← drafts user stories
-│   │   ├── epic_decomposer_agent.py ← groups stories → epics, breaks into tasks
-│   │   └── gap_detector_agent.py    ← finds gaps, conflicts, duplicates
+│   │   ├── base.py
+│   │   ├── parser_agent.py
+│   │   ├── constraint_agent.py
+│   │   ├── story_writer_agent.py    ← _attach_evidence(), _repair_source_topic_id()
+│   │   ├── epic_decomposer_agent.py
+│   │   └── gap_detector_agent.py
 │   ├── tools/
 │   │   ├── base.py
-│   │   ├── claude_tool.py           ← wrapped Claude API client
-│   │   ├── jira_tool.py             ← mocked JIRA API
-│   │   ├── confluence_tool.py       ← mocked Confluence API
-│   │   └── github_tool.py           ← mocked GitHub Issues API
-│   └── memory/
-│       ├── store.py                 ← shared memory (vector + KV)
-│       └── audit_log.py             ← structured trace events
+│   │   ├── claude_tool.py
+│   │   ├── gemini_tool.py
+│   │   ├── ollama_tool.py
+│   │   ├── embedding_tool.py        ← all-MiniLM-L6-v2, local duplicate detection
+│   │   ├── jira_tool.py
+│   │   ├── confluence_tool.py
+│   │   ├── github_tool.py
+│   │   ├── mcp_atlassian_tool.py    ← live Jira + Confluence via MCP
+│   │   └── mcp_github_tool.py       ← live GitHub Issues via MCP
+│   ├── memory/
+│   │   ├── state.py                 ← PipelineState TypedDict + _merge_dicts reducer
+│   │   ├── store.py                 ← KV + ChromaDB / NPZ vector cache
+│   │   └── audit_log.py             ← SHA-256 hash chain, SQLite
+│   └── ui/
+│       ├── run_history.py
+│       ├── styling.py
+│       └── cost.py
+│
 ├── prompts/
-│   ├── system_prompt.md             ← shared role + global rules
+│   ├── system_prompt.md
 │   ├── parser_prompt.md
 │   ├── constraint_extractor_prompt.md
 │   ├── story_writer_prompt.md
 │   ├── epic_decomposer_prompt.md
 │   └── gap_detector_prompt.md
-├── samples/
-│   ├── README.md                    ← what's in each sample, NorthStar Retail fiction
-│   ├── meeting_notes.txt            ← customer meeting transcript
-│   ├── architecture_constraints.md  ← Confluence-style export
-│   ├── product_strategy.md          ← strategy document
-│   ├── jira_backlog.json            ← existing JIRA tickets (mocked)
-│   └── github_issues.json           ← existing GitHub issues (mocked)
+│
 ├── evaluation/
-│   ├── golden_dataset/              ← 10 hand-curated input/expected pairs incl. negative / conflict-heavy / ambiguity / compliance cases
-│   ├── metrics.py                   ← completeness, tag accuracy, F1 for conflicts
-│   ├── llm_as_judge.py              ← LLM-based qualitative scoring (5 dimensions, scores normalised to [0,1])
-│   ├── run_evaluation.py            ← runs the suite, writes per-case + aggregate results under results/<ts>/
-│   ├── dashboard.py                 ← trend / regression dashboard across past runs
-│   ├── ab_compare.py                ← A/B compare two prompt variants on the same golden set
-│   └── results/                     ← evaluation artifacts (per-run summary, scorecards, A/B reports)
-├── tests/
-│   ├── test_orchestrator.py         ← end-to-end with mocked Claude
-│   └── test_agents.py               ← per-agent unit tests + memory/audit tests
-└── docs/
-    ├── AGENT_DESIGN.md              ← why this multi-agent design
-    ├── PROMPT_ENGINEERING.md
-    └── AI_USAGE_SDLC.md             ← how AI was used in each SDLC phase
+│   ├── golden_dataset/              ← 10 cases (negative, conflict-heavy, compliance)
+│   ├── metrics.py                   ← 6 deterministic metrics
+│   ├── llm_as_judge.py              ← 5-dimension qualitative scoring, normalised [0,1]
+│   ├── run_evaluation.py
+│   ├── dashboard.py                 ← regression dashboard, --fail-on-regression
+│   └── ab_compare.py                ← A/B prompt variant comparison
+│
+├── tests/                           ← 205 tests across 15 files (all mocked, ~1s)
+│
+├── samples/                         ← NorthStar Retail demo dataset
+│   ├── meeting_notes.txt
+│   ├── architecture_constraints.md
+│   ├── product_strategy.md
+│   ├── jira_backlog.json            ← 30 tickets with intentional overlaps + conflicts
+│   └── github_issues.json
+│
+├── infra/
+│   ├── terraform/                   ← Azure IaC (azurerm ~3.100)
+│   └── terraform/                   ← (see above)
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                   ← tests + lint + eval gate
+│       ├── deploy.yml               ← Azure Container Apps deploy
+│       ├── terraform.yml            ← Azure infrastructure
+│       └── terraform.yml            ← Azure infrastructure
+│
+├── scripts/
+│   ├── azure_setup.sh
+│   ├── seed_jira.py
+│   ├── seed_confluence.py
+│   ├── seed_github_issues.py
+│   ├── demo_hallucination.py
+│   └── test_mcp_tools.py
+│
+├── docs/
+│   ├── AZURE_USER_FLOW.md           ← E2E Azure user journey (10 steps, Mermaid diagrams)
+│   ├── AZURE_DEPLOY.md
+│   ├── AGENT_DESIGN.md
+│   ├── ARCHITECTURE_FINAL.md
+│   ├── AI_USAGE_SDLC.md
+│   ├── PROMPT_ENGINEERING.md
+│   ├── RUNBOOK.md
+│   ├── TECHNICAL_DOCUMENT.md
+│   ├── DEMO.md
+│   └── screenshots/
+│
+└── config/
+    └── auth.yaml                    ← local fallback auth (gitignored)
 ```
-
----
-
-## How AI is used
-
-The Claude API is called by each agent for its specific reasoning task. Outside those calls, everything is deterministic Python.
-
-| Agent | What it reasons about | Tools it calls |
-|---|---|---|
-| **Parser** | What entities / topics are in the raw transcript | `claude_tool` |
-| **Constraint Extractor** | What architectural rules / integrations / limits apply | `claude_tool`, `confluence_tool` |
-| **Story Writer** | What user stories with AC fit the customer asks | `claude_tool` |
-| **Epic Decomposer** | How to group stories into epics + break them into tasks | `claude_tool` |
-| **Gap Detector** | Which new asks are duplicates, conflicts, or gaps | `claude_tool`, `jira_tool`, `github_tool` |
-
-Embedding-based retrieval (from the simpler v1) lives in `src/memory/store.py` and is used by the Gap Detector to surface candidate backlog items before the LLM reranks.
 
 ---
 

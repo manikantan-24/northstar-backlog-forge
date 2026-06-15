@@ -45,3 +45,17 @@ mcp-atlassian>=0.21 ; python_version >= "3.10"
 opentelemetry-api>=1.24.0
 opentelemetry-sdk>=1.24.0
 opentelemetry-exporter-otlp-proto-http>=1.24.0   # Grafana Cloud / any OTLP HTTP backend
+
+# Entra ID SSO — RS256 JWT verification via Microsoft JWKS endpoint.
+# cryptography extra is required for RS256 (asymmetric) signature validation.
+PyJWT[cryptography]>=2.8.0
+
+# Redis — atomic cross-pod budget reserve/settle and per-user rate limiting.
+# budget_store.py lazy-imports this; falls back to file-based mode if absent.
+# Required when REDIS_URL is set (Azure Cache for Redis is provisioned by Terraform).
+redis>=5.0.0
+
+# Prometheus metrics — exposes /metrics on :9090.
+# metrics.py guards the import gracefully; without this package, the endpoint
+# is unavailable but the app continues to run.
+prometheus-client>=0.20.0

@@ -60,7 +60,8 @@ jobs:
         run: |
           for ns in Microsoft.App Microsoft.ContainerRegistry Microsoft.KeyVault \
                     Microsoft.Storage Microsoft.OperationalInsights \
-                    Microsoft.ContainerService Microsoft.ManagedIdentity; do
+                    Microsoft.ContainerService Microsoft.ManagedIdentity \
+                    Microsoft.Cache; do
             az provider register --namespace "$ns" --wait || true
           done
 
@@ -133,6 +134,7 @@ jobs:
           SUB="${ARM_SUBSCRIPTION_ID}"
           RG="rg-backlog-synthesizer"
           KV="kv-backlog-synth"
+          ENV="${{ github.event.inputs.environment || 'staging' }}"
 
           safe_import() {
             local addr="$1" id="$2"
@@ -198,6 +200,10 @@ jobs:
           import_kv_secret azurerm_key_vault_secret.acr_password        ACR-ADMIN-PASSWORD
           import_kv_secret azurerm_key_vault_secret.auth_cookie_secret  AUTH-COOKIE-SECRET
           import_kv_secret azurerm_key_vault_secret.slack_webhook_url   SLACK-WEBHOOK-URL
+          import_kv_secret azurerm_key_vault_secret.redis_url           REDIS-URL
+
+          safe_import azurerm_redis_cache.main \
+            "/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Cache/Redis/redis-backlog-${ENV}"
 
       # ── Plan (always runs — shows what will change) ──────────────────────
       - name: Terraform Plan
@@ -252,8 +258,18 @@ jobs:
             -var="anthropic_api_key=${{ secrets.TF_VAR_ANTHROPIC_API_KEY }}" \
             -var="google_api_key=${{ secrets.TF_VAR_GOOGLE_API_KEY }}" \
             -var="jira_api_token=${{ secrets.TF_VAR_JIRA_API_TOKEN }}" \
+            -var="jira_base_url=${{ secrets.TF_VAR_JIRA_BASE_URL }}" \
+            -var="jira_email=${{ secrets.TF_VAR_JIRA_EMAIL }}" \
+            -var="jira_project_key=${{ secrets.TF_VAR_JIRA_PROJECT_KEY }}" \
             -var="github_token=${{ secrets.TF_VAR_GITHUB_TOKEN }}" \
+            -var="github_owner=${{ secrets.TF_VAR_GITHUB_OWNER }}" \
+            -var="github_repo=${{ secrets.TF_VAR_GITHUB_REPO }}" \
+            -var="entra_tenant_id=${{ secrets.TF_VAR_ENTRA_TENANT_ID }}" \
+            -var="entra_client_id=${{ secrets.TF_VAR_ENTRA_CLIENT_ID }}" \
+            -var="entra_tenant_domain=${{ secrets.TF_VAR_ENTRA_TENANT_DOMAIN }}" \
             -var="entra_client_secret=${{ secrets.TF_VAR_ENTRA_CLIENT_SECRET }}" \
+            -var="entra_redirect_uri=${{ secrets.TF_VAR_ENTRA_REDIRECT_URI }}" \
+            -var="otel_endpoint=${{ secrets.TF_VAR_OTEL_ENDPOINT }}" \
             -var="otel_headers=${{ secrets.TF_VAR_OTEL_HEADERS }}" \
             -var="auth_cookie_secret=${{ secrets.TF_VAR_AUTH_COOKIE_SECRET }}" \
             -var="slack_webhook_url=${{ secrets.TF_VAR_SLACK_WEBHOOK_URL }}"

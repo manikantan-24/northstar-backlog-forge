@@ -28,6 +28,11 @@ output "managed_identity_client_id" {
   value       = azurerm_user_assigned_identity.app.client_id
 }
 
+output "redis_hostname" {
+  description = "Azure Cache for Redis hostname (TLS port 6380)"
+  value       = azurerm_redis_cache.main.hostname
+}
+
 output "key_vault_secrets_stored" {
   description = "Secrets stored in Key Vault (names only — values never output)"
   sensitive   = true
@@ -39,5 +44,8 @@ output "key_vault_secrets_stored" {
     "ENTRA-CLIENT-SECRET",
     "OTEL-EXPORTER-OTLP-HEADERS",
     "ACR-ADMIN-PASSWORD",
+    "AUTH-COOKIE-SECRET",
+    "SLACK-WEBHOOK-URL",
+    "REDIS-URL",
   ])
 }

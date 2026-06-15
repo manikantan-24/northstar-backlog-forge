@@ -163,6 +163,31 @@ resource "azurerm_key_vault_secret" "slack_webhook_url" {
   depends_on    = [time_sleep.kv_policy_propagation]
 }
 
+# ── Azure Cache for Redis ──────────────────────────────────────────────────────
+# Used by budget_store.py for atomic cross-pod budget reserve/settle and
+# per-user request rate limiting. Without this, budget enforcement falls back
+# to per-pod file-based counting (single-pod only).
+# Basic C0 (250 MB, no SLA) is sufficient for budget keys — each key is <1 KB.
+resource "azurerm_redis_cache" "main" {
+  name                = "redis-backlog-${var.environment}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku_name            = "Basic"
+  family              = "C"
+  capacity            = 0
+  enable_non_ssl_port = false
+  minimum_tls_version = "1.2"
+  tags                = local.common_tags
+}
+
+resource "azurerm_key_vault_secret" "redis_url" {
+  name         = "REDIS-URL"
+  key_vault_id = azurerm_key_vault.main.id
+  # rediss:// (double-s) = TLS — Azure Redis only allows TLS on port 6380
+  value      = "rediss://:${azurerm_redis_cache.main.primary_access_key}@${azurerm_redis_cache.main.hostname}:6380/0"
+  depends_on = [time_sleep.kv_policy_propagation]
+}
+
 # ── Storage Account + Azure Files ─────────────────────────────────────────────
 resource "azurerm_storage_account" "main" {
   name                     = var.storage_account_name
@@ -282,6 +307,11 @@ resource "azurerm_container_app" "app" {
   secret {
     name                = "slack-webhook-url"
     key_vault_secret_id = azurerm_key_vault_secret.slack_webhook_url.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
+  }
+  secret {
+    name                = "redis-url"
+    key_vault_secret_id = azurerm_key_vault_secret.redis_url.versionless_id
     identity            = azurerm_user_assigned_identity.app.id
   }
 
@@ -424,6 +454,10 @@ resource "azurerm_container_app" "app" {
       env {
         name        = "SLACK_WEBHOOK_URL"
         secret_name = "slack-webhook-url"
+      }
+      env {
+        name        = "REDIS_URL"
+        secret_name = "redis-url"
       }
 
       volume_mounts {
