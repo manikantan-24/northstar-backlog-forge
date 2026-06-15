@@ -3925,6 +3925,7 @@ if run_clicked or _main_canvas_run:
         },
     }
     _save_run_to_disk(history_summary)
+    print(json.dumps({"event": "pipeline_completed", **history_summary}), flush=True)
 
     # Fire Slack/Teams synthesis-complete notification (SLACK_WEBHOOK_URL).
     try:

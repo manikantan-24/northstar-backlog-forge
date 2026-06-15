@@ -497,6 +497,25 @@ resource "azurerm_container_app" "app" {
   }
 }
 
+# ── Container App diagnostic setting → Log Analytics ──────────────────────────
+# Routes ContainerAppConsoleLogs (stdout/stderr) explicitly to the Log Analytics
+# Workspace so structured JSON emitted by the app is queryable via KQL.
+# The Container App Environment already links to the same workspace, but this
+# diagnostic setting guarantees console logs are captured at the app level too.
+resource "azurerm_monitor_diagnostic_setting" "container_app" {
+  name                       = "diag-backlog-synthesizer"
+  target_resource_id         = azurerm_container_app.app.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log {
+    category = "ContainerAppConsoleLogs"
+  }
+
+  enabled_log {
+    category = "ContainerAppSystemLogs"
+  }
+}
+
 # ── Note: GitHub Actions service principal (sp-backlog-synthesizer-terraform) ──
 # Created manually in Azure Portal — not managed by Terraform to avoid
 # Azure AD app registration permissions requirement on free tier accounts.
