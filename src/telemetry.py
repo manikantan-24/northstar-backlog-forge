@@ -29,8 +29,9 @@ from contextlib import contextmanager
 from typing import Any, Generator
 
 _ENABLED = os.environ.get("OTEL_ENABLED", "").strip() == "1"
-_tracer = None
-_meter  = None
+_tracer         = None
+_meter          = None
+_meter_provider = None
 
 
 def _parse_headers() -> dict[str, str]:
@@ -46,7 +47,7 @@ def _parse_headers() -> dict[str, str]:
 
 
 def _get_tracer_and_meter():
-    global _tracer, _meter
+    global _tracer, _meter, _meter_provider
     if _tracer is not None:
         return _tracer, _meter
     try:
@@ -100,6 +101,7 @@ def _get_tracer_and_meter():
 
         meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
         metrics.set_meter_provider(meter_provider)
+        _meter_provider = meter_provider
         _meter = metrics.get_meter("backlog_synthesizer.pipeline")
 
     except ImportError:
@@ -124,6 +126,8 @@ def _instrument(name: str, kind: str, description: str, unit: str = "1") -> Any:
     if key not in _instruments:
         if kind == "counter":
             _instruments[key] = meter.create_counter(name, description=description, unit=unit)
+        elif kind == "updowncounter":
+            _instruments[key] = meter.create_up_down_counter(name, description=description, unit=unit)
         elif kind == "histogram":
             _instruments[key] = meter.create_histogram(name, description=description, unit=unit)
     return _instruments.get(key)
@@ -315,7 +319,7 @@ def inc_active_synthesis() -> None:
     """Increment backlog_active_synthesis gauge (call at run start)."""
     if not _ENABLED:
         return
-    c = _instrument("backlog_active_synthesis", "counter",
+    c = _instrument("backlog_active_synthesis", "updowncounter",
                     "Number of pipeline runs currently in progress")
     if c:
         c.add(1)
@@ -325,10 +329,36 @@ def dec_active_synthesis() -> None:
     """Decrement backlog_active_synthesis gauge (call at run end/error)."""
     if not _ENABLED:
         return
-    c = _instrument("backlog_active_synthesis", "counter",
+    c = _instrument("backlog_active_synthesis", "updowncounter",
                     "Number of pipeline runs currently in progress")
     if c:
         c.add(-1)
+
+
+def record_synthesis_complete(
+    run_id: str = "",
+    preset: str = "",
+    elapsed_seconds: float = 0.0,
+    status: str = "ok",
+) -> None:
+    """Emit backlog_syntheses_total counter + backlog_synthesis_duration_seconds histogram.
+
+    Call once per run, just before dec_active_synthesis. This replaces the
+    pipeline_span context-manager approach which required wrapping the entire
+    900-line orchestrator run() method.
+    """
+    if not _ENABLED:
+        return
+    attrs = {"preset": preset, "status": status}
+    counter = _instrument("backlog_syntheses_total", "counter",
+                          "Total number of pipeline executions")
+    if counter:
+        counter.add(1, attrs)
+    if elapsed_seconds > 0:
+        hist = _instrument("backlog_synthesis_duration_seconds", "histogram",
+                           "End-to-end pipeline run duration", unit="s")
+        if hist:
+            hist.record(elapsed_seconds, attrs)
 
 
 def record_pipeline_cost(cost_usd: float, preset: str = "") -> None:
@@ -339,6 +369,21 @@ def record_pipeline_cost(cost_usd: float, preset: str = "") -> None:
                        "Per-run estimated LLM cost in USD", unit="USD")
     if hist:
         hist.record(cost_usd, {"preset": preset})
+
+
+def flush_metrics(timeout_ms: int = 5_000) -> None:
+    """Force-flush the OTel MeterProvider so metrics are shipped before scale-to-zero.
+
+    Call once at the end of every synthesis run. Without this, the periodic
+    exporter (15s interval) may not fire before Azure Container Apps idles the
+    container, leaving the last run invisible in Grafana.
+    """
+    if not _ENABLED or _meter_provider is None:
+        return
+    try:
+        _meter_provider.force_flush(timeout_millis=timeout_ms)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def record_llm_error(provider: str = "") -> None:

@@ -15,6 +15,7 @@ See `docs/AGENT_DESIGN.md` for the rationale.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from logger_setup import get_logger
@@ -85,6 +86,8 @@ try:
     from telemetry import (
         pipeline_span, stage_span, record_stage_tokens, record_guardrail_findings,
         inc_active_synthesis, dec_active_synthesis, record_llm_error,
+        record_synthesis_complete,
+        flush_metrics,
     )
 except ImportError:  # pragma: no cover — telemetry is optional
     from contextlib import contextmanager
@@ -102,6 +105,8 @@ except ImportError:  # pragma: no cover — telemetry is optional
     def inc_active_synthesis(): pass
     def dec_active_synthesis(): pass
     def record_llm_error(*a, **kw): pass
+    def record_synthesis_complete(*a, **kw): pass
+    def flush_metrics(*a, **kw): pass
 
 logger = get_logger(__name__)
 
@@ -381,6 +386,7 @@ class Orchestrator:
         memory = MemoryStore(persistent=persistent_memory)
         audit = AuditLog()
         inc_active_synthesis()
+        _run_start = time.perf_counter()
 
         # ---- Record MCP tool configuration ----
         # Log which transport layer (MCP server vs. REST vs. fixture) is active
@@ -970,6 +976,16 @@ class Orchestrator:
         # Final render after pipeline_completed is appended.
         result["audit_trail"] = audit.render_markdown()
         result["audit_chain_fingerprint"] = audit.chain_fingerprint
+        _run_status = "error" if result.get("guardrail_findings") and any(
+            f.get("severity") == "error" for f in result.get("guardrail_findings", [])
+        ) else "ok"
+        record_synthesis_complete(
+            run_id=audit._run_id,
+            preset=_summarize_models(resolved_models),
+            elapsed_seconds=time.perf_counter() - _run_start,
+            status=_run_status,
+        )
+        flush_metrics()
         dec_active_synthesis()
 
         return result
