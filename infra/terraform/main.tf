@@ -175,7 +175,7 @@ resource "azurerm_redis_cache" "main" {
   sku_name            = "Basic"
   family              = "C"
   capacity            = 0
-  enable_non_ssl_port = false
+  non_ssl_port_enabled = false
   minimum_tls_version = "1.2"
   tags                = local.common_tags
 }
@@ -491,10 +491,8 @@ resource "azurerm_container_app" "app" {
 
   lifecycle {
     # image — managed by deploy.yml, not Terraform
-    # secret — az containerapp secret set in deploy may add/update secrets out-of-band
     ignore_changes = [
       template[0].container[0].image,
-      secret,
     ]
   }
 }
