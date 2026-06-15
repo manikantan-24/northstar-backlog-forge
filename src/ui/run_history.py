@@ -41,7 +41,7 @@ def _esc(value: Any) -> str:
 
 def _user_runs_dir(user_id: str) -> Path:
     """Per-user run history directory: logs/runs/<safe_user_id>/"""
-    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in (user_id or "anonymous"))
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in (user_id or "anonymous"))
     return RUNS_DIR / safe
 
 

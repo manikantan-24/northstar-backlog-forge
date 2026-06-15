@@ -2280,7 +2280,7 @@ with st.sidebar:
                 _authenticator.logout(button_name="Log out", location="sidebar", key="sidebar_logout")
 
     # ── Usage meter (rate limit) ────────────────────────────────────────────
-    if _can_run():
+    if _can_run() and _current_user not in ("local", "unknown", "anonymous", ""):
         try:
             _usage = get_usage_summary(_current_user)
             _hr_pct = min(100, int(100 * _usage["runs_last_hour"] / max(1, _usage["max_runs_per_hour"])))
