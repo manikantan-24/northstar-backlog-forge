@@ -4,7 +4,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# Backlog Synthesizer Operational Workbook\nWelcome to the Azure Monitor Workbook for **Backlog Synthesizer**. This workbook provides real-time visibility into pipeline executions, cost control, model usage, and error tracking directly from your Log Analytics workspace."
+        "json": "# Backlog Synthesizer Operational Workbook\nWelcome to the Azure Monitor Workbook for **Backlog Synthesizer**. This workbook provides real-time visibility into pipeline executions, cost control, model usage, and error tracking directly from your Log Analytics workspace.\n\n> **Note:** If you see \"No results\" or tile configuration alerts, ensure you have run at least one synthesis pipeline in the application so logs are generated. Initial log ingestion in Azure Monitor can take 2–5 minutes."
       },
       "name": "welcome_text"
     },
@@ -12,7 +12,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend elapsed = todouble(d.elapsed_seconds), cost = todouble(d.cost_usd)\n| summarize \n    TotalRuns = count(),\n    AvgDurationSec = round(avg(elapsed), 1),\n    TotalCostUSD = round(sum(cost), 2)",
+        "query": "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend elapsed = todouble(d.elapsed_seconds), cost = todouble(d.cost_usd)\n| summarize \n    TotalRuns = count(),\n    AvgDurationSec = round(avg(elapsed), 1),\n    TotalCostUSD = round(sum(cost), 2)",
         "size": 3,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -41,7 +41,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| summarize Runs = count() by bin(TimeGenerated, 1h)\n| order by TimeGenerated asc",
+        "query": "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| summarize Runs = count() by bin(TimeGenerated, 1h)\n| order by TimeGenerated asc",
         "size": 0,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -56,7 +56,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend elapsed = todouble(d.elapsed_seconds)\n| summarize AvgDuration = avg(elapsed) by bin(TimeGenerated, 1h)\n| order by TimeGenerated asc",
+        "query": "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend elapsed = todouble(d.elapsed_seconds)\n| summarize AvgDuration = avg(elapsed) by bin(TimeGenerated, 1h)\n| order by TimeGenerated asc",
         "size": 0,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -78,7 +78,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend cost = todouble(d.cost_usd)\n| summarize Cost = sum(cost) by bin(TimeGenerated, 1h)\n| order by TimeGenerated asc",
+        "query": "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend cost = todouble(d.cost_usd)\n| summarize Cost = sum(cost) by bin(TimeGenerated, 1h)\n| order by TimeGenerated asc",
         "size": 0,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -93,7 +93,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend user = tostring(d.user_id), cost = todouble(d.cost_usd)\n| summarize TotalCost = round(sum(cost), 2) by user\n| order by TotalCost desc",
+        "query": "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend user = tostring(d.user_id), cost = todouble(d.cost_usd)\n| summarize TotalCost = round(sum(cost), 2) by user\n| order by TotalCost desc",
         "size": 0,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -115,7 +115,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend parser_in = toint(d.token_usage.parser.input), parser_out = toint(d.token_usage.parser.output), story_in = toint(d.token_usage.story_writer.input), story_out = toint(d.token_usage.story_writer.output), epic_in = toint(d.token_usage.epic_decomposer.input), epic_out = toint(d.token_usage.epic_decomposer.output), gap_in = toint(d.token_usage.gap_detector.input), gap_out = toint(d.token_usage.gap_detector.output)\n| summarize Parser = sum(parser_in + parser_out), StoryWriter = sum(story_in + story_out), EpicDecomposer = sum(epic_in + epic_out), GapDetector = sum(gap_in + gap_out)",
+        "query": "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend parser_in = toint(d.token_usage.parser.input), parser_out = toint(d.token_usage.parser.output), story_in = toint(d.token_usage.story_writer.input), story_out = toint(d.token_usage.story_writer.output), epic_in = toint(d.token_usage.epic_decomposer.input), epic_out = toint(d.token_usage.epic_decomposer.output), gap_in = toint(d.token_usage.gap_detector.input), gap_out = toint(d.token_usage.gap_detector.output)\n| summarize Parser = sum(parser_in + parser_out), StoryWriter = sum(story_in + story_out), EpicDecomposer = sum(epic_in + epic_out), GapDetector = sum(gap_in + gap_out)",
         "size": 0,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -130,7 +130,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend model = tostring(d.model)\n| summarize Runs = count() by model",
+        "query": "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| extend model = tostring(d.model)\n| summarize Runs = count() by model",
         "size": 0,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -152,7 +152,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| project TimeGenerated, RunID = tostring(d.run_id), User = tostring(d.user_id), Epics = toint(d.epic_count), Stories = toint(d.story_count), Gaps = toint(d.gap_count), Conflicts = toint(d.conflict_count), Model = tostring(d.model), CostUSD = round(todouble(d.cost_usd), 3), ElapsedSec = round(todouble(d.elapsed_seconds), 1)\n| order by TimeGenerated desc\n| limit 50",
+        "query": "union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppConsoleLogs\n| where ContainerName_s == \"backlog-synthesizer\"\n| where Log_s has \"pipeline_completed\"\n| extend d = parse_json(Log_s)\n| where tostring(d.event) == \"pipeline_completed\"\n| project TimeGenerated, RunID = tostring(d.run_id), User = tostring(d.user_id), Epics = toint(d.epic_count), Stories = toint(d.story_count), Gaps = toint(d.gap_count), Conflicts = toint(d.conflict_count), Model = tostring(d.model), CostUSD = round(todouble(d.cost_usd), 3), ElapsedSec = round(todouble(d.elapsed_seconds), 1)\n| order by TimeGenerated desc\n| limit 50",
         "size": 0,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
