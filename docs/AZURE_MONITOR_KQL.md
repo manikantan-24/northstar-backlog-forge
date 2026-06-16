@@ -217,9 +217,38 @@ In Grafana Cloud → Connections → Add data source → Azure Monitor:
 
 | Field | Value |
 |---|---|
-| Directory (tenant) ID | `AZURE_TENANT_ID` |
-| Application (client) ID | `AZURE_CLIENT_ID` |
-| Client secret | `AZURE_CLIENT_SECRET` |
-| Default subscription | Your Azure subscription ID |
-
 Set query type to **Logs** and workspace to `law-backlog-synthesizer` for all panels above.
+
+---
+
+## Automated Azure Portal Dashboard Setup
+
+You can deploy these 12 panels automatically as a native **Azure Portal Dashboard** using either Terraform or a shell script.
+
+### Option A — Provision via Terraform (Recommended)
+
+The dashboard is integrated directly into the infrastructure codebase. When you run Terraform, it compiles the dashboard JSON and provisions the resource:
+
+1. **Apply Terraform:**
+   ```bash
+   cd infra/terraform
+   terraform apply
+   ```
+2. **Access Dashboard:**
+   Navigate to the Azure Portal → **Shared Dashboards** → select `db-backlog-synthesizer-staging` (or `production`).
+   The dashboard configuration is defined in:
+   - [dashboard.tf](file:///Users/mani.kantan.arun/Downloads/backlog-synthesizer/infra/terraform/dashboard.tf)
+   - [dashboard.json.tpl](file:///Users/mani.kantan.arun/Downloads/backlog-synthesizer/infra/terraform/templates/dashboard.json.tpl)
+
+### Option B — Deploy via Azure CLI Script
+
+If you're not using Terraform, you can run the setup script to compile the JSON and deploy the dashboard directly:
+
+1. **Execute script:**
+   ```bash
+   chmod +x scripts/setup_azure_dashboard.sh
+   ./scripts/setup_azure_dashboard.sh
+   ```
+2. **Access Dashboard:**
+   The script output will print a direct link to view your newly created shared dashboard `db-backlog-synthesizer-manual` in the Azure Portal.
+

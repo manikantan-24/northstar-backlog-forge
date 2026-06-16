@@ -49,3 +49,14 @@ output "key_vault_secrets_stored" {
     "REDIS-URL",
   ])
 }
+
+output "log_analytics_workspace_id" {
+  description = "Log Analytics Workspace Customer ID"
+  value       = azurerm_log_analytics_workspace.main.workspace_id
+}
+
+output "log_analytics_workspace_name" {
+  description = "Log Analytics Workspace Name"
+  value       = azurerm_log_analytics_workspace.main.name
+}
+
