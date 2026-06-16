@@ -9,6 +9,38 @@
       "name": "welcome_text"
     },
     {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "time_range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 86400000
+            },
+            "typeSettings": {
+              "parameterAllowedTypes": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8
+              ]
+            },
+            "name": "TimeRange",
+            "label": "Time Range"
+          }
+        ],
+        "style": "pill"
+      },
+      "name": "time_range_parameter"
+    },
+    {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
@@ -19,6 +51,7 @@
         "crossComponentResources": [
           "${workspace_id}"
         ],
+        "timeContextFromParameter": "TimeRange",
         "visualization": "tiles",
         "tileSettings": {
           "showBorder": true,
@@ -48,6 +81,7 @@
         "crossComponentResources": [
           "${workspace_id}"
         ],
+        "timeContextFromParameter": "TimeRange",
         "visualization": "linechart"
       },
       "name": "runs_over_time_chart"
@@ -63,6 +97,7 @@
         "crossComponentResources": [
           "${workspace_id}"
         ],
+        "timeContextFromParameter": "TimeRange",
         "visualization": "linechart"
       },
       "name": "duration_over_time_chart"
@@ -85,6 +120,7 @@
         "crossComponentResources": [
           "${workspace_id}"
         ],
+        "timeContextFromParameter": "TimeRange",
         "visualization": "linechart"
       },
       "name": "cost_over_time_chart"
@@ -100,6 +136,7 @@
         "crossComponentResources": [
           "${workspace_id}"
         ],
+        "timeContextFromParameter": "TimeRange",
         "visualization": "barchart"
       },
       "name": "cost_by_user_chart"
@@ -122,6 +159,7 @@
         "crossComponentResources": [
           "${workspace_id}"
         ],
+        "timeContextFromParameter": "TimeRange",
         "visualization": "barchart"
       },
       "name": "token_usage_by_stage_chart"
@@ -137,6 +175,7 @@
         "crossComponentResources": [
           "${workspace_id}"
         ],
+        "timeContextFromParameter": "TimeRange",
         "visualization": "piechart"
       },
       "name": "model_distribution_chart"
@@ -159,6 +198,7 @@
         "crossComponentResources": [
           "${workspace_id}"
         ],
+        "timeContextFromParameter": "TimeRange",
         "visualization": "table"
       },
       "name": "recent_runs_table"
