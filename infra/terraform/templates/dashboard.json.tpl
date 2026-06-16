@@ -33,8 +33,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | summarize TotalRuns = count()" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | summarize TotalRuns = count()" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "SingleValue" }
             ],
@@ -59,8 +59,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend elapsed = todouble(d.elapsed_seconds) | summarize AvgDuration = round(avg(elapsed), 1)" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend elapsed = todouble(d.elapsed_seconds) | summarize AvgDuration = round(avg(elapsed), 1)" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "SingleValue" }
             ],
@@ -85,8 +85,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend cost = todouble(d.cost_usd) | summarize TotalCost = round(sum(cost), 2)" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend cost = todouble(d.cost_usd) | summarize TotalCost = round(sum(cost), 2)" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "SingleValue" }
             ],
@@ -111,8 +111,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has_any (\"[ERROR]\", \"[WARNING]\") | where Log_s has_any (\"failed\", \"error\", \"exception\") | summarize TotalErrors = count()" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has_any (\"[ERROR]\", \"[WARNING]\") | where Log_s has_any (\"failed\", \"error\", \"exception\") | summarize TotalErrors = count()" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "SingleValue" }
             ],
@@ -137,8 +137,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | summarize Runs = count() by bin(TimeGenerated, 1h) | order by TimeGenerated asc" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | summarize Runs = count() by bin(TimeGenerated, 1h) | order by TimeGenerated asc" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "Line" }
             ],
@@ -163,8 +163,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend elapsed = todouble(d.elapsed_seconds) | summarize AvgDuration = avg(elapsed) by bin(TimeGenerated, 1h) | order by TimeGenerated asc" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend elapsed = todouble(d.elapsed_seconds) | summarize AvgDuration = avg(elapsed) by bin(TimeGenerated, 1h) | order by TimeGenerated asc" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "Line" }
             ],
@@ -189,8 +189,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend cost = todouble(d.cost_usd) | summarize TotalCost = sum(cost) by bin(TimeGenerated, 1h) | order by TimeGenerated asc" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend cost = todouble(d.cost_usd) | summarize TotalCost = sum(cost) by bin(TimeGenerated, 1h) | order by TimeGenerated asc" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "Line" }
             ],
@@ -215,8 +215,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend total_tokens = toint(d.token_usage.total.input) + toint(d.token_usage.total.output) | summarize TotalTokens = sum(total_tokens) by bin(TimeGenerated, 1h) | order by TimeGenerated asc" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend total_tokens = toint(d.token_usage.total.input) + toint(d.token_usage.total.output) | summarize TotalTokens = sum(total_tokens) by bin(TimeGenerated, 1h) | order by TimeGenerated asc" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "Line" }
             ],
@@ -241,8 +241,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend parser_in = toint(d.token_usage.parser.input), parser_out = toint(d.token_usage.parser.output), story_in = toint(d.token_usage.story_writer.input), story_out = toint(d.token_usage.story_writer.output), epic_in = toint(d.token_usage.epic_decomposer.input), epic_out = toint(d.token_usage.epic_decomposer.output), gap_in = toint(d.token_usage.gap_detector.input), gap_out = toint(d.token_usage.gap_detector.output) | summarize Parser = sum(parser_in + parser_out), StoryWriter = sum(story_in + story_out), EpicDecomposer = sum(epic_in + epic_out), GapDetector = sum(gap_in + gap_out)" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend parser_in = toint(d.token_usage.parser.input), parser_out = toint(d.token_usage.parser.output), story_in = toint(d.token_usage.story_writer.input), story_out = toint(d.token_usage.story_writer.output), epic_in = toint(d.token_usage.epic_decomposer.input), epic_out = toint(d.token_usage.epic_decomposer.output), gap_in = toint(d.token_usage.gap_detector.input), gap_out = toint(d.token_usage.gap_detector.output) | summarize Parser = sum(parser_in + parser_out), StoryWriter = sum(story_in + story_out), EpicDecomposer = sum(epic_in + epic_out), GapDetector = sum(gap_in + gap_out)" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "UnstackedBar" }
             ],
@@ -267,8 +267,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend user = tostring(d.user_id), cost = todouble(d.cost_usd) | summarize TotalCost = sum(cost), Runs = count() by user | order by TotalCost desc" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend user = tostring(d.user_id), cost = todouble(d.cost_usd) | summarize TotalCost = sum(cost), Runs = count() by user | order by TotalCost desc" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "UnstackedBar" }
             ],
@@ -293,8 +293,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend model = tostring(d.model) | summarize Runs = count() by model" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | extend model = tostring(d.model) | summarize Runs = count() by model" },
               { "name": "ControlType", "value": "FrameControlChart" },
               { "name": "SpecificChart", "value": "Pie" }
             ],
@@ -319,8 +319,8 @@
           "metadata": {
             "inputs": [
               { "name": "resourceType", "value": "Microsoft.OperationalInsights/workspaces" },
-              { "name": "ComponentId", "value": "${workspace_id}" },
-              { "name": "Query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | project TimeGenerated, RunID = tostring(d.run_id), User = tostring(d.user_id), Epics = toint(d.epic_count), Stories = toint(d.story_count), Gaps = toint(d.gap_count), Conflicts = toint(d.conflict_count), Model = tostring(d.model), CostUSD = round(todouble(d.cost_usd), 3), ElapsedSec = round(todouble(d.elapsed_seconds), 1) | order by TimeGenerated desc | limit 50" },
+              { "name": "resourceId", "value": "${workspace_id}" },
+              { "name": "query", "value": "ContainerAppConsoleLogs_CL | where ContainerName_s == \"backlog-synthesizer\" | where Log_s has \"pipeline_completed\" | extend d = parse_json(Log_s) | where tostring(d.event) == \"pipeline_completed\" | project TimeGenerated, RunID = tostring(d.run_id), User = tostring(d.user_id), Epics = toint(d.epic_count), Stories = toint(d.story_count), Gaps = toint(d.gap_count), Conflicts = toint(d.conflict_count), Model = tostring(d.model), CostUSD = round(todouble(d.cost_usd), 3), ElapsedSec = round(todouble(d.elapsed_seconds), 1) | order by TimeGenerated desc | limit 50" },
               { "name": "ControlType", "value": "AnalyticsGrid" }
             ],
             "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
