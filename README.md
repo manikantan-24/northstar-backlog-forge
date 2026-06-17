@@ -1,5 +1,7 @@
 # Backlog Synthesizer
 
+> 🚀 **Live Demo:** [Access the live Azure-deployed application](https://backlog-synthesizer.happyforest-744d2ef4.eastus.azurecontainerapps.io) (Secured via Microsoft Entra ID SSO).
+
 > **Version:** V2
 
 A multi-agent AI system that ingests customer meeting transcripts, architecture wikis, and existing engineering backlog tickets — and synthesizes the result into a structured set of epics, user stories, and tasks. Detects gaps, conflicts, and duplicates. Maintains a tamper-evident audit trail of every agent decision.
