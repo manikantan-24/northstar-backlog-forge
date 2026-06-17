@@ -2121,6 +2121,8 @@ TRANSCRIPT_OPTIONS = {
         SAMPLES_DIR / "meeting_notes.txt",
     "Q3 Strategy doc":
         SAMPLES_DIR / "product_strategy.md",
+    "Vendor Security Proposal (Conflicts demo)":
+        SAMPLES_DIR / "vendor_security_proposal.md",
     "Pharmacy refill escalation":
         GOLDEN_TRANSCRIPTS_DIR / "case_02_pharmacy_escalation.txt",
     "Mobile Slack standup":

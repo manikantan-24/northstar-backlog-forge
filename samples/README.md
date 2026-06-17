@@ -17,6 +17,8 @@ NorthStar Retail runs about 2,000 stores nationwide, from urban grocery formats 
 | `product_strategy.md` | Q3 strategy document from the VP of CX | Same themes as the meeting notes but formal; tags P0 vs P1; explicitly excludes self-checkout, vendor portal, B2B tier |
 | `jira_backlog.json` | 30 existing JIRA tickets | Multiple intentional overlaps with the meeting notes (NS-412 search staleness, NS-419 mainframe scrape, NS-227 Kafka migration). Triggers RAG path (≥20 items). |
 | `github_issues.json` | 6 existing GitHub issues | A second source of existing work; some overlap with JIRA, some unique (e.g., #1041 curbside GPS) |
+| `vendor_security_proposal.md` | External vendor integration proposal | Contains 4 deliberate critical conflicts violating data residency, PCI-DSS card caching, custom crypto, and legacy mainframe access rules. |
+
 
 ## Intentional flags the agents should find
 

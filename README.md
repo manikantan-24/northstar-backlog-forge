@@ -401,6 +401,7 @@ backlog-synthesizer/
 │   ├── meeting_notes.txt
 │   ├── architecture_constraints.md
 │   ├── product_strategy.md
+│   ├── vendor_security_proposal.md  ← Vendor proposal with deliberate conflicts & violations
 │   ├── jira_backlog.json            ← 30 tickets with intentional overlaps + conflicts
 │   └── github_issues.json
 │
