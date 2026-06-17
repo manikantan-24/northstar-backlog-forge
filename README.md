@@ -349,8 +349,7 @@ backlog-synthesizer/
 │   ├── gdpr_purge.py            ← GDPR right-to-be-forgotten utility (purges ticket records from state/embeddings)
 │   ├── ollama_manager.py        ← Lifecycle manager for local Ollama process
 │   ├── logger_setup.py
-│   ├── startup_check.py
-│   ├── warmup.py
+│   └── startup_check.py
 │   ├── agents/
 │   │   ├── base.py
 │   │   ├── parser_agent.py
