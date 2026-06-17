@@ -28,3 +28,19 @@ infra/terraform/tfplan
 
 # SQLite audit log chain (runtime artifact, not source)
 logs/audit_chain.db
+
+# Agent/IDE local configuration
+.claude/
+logs/.ui_state.json
+
+# Local runs, test results, and outputs subdirectories
+logs/runs/
+outputs/*/
+test_results/
+
+# Local authentications config
+config/auth.yaml
+
+# Architectural references and technical guides
+TECHNICAL_GUIDE.md
+target_architecture_comparison.md
