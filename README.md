@@ -1,6 +1,6 @@
 # Backlog Synthesizer
 
-> **Version:** V2. A frozen V1 snapshot is preserved at [versions/v1_baseline/](versions/v1_baseline/).
+> **Version:** V2
 
 A multi-agent AI system that ingests customer meeting transcripts, architecture wikis, and existing engineering backlog tickets — and synthesizes the result into a structured set of epics, user stories, and tasks. Detects gaps, conflicts, and duplicates. Maintains a tamper-evident audit trail of every agent decision.
 
@@ -12,18 +12,12 @@ The bundled sample data is themed around **NorthStar Retail**, a fictional natio
 
 ## Demo
 
-> Capture instructions are in [docs/screenshots/](docs/screenshots/) — run `make ui`, synthesize the bundled sample, and save the frames.
-
-![Backlog Synthesizer demo](docs/screenshots/demo.gif)
-
-*Home → five-agent pipeline → epics/stories/tasks → gaps & conflicts → audit trail.*
-
-| | |
-|---|---|
-| ![Pipeline running](docs/screenshots/02_pipeline.png) | ![Epics → stories → tasks](docs/screenshots/03_epics.png) |
-| The five-agent pipeline, live | Structured output with traceable evidence |
-| ![Gaps / conflicts / duplicates](docs/screenshots/04_findings.png) | ![Audit trail](docs/screenshots/05_audit.png) |
-| Gap, conflict & duplicate detection | Full per-agent audit trail |
+The application can be run locally using the Streamlit UI. 
+Run the following command to start the web application:
+```bash
+make ui        # or: streamlit run app.py
+```
+This launches a browser interface where you can upload transcripts, configure constraints, select models (Claude, Gemini, or Ollama), track the 5-agent pipeline execution in real-time, inspect audit trails, and push issues to Jira.
 
 Or run it yourself in one command: `make demo` (CLI) or `make ui` (web).
 
@@ -183,7 +177,7 @@ Open `http://localhost:8501`. The UI supports:
 pytest tests/ -v
 ```
 
-**205 tests across 15 files**, all mocked end-to-end (zero API credit, ~1s):
+**318 tests across 14 files**, all mocked end-to-end (zero API credit, ~1s):
 
 | File | What it covers |
 |---|---|
@@ -281,7 +275,7 @@ git push origin main   # triggers deploy.yml automatically
 
 Resources provisioned by `infra/terraform/`: Azure Container Registry, Container Apps, Key Vault (10 secrets via MSI), Azure Cache for Redis (Basic C0, atomic budget enforcement), Azure Files (logs/ 10 GB + outputs/ 50 GB), Log Analytics Workspace.
 
-See [docs/AZURE_USER_FLOW.md](docs/AZURE_USER_FLOW.md) for the full Azure end-to-end user journey.
+See [target_architecture_comparison.md](target_architecture_comparison.md) for a detailed comparison of the current local state vs. the target production architecture.
 
 ---
 
@@ -319,19 +313,20 @@ Duplicate detection uses local `all-MiniLM-L6-v2` embeddings (cosine top-5, thre
 ```
 backlog-synthesizer/
 ├── README.md
-├── LICENSE
+├── TECHNICAL_GUIDE.md           ← Complete architecture, implementation & interview guide
+├── target_architecture_comparison.md ← Comparison of local and production architectures
+├── PRODUCTION_READINESS.md
+├── architecture.md              ← Mermaid diagrams (App+AI layer, Infra, Pipeline, Security, Eval)
 ├── Makefile
 ├── requirements.txt
 ├── requirements-lock.txt
 ├── .env.example
-├── architecture.md              ← Mermaid diagrams (App+AI layer, Infra, Pipeline, Security, Eval)
-├── CHANGELOG.md
-├── PRODUCTION_READINESS.md
 ├── Dockerfile
 ├── .dockerignore
 ├── app.py                       ← Streamlit UI entry point
 ├── mcp_server.py                ← FastMCP server (5 tools)
 ├── entrypoint.sh
+├── start.sh                     ← Helper script to launch Streamlit + Ollama
 │
 ├── src/
 │   ├── pipeline.py              ← LangGraph StateGraph (7 nodes)
@@ -340,6 +335,7 @@ backlog-synthesizer/
 │   ├── input_loader.py
 │   ├── output_formatter.py
 │   ├── security.py              ← InputSanitizer (8 rules) + OutputScanner (PII/toxicity/bias)
+│   ├── redactor.py              ← PII redactor (matches regexes and restores safely)
 │   ├── guardrails.py            ← 6 deterministic post-synthesis checks
 │   ├── circuit_breaker.py       ← per-provider CLOSED/OPEN/HALF_OPEN breaker
 │   ├── budget_store.py          ← Redis atomic reserve/settle + rate limiting
@@ -350,6 +346,8 @@ backlog-synthesizer/
 │   ├── metrics.py               ← Prometheus metrics (:9090)
 │   ├── pricing.py               ← per-model cost estimates
 │   ├── alerts.py                ← Slack / MS Teams / PagerDuty
+│   ├── gdpr_purge.py            ← GDPR right-to-be-forgotten utility (purges ticket records from state/embeddings)
+│   ├── ollama_manager.py        ← Lifecycle manager for local Ollama process
 │   ├── logger_setup.py
 │   ├── startup_check.py
 │   ├── warmup.py
@@ -396,7 +394,7 @@ backlog-synthesizer/
 │   ├── dashboard.py                 ← regression dashboard, --fail-on-regression
 │   └── ab_compare.py                ← A/B prompt variant comparison
 │
-├── tests/                           ← 205 tests across 15 files (all mocked, ~1s)
+├── tests/                           ← 318 tests across 14 files (all mocked, ~1s)
 │
 ├── samples/                         ← NorthStar Retail demo dataset
 │   ├── meeting_notes.txt
@@ -406,14 +404,12 @@ backlog-synthesizer/
 │   └── github_issues.json
 │
 ├── infra/
-│   ├── terraform/                   ← Azure IaC (azurerm ~3.100)
-│   └── terraform/                   ← (see above)
+│   └── terraform/                   ← Azure IaC (azurerm ~3.100)
 │
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                   ← tests + lint + eval gate
 │       ├── deploy.yml               ← Azure Container Apps deploy
-│       ├── terraform.yml            ← Azure infrastructure
 │       └── terraform.yml            ← Azure infrastructure
 │
 ├── scripts/
@@ -422,19 +418,9 @@ backlog-synthesizer/
 │   ├── seed_confluence.py
 │   ├── seed_github_issues.py
 │   ├── demo_hallucination.py
-│   └── test_mcp_tools.py
-│
-├── docs/
-│   ├── AZURE_USER_FLOW.md           ← E2E Azure user journey (10 steps, Mermaid diagrams)
-│   ├── AZURE_DEPLOY.md
-│   ├── AGENT_DESIGN.md
-│   ├── ARCHITECTURE_FINAL.md
-│   ├── AI_USAGE_SDLC.md
-│   ├── PROMPT_ENGINEERING.md
-│   ├── RUNBOOK.md
-│   ├── TECHNICAL_DOCUMENT.md
-│   ├── DEMO.md
-│   └── screenshots/
+│   ├── test_mcp_tools.py
+│   ├── capture_screenshots.py       ← Local tool for demo capture
+│   └── make_whiteboard_sample.py    ← Helper to generate mock image inputs
 │
 └── config/
     └── auth.yaml                    ← local fallback auth (gitignored)
