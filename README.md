@@ -30,6 +30,7 @@ Or run it yourself in one command: `make demo` (CLI) or `make ui` (web).
 Feed it any combination of these:
 
 - **Customer / stakeholder meeting transcripts** (`.txt`, `.md`, `.pdf`)
+- **Whiteboard planning photos & UI sketches** (JPEG, PNG, WebP — processed via multimodal vision APIs to extract requirements or wireframe details)
 - **Architecture / wiki exports** describing constraints, integrations, platform limits (`.md`)
 - **Existing backlog tickets** from Jira or GitHub Issues (live API via MCP, or mocked JSON)
 
@@ -150,6 +151,15 @@ python src/main.py \
     --backlog samples/jira_backlog.json
 ```
 
+### Run the compliance & conflict demo (CLI)
+
+To demonstrate how the **Constraint Agent** catches critical security and architecture violations (such as data residency issues, plain-text credit card caching, and custom cryptography rules):
+```bash
+python src/main.py \
+    --transcript samples/vendor_security_proposal.md \
+    --constraints samples/architecture_constraints.md
+```
+
 Outputs land in `outputs/<timestamp>/`:
 - `synthesis.json` — full structured result
 - `synthesis.md` — human-readable Markdown
@@ -246,6 +256,7 @@ ENTRA_REDIRECT_URI=http://localhost:8501/
 - RS256 JWT verification via Microsoft JWKS endpoint
 - Per-request state nonces with 600s TTL (CSRF protection)
 - Role mapping from Entra app roles → `viewer` / `contributor` / `admin`
+- Role-Based Access Control (RBAC): Entra ID App Roles map directly to application roles, governing permissions for viewing (viewer), running the synthesis pipeline (contributor), or overriding safety limits and editing features (admin)
 
 Leave these vars unset to fall back to local `config/auth.yaml` username/password auth.
 
