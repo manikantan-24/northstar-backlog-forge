@@ -11,8 +11,6 @@ Writes to memory:
         id, title, description, user_story, acceptance_criteria, priority,
         priority_rationale, tags, source_topic_id, conflicts_with_constraints
     }
-
-Tools used: `claude_tool` only.
 """
 
 from __future__ import annotations
