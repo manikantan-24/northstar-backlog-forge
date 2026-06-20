@@ -3035,6 +3035,47 @@ def show_admin_settings_dialog() -> None:
                                help=hint, key=f"ff_toggle_{key}")
 
     flags["contributor"] = c
+
+    st.markdown("#### Cryptographic Audit Log Verification")
+    st.caption(
+        "Verify the integrity of the SQLite audit database logs (`logs/audit_chain.db`) "
+        "by re-computing the SHA-256 hash chain."
+    )
+    if st.button("🛡️  Verify Audit Log Integrity", use_container_width=True, key="admin_audit_verify_btn"):
+        with st.spinner("Re-computing SHA-256 hash chain in SQLite..."):
+            try:
+                from memory.audit_log import AuditLog, _AUDIT_DB_PATH
+                import sqlite3
+
+                # 1. Try to get the active run_id from session state
+                res = st.session_state.get("result")
+                run_id = None
+                if res:
+                    run_id = res.get("run_metadata", {}).get("run_id")
+
+                # 2. If no active run_id, check the SQLite DB for the most recent run_id
+                if not run_id:
+                    try:
+                        conn = sqlite3.connect(str(_AUDIT_DB_PATH))
+                        row = conn.execute("SELECT run_id FROM audit_events ORDER BY seq DESC LIMIT 1").fetchone()
+                        if row:
+                            run_id = row[0]
+                        conn.close()
+                    except Exception:
+                        pass
+
+                if run_id:
+                    log_instance = AuditLog(run_id=run_id)
+                    intact, message = log_instance.verify_chain()
+                    if intact:
+                        st.success(f"🟢 Integrity Verified for run `{run_id}`: {message}")
+                    else:
+                        st.error(f"🔴 TAMPERING DETECTED for run `{run_id}`: {message}")
+                else:
+                    st.info("No runs found in the database to verify.")
+            except Exception as e:
+                st.error(f"Audit log verification failed: {e}")
+
     st.divider()
     if st.button("💾  Save feature flags", type="primary", use_container_width=True,
                  key="ff_save_btn"):

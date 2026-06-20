@@ -43,4 +43,5 @@ config/auth.yaml
 
 # Architectural references and technical guides
 TECHNICAL_GUIDE.md
+TECHNICAL_GUIDE_V2.md
 target_architecture_comparison.md

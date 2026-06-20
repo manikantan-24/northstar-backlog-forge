@@ -182,6 +182,7 @@ Open `http://localhost:8501`. The UI supports:
 - Downloadable `synthesis.json`, `synthesis.md`, `audit_trail.md`
 - Human-in-the-loop Jira push gate (admin / contributor only)
 - Two-way Jira status sync
+- Interactive Cryptographic Audit Log Verification (admin only)
 
 ### Run the tests
 
@@ -256,7 +257,7 @@ ENTRA_REDIRECT_URI=http://localhost:8501/
 - RS256 JWT verification via Microsoft JWKS endpoint
 - Per-request state nonces with 600s TTL (CSRF protection)
 - Role mapping from Entra app roles → `viewer` / `contributor` / `admin`
-- Role-Based Access Control (RBAC): Entra ID App Roles map directly to application roles, governing permissions for viewing (viewer), running the synthesis pipeline (contributor), or overriding safety limits and editing features (admin)
+- Role-Based Access Control (RBAC): Entra ID App Roles map directly to application roles, governing permissions for viewing (viewer), running the synthesis pipeline (contributor), or overriding safety limits, editing features, and performing cryptographic log verification audits (admin)
 
 Leave these vars unset to fall back to local `config/auth.yaml` username/password auth.
 

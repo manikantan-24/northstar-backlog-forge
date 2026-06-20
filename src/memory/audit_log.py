@@ -81,7 +81,12 @@ class AuditLog:
 
     def __init__(self, run_id: str | None = None) -> None:
         self._events: list[AuditEvent] = []
-        self._run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        import uuid
+        self._run_id = run_id or (
+            datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            + "_"
+            + uuid.uuid4().hex[:6]
+        )
         self._last_hash = "GENESIS"  # anchor for the first event
         self._db_path = Path(os.environ.get("AUDIT_DB_PATH", str(_AUDIT_DB_PATH)))
         self._db_ok = False
