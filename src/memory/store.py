@@ -130,7 +130,14 @@ class MemoryStore:
         """Initialise a file-backed ChromaDB client + collection."""
         try:
             import chromadb
-            chroma_path = str(self._cache_dir / "chroma")
+            if os.environ.get("LOGS_DIR"):
+                # SQLite on Azure Files (SMB network share) hangs/fails due to POSIX file locking limitations.
+                # Force ChromaDB to use the local container filesystem (.cache/memory/chroma) which supports locking.
+                chroma_path_obj = Path(".cache") / "memory" / "chroma"
+            else:
+                chroma_path_obj = self._cache_dir / "chroma"
+            chroma_path_obj.mkdir(parents=True, exist_ok=True)
+            chroma_path = str(chroma_path_obj)
             client = chromadb.PersistentClient(path=chroma_path)
             self._chroma_collection = client.get_or_create_collection(
                 name="backlog_tickets",
