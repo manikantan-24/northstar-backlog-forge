@@ -40,7 +40,11 @@ from logger_setup import get_logger
 logger = get_logger(__name__)
 
 _RETRIEVAL_THRESHOLD = 20  # Below this, skip embeddings and return everything.
-_DEFAULT_CACHE_DIR = Path(".cache") / "memory"
+_LOGS_DIR = os.environ.get("LOGS_DIR")
+if _LOGS_DIR:
+    _DEFAULT_CACHE_DIR = Path(_LOGS_DIR) / "memory"
+else:
+    _DEFAULT_CACHE_DIR = Path(".cache") / "memory"
 _EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
