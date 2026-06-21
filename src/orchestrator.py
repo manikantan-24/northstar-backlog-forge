@@ -16,6 +16,8 @@ See `docs/AGENT_DESIGN.md` for the rationale.
 from __future__ import annotations
 
 import time
+import concurrent.futures
+import threading
 from typing import Any
 
 from logger_setup import get_logger
@@ -282,16 +284,18 @@ class Orchestrator:
         text). The rest of the result fields are empty so downstream code
         that iterates `epics`, `gaps`, etc. doesn't break.
         """
+        callback_lock = threading.Lock()
         def _emit(stage_index: int, stage_name: str, event: str, detail: str = ""):
             """Helper: call the progress callback if one was provided.
             Swallows callback exceptions so a bad UI hook can't break the
             actual pipeline."""
             if progress_callback is None:
                 return
-            try:
-                progress_callback(stage_index, stage_name, event, detail)
-            except Exception as e:  # noqa: BLE001 — never break the run for a UI bug
-                logger.warning("progress_callback raised: %s", e)
+            with callback_lock:
+                try:
+                    progress_callback(stage_index, stage_name, event, detail)
+                except Exception as e:  # noqa: BLE001 — never break the run for a UI bug
+                    logger.warning("progress_callback raised: %s", e)
 
         existing_tickets = existing_tickets or []
 
@@ -703,69 +707,77 @@ class Orchestrator:
             )
             return True
 
-        # ---- Stage 1: Parse the transcript into topics ----
-        if transcript_text.strip() or vision_attachments:
-            detail_chars = f"reading {len(transcript_text):,} chars"
-            if vision_attachments:
-                detail_chars += f" + {len(vision_attachments)} image(s)"
-            _emit(0, "parser", "started", detail_chars)
-            parser_tool = _tool_for(0, "parser")
-            if parser_tool is not None:
-                parser = ParserAgent(tool=parser_tool, memory=memory, audit=audit)
-                with stage_span("parser", model=resolved_models.get("parser", ""), input_chars=len(transcript_text)):
-                    try:
-                        parser.run(transcript_text, vision_attachments=vision_attachments)
-                        _emit(0, "parser", "completed",
-                              f"{len(memory.get('topics', []))} topics extracted")
-                    except AgentError as e:
-                        def _retry_parser(t):
-                            ParserAgent(tool=t, memory=memory, audit=audit).run(
-                                transcript_text, vision_attachments=vision_attachments)
-                        if _attempt_failover(0, "parser", e, _retry_parser):
+        # Define parallel worker targets for Stage 1 and Stage 2
+        def run_parser():
+            if transcript_text.strip() or vision_attachments:
+                detail_chars = f"reading {len(transcript_text):,} chars"
+                if vision_attachments:
+                    detail_chars += f" + {len(vision_attachments)} image(s)"
+                _emit(0, "parser", "started", detail_chars)
+                parser_tool = _tool_for(0, "parser")
+                if parser_tool is not None:
+                    parser = ParserAgent(tool=parser_tool, memory=memory, audit=audit)
+                    with stage_span("parser", model=resolved_models.get("parser", ""), input_chars=len(transcript_text)):
+                        try:
+                            parser.run(transcript_text, vision_attachments=vision_attachments)
                             _emit(0, "parser", "completed",
-                                  f"{len(memory.get('topics', []))} topics extracted (via failover)")
-        else:
-            _emit(0, "parser", "skipped", "no transcript provided")
-            audit.record("parser", "stage_skipped", payload={"reason": "no transcript or vision input provided"},
-                         reasoning="Parser was not run because no text transcript or image attachment was supplied.")
-
-        # ---- Stage 2: Extract constraints from the wiki ----
-        if constraint_text.strip():
-            # Show where the constraint text came from so the live log is informative.
-            if live_confluence_page_id and not _live_confluence_error:
-                _conf_source = (
-                    f"from Confluence via Atlassian MCP (page {live_confluence_page_id})"
-                    if hasattr(self.confluence, "_use_mcp") and self.confluence._use_mcp
-                    else f"from live Confluence REST (page {live_confluence_page_id})"
-                )
+                                  f"{len(memory.get('topics', []))} topics extracted")
+                        except AgentError as e:
+                            def _retry_parser(t):
+                                ParserAgent(tool=t, memory=memory, audit=audit).run(
+                                    transcript_text, vision_attachments=vision_attachments)
+                            if _attempt_failover(0, "parser", e, _retry_parser):
+                                _emit(0, "parser", "completed",
+                                      f"{len(memory.get('topics', []))} topics extracted (via failover)")
             else:
-                _conf_source = "from local file / sample"
-            _emit(1, "constraint_extractor", "started",
-                  f"reading {len(constraint_text):,} chars · {_conf_source}")
-            constraint_tool = _tool_for(1, "constraint_extractor")
-            if constraint_tool is not None:
-                constraint_agent = ConstraintAgent(
-                    tool=constraint_tool,
-                    confluence=self.confluence,
-                    memory=memory,
-                    audit=audit,
-                )
-                with stage_span("constraint_extractor", model=resolved_models.get("constraint", ""), input_chars=len(constraint_text)):
-                    try:
-                        constraint_agent.run(constraint_text)
-                        _emit(1, "constraint_extractor", "completed",
-                              f"{len(memory.get('constraints', []))} constraints captured")
-                    except AgentError as e:
-                        def _retry_constraint(t):
-                            ConstraintAgent(tool=t, confluence=self.confluence,
-                                            memory=memory, audit=audit).run(constraint_text)
-                        if _attempt_failover(1, "constraint_extractor", e, _retry_constraint):
+                _emit(0, "parser", "skipped", "no transcript provided")
+                audit.record("parser", "stage_skipped", payload={"reason": "no transcript or vision input provided"},
+                             reasoning="Parser was not run because no text transcript or image attachment was supplied.")
+
+        def run_constraint():
+            if constraint_text.strip():
+                if live_confluence_page_id and not _live_confluence_error:
+                    _conf_source = (
+                        f"from Confluence via Atlassian MCP (page {live_confluence_page_id})"
+                        if hasattr(self.confluence, "_use_mcp") and self.confluence._use_mcp
+                        else f"from live Confluence REST (page {live_confluence_page_id})"
+                    )
+                else:
+                    _conf_source = "from local file / sample"
+                _emit(1, "constraint_extractor", "started",
+                      f"reading {len(constraint_text):,} chars · {_conf_source}")
+                constraint_tool = _tool_for(1, "constraint_extractor")
+                if constraint_tool is not None:
+                    constraint_agent = ConstraintAgent(
+                        tool=constraint_tool,
+                        confluence=self.confluence,
+                        memory=memory,
+                        audit=audit,
+                    )
+                    with stage_span("constraint_extractor", model=resolved_models.get("constraint", ""), input_chars=len(constraint_text)):
+                        try:
+                            constraint_agent.run(constraint_text)
                             _emit(1, "constraint_extractor", "completed",
-                                  f"{len(memory.get('constraints', []))} constraints captured (via failover)")
-        else:
-            _emit(1, "constraint_extractor", "skipped", "no wiki / constraints provided")
-            audit.record("constraint_extractor", "stage_skipped", payload={"reason": "no wiki / constraints text provided"},
-                         reasoning="Constraint Extractor was not run because no architecture wiki or constraint text was supplied.")
+                                  f"{len(memory.get('constraints', []))} constraints captured")
+                        except AgentError as e:
+                            def _retry_constraint(t):
+                                ConstraintAgent(tool=t, confluence=self.confluence,
+                                                memory=memory, audit=audit).run(constraint_text)
+                            if _attempt_failover(1, "constraint_extractor", e, _retry_constraint):
+                                _emit(1, "constraint_extractor", "completed",
+                                      f"{len(memory.get('constraints', []))} constraints captured (via failover)")
+            else:
+                _emit(1, "constraint_extractor", "skipped", "no wiki / constraints provided")
+                audit.record("constraint_extractor", "stage_skipped", payload={"reason": "no wiki / constraints text provided"},
+                             reasoning="Constraint Extractor was not run because no architecture wiki or constraint text was supplied.")
+
+        # Execute Stage 1 and Stage 2 concurrently
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(run_parser),
+                executor.submit(run_constraint)
+            ]
+            concurrent.futures.wait(futures)
 
         # ---- Stage 3: Draft user stories from topics + constraints ----
         topics = memory.get("topics", [])

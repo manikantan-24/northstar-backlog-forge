@@ -32,6 +32,7 @@ ACR_NAME="backlogsynth"                          # must be globally unique, lowe
 KEYVAULT_NAME="kv-backlog-synth"                 # must be globally unique
 CONTAINERAPP_ENV="cae-backlog-synthesizer"
 CONTAINERAPP_NAME="backlog-synthesizer"
+CONTAINERAPP_NAME_STAGING="${CONTAINERAPP_NAME}-staging"
 STORAGE_ACCOUNT="stbacklogsynth"                 # globally unique, lowercase, no hyphens
 FILE_SHARE_NAME="backlog-data"
 GITHUB_REPO="your-org/backlog-synthesizer"       # ← update to your GitHub repo
@@ -144,8 +145,6 @@ info "Creating Container App: $CONTAINERAPP_NAME (initial deployment from mcr.mi
 # first push to main. This avoids a chicken-and-egg problem where the app
 # doesn't exist yet when GitHub Actions tries to update it.
 
-ANTHROPIC_SECRET_URI="https://${KEYVAULT_NAME}.vault.azure.net/secrets/ANTHROPIC-API-KEY/"
-
 az containerapp create \
   --resource-group "$RESOURCE_GROUP" \
   --name "$CONTAINERAPP_NAME" \
@@ -161,16 +160,128 @@ az containerapp create \
     "AUTH_DISABLED=0" \
     "OTEL_ENABLED=1" \
     "OTEL_SERVICE_NAME=backlog-synthesizer" \
+    "LOGS_DIR=/app/backlog-data/logs" \
+    "OUTPUTS_DIR=/app/backlog-data/outputs" \
+    "SHUTDOWN_FLAG_PATH=/tmp/.shutdown_requested" \
+    "SHUTDOWN_GRACE_SECONDS=75" \
   --output none
 
 ok "Container App created (placeholder image — GitHub Actions will deploy the real image)"
+
+# ── Attach the Azure Files volume to the container app ────────────────────────
+# The environment-level storage registered above is only a credential; the
+# volume must also be declared in the container app spec and mounted at the
+# correct path.  We use `az containerapp update --yaml` for fine-grained
+# control that the CLI `--volume` shorthand doesn't yet support uniformly.
+#
+# Mount path  /app/backlog-data
+#   └── logs/      ← LOGS_DIR — run history JSON, audit SQLite
+#   └── outputs/   ← OUTPUTS_DIR — synthesis JSON + markdown exports
+#
+# Both the app and entrypoint.sh sub-paths are set via env vars above,
+# so the code never has a hard dependency on the physical mount location.
+info "Attaching Azure Files volume to Container App…"
+
+# Build a minimal YAML patch that adds the volume and mount to the existing
+# container app without touching any other configuration.
+VOLUME_YAML=$(cat <<YAML
+properties:
+  template:
+    volumes:
+      - name: backlog-data
+        storageType: AzureFile
+        storageName: backlog-data
+    containers:
+      - name: backlog-synthesizer
+        image: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
+        volumeMounts:
+          - volumeName: backlog-data
+            mountPath: /app/backlog-data
+  configuration:
+    ingress:
+      targetPort: 8501
+    terminationGracePeriodSeconds: 90
+YAML
+)
+
+echo "$VOLUME_YAML" > /tmp/backlog-volume-patch.yaml
+az containerapp update \
+  --name "$CONTAINERAPP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --yaml /tmp/backlog-volume-patch.yaml \
+  --output none
+rm -f /tmp/backlog-volume-patch.yaml
+
+ok "Volume mounted at /app/backlog-data; terminationGracePeriodSeconds=90"
 
 APP_URL=$(az containerapp show \
   --name "$CONTAINERAPP_NAME" \
   --resource-group "$RESOURCE_GROUP" \
   --query "properties.configuration.ingress.fqdn" \
   -o tsv)
-ok "App URL: https://${APP_URL}"
+ok "Production URL: https://${APP_URL}"
+
+# ── 7b. Staging Container App ─────────────────────────────────────────────────
+# Smaller SKU (0.5 vCPU / 1 GB) and min-replicas=0 so it costs nothing at idle.
+# AUTH_DISABLED=1 so the team can test without Entra credentials.
+info "Creating staging Container App: $CONTAINERAPP_NAME_STAGING"
+az containerapp create \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$CONTAINERAPP_NAME_STAGING" \
+  --environment "$CONTAINERAPP_ENV" \
+  --image "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest" \
+  --target-port 8501 \
+  --ingress external \
+  --min-replicas 0 \
+  --max-replicas 1 \
+  --cpu 0.5 \
+  --memory 1.0Gi \
+  --env-vars \
+    "AUTH_DISABLED=1" \
+    "OTEL_ENABLED=0" \
+    "OTEL_SERVICE_NAME=backlog-synthesizer-staging" \
+    "LOGS_DIR=/app/backlog-data/staging/logs" \
+    "OUTPUTS_DIR=/app/backlog-data/staging/outputs" \
+    "SHUTDOWN_FLAG_PATH=/tmp/.shutdown_requested" \
+    "SHUTDOWN_GRACE_SECONDS=75" \
+  --output none
+ok "Staging Container App created"
+
+# Mount the same Azure Files share; staging writes under /staging/ sub-paths
+# so prod and staging data never collide on the share.
+STAGING_VOLUME_YAML=$(cat <<YAML
+properties:
+  template:
+    volumes:
+      - name: backlog-data
+        storageType: AzureFile
+        storageName: backlog-data
+    containers:
+      - name: ${CONTAINERAPP_NAME_STAGING}
+        image: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
+        volumeMounts:
+          - volumeName: backlog-data
+            mountPath: /app/backlog-data
+  configuration:
+    ingress:
+      targetPort: 8501
+    terminationGracePeriodSeconds: 90
+YAML
+)
+echo "$STAGING_VOLUME_YAML" > /tmp/backlog-staging-patch.yaml
+az containerapp update \
+  --name "$CONTAINERAPP_NAME_STAGING" \
+  --resource-group "$RESOURCE_GROUP" \
+  --yaml /tmp/backlog-staging-patch.yaml \
+  --output none
+rm -f /tmp/backlog-staging-patch.yaml
+
+STAGING_URL=$(az containerapp show \
+  --name "$CONTAINERAPP_NAME_STAGING" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "properties.configuration.ingress.fqdn" \
+  -o tsv)
+ok "Staging URL: https://${STAGING_URL}"
 
 # ── 8. Service principal for GitHub Actions ────────────────────────────────────
 info "Creating service principal for GitHub Actions: sp-backlog-synthesizer-ghactions"
@@ -209,6 +320,7 @@ echo "────────────────────────�
 echo "ACR_REGISTRY              ${ACR_NAME}.azurecr.io"
 echo "AZURE_RESOURCE_GROUP      ${RESOURCE_GROUP}"
 echo "CONTAINERAPP_NAME         ${CONTAINERAPP_NAME}"
+echo "CONTAINERAPP_NAME_STAGING ${CONTAINERAPP_NAME_STAGING}"
 echo "──────────────────────────────────────────────────────────────"
 echo ""
 echo -e "${YELLOW}Optional (for live Jira/Confluence):${NC}"
@@ -218,5 +330,6 @@ echo "JIRA_PROJECT_KEY          YOURPROJ"
 echo "GOOGLE_API_KEY            (your Google AI key for Gemini)"
 echo ""
 echo -e "${GREEN}Next step: push a commit to main to trigger your first real deployment.${NC}"
-echo -e "${GREEN}App will be live at: https://${APP_URL}${NC}"
+echo -e "${GREEN}Production:  https://${APP_URL}${NC}"
+echo -e "${GREEN}Staging:     https://${STAGING_URL}${NC}"
 echo ""

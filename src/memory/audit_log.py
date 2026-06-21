@@ -22,11 +22,43 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
+import threading
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+
+# ---- PII redaction patterns --------------------------------------------------
+# Applied to LLM prompts before they are written to the audit database.
+# Transcripts may contain speaker names, email addresses, phone numbers, and
+# other identifiers that must not land in a tamper-evident log without consent.
+_PII_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'), "[EMAIL REDACTED]"),
+    (re.compile(r'\b(\+?1[\s\-.]?)?\(?\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4}\b'), "[PHONE REDACTED]"),
+    (re.compile(r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'), "[SSN REDACTED]"),
+    (re.compile(r'\b(?:\d[ -]?){13,16}\b'), "[CARD REDACTED]"),
+]
+
+# Configurable — set AUDIT_PII_REDACTION=0 to disable (e.g. for on-prem
+# deployments where the audit DB is itself a controlled PII store).
+_PII_REDACTION_ENABLED = os.environ.get("AUDIT_PII_REDACTION", "1").strip() not in ("0", "false", "no")
+
+# ---- Retention policy --------------------------------------------------------
+# AUDIT_LOG_RETENTION_DAYS=0 means keep forever (default for tamper-evidence).
+_RETENTION_DAYS = int(os.environ.get("AUDIT_LOG_RETENTION_DAYS", "0"))
+
+
+def _redact_pii(text: str) -> str:
+    """Replace recognised PII patterns with placeholder tokens."""
+    if not _PII_REDACTION_ENABLED:
+        return text
+    for pattern, replacement in _PII_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
 
 
 @dataclass
@@ -90,24 +122,43 @@ class AuditLog:
         self._last_hash = "GENESIS"  # anchor for the first event
         self._db_path = Path(os.environ.get("AUDIT_DB_PATH", str(_AUDIT_DB_PATH)))
         self._db_ok = False
+        self._conn: sqlite3.Connection | None = None
+        # Protects _last_hash, _events, and the DB connection from concurrent
+        # writes when parallel pipeline nodes call record() simultaneously.
+        self._lock = threading.Lock()
         self._init_db()
+
+    def __reduce__(self) -> tuple:
+        # LangGraph's MemorySaver checkpoints all state fields including the
+        # AuditLog instance.  AuditLog is not msgpack-serializable; returning
+        # a fresh empty instance on deserialization is safe because the live
+        # object remains in scope within the same process throughout the run.
+        return (self.__class__.__new__, (self.__class__,))
 
     def _init_db(self) -> None:
         try:
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(str(self._db_path))
+            conn = sqlite3.connect(
+                str(self._db_path),
+                check_same_thread=False,  # lock protects concurrent access
+            )
+            # WAL journal mode: readers never block writers and vice-versa.
+            # With multiple concurrent runs each holding their own connection,
+            # this eliminates the per-write lock contention on the shared file.
+            conn.execute("PRAGMA journal_mode=WAL")
+            # NORMAL sync is safe with WAL and gives ~5x faster writes vs FULL.
+            conn.execute("PRAGMA synchronous=NORMAL")
             _ensure_db(conn)
-            conn.close()
+            self._conn = conn
             self._db_ok = True
         except Exception:  # noqa: BLE001 — never break a run over audit persistence
             self._db_ok = False
 
     def _persist(self, event: AuditEvent, prev_hash: str, event_hash: str) -> None:
-        if not self._db_ok:
+        if not self._db_ok or self._conn is None:
             return
         try:
-            conn = sqlite3.connect(str(self._db_path))
-            conn.execute(
+            self._conn.execute(
                 """INSERT INTO audit_events
                    (run_id, timestamp, agent, event, payload_json,
                     reasoning, prev_hash, event_hash)
@@ -123,8 +174,7 @@ class AuditLog:
                     event_hash,
                 ),
             )
-            conn.commit()
-            conn.close()
+            self._conn.commit()
         except Exception:  # noqa: BLE001
             pass  # best-effort persistence — in-memory log is authoritative
 
@@ -137,18 +187,19 @@ class AuditLog:
         payload: dict[str, Any] | None = None,
         reasoning: str = "",
     ) -> None:
-        ev = AuditEvent(
-            timestamp=_now(),
-            agent=agent,
-            event=event,
-            payload=payload or {},
-            reasoning=reasoning,
-        )
-        prev = self._last_hash
-        h = _event_hash(prev, ev)
-        self._last_hash = h
-        self._events.append(ev)
-        self._persist(ev, prev, h)
+        with self._lock:
+            ev = AuditEvent(
+                timestamp=_now(),
+                agent=agent,
+                event=event,
+                payload=payload or {},
+                reasoning=reasoning,
+            )
+            prev = self._last_hash
+            h = _event_hash(prev, ev)
+            self._last_hash = h
+            self._events.append(ev)
+            self._persist(ev, prev, h)
 
     def record_tool_call(
         self,
@@ -191,15 +242,17 @@ class AuditLog:
                 "input_tokens": usage.get("input_tokens"),
                 "output_tokens": usage.get("output_tokens"),
             }
-        # Full prompt + response — capped to 16 KB each so the audit file
-        # stays small. The markdown render shows them in collapsible
-        # <details> blocks so the high-level trail stays readable.
+        # Full prompt + response — PII-redacted then capped to 16 KB each.
+        # Redaction runs before truncation so the char-count reflects the
+        # redacted length; reviewers see [EMAIL REDACTED] placeholders.
         if prompt is not None:
-            payload["prompt_full"] = _truncate(prompt, max_chars=16_000)
-            payload["prompt_chars_actual"] = len(prompt)
+            redacted_prompt = _redact_pii(prompt)
+            payload["prompt_full"] = _truncate(redacted_prompt, max_chars=16_000)
+            payload["prompt_chars_actual"] = len(redacted_prompt)
         if response_text is not None:
-            payload["response_full"] = _truncate(response_text, max_chars=16_000)
-            payload["response_chars_actual"] = len(response_text)
+            redacted_response = _redact_pii(response_text)
+            payload["response_full"] = _truncate(redacted_response, max_chars=16_000)
+            payload["response_chars_actual"] = len(redacted_response)
         self.record(agent=agent, event="tool_call", payload=payload)
 
     def record_failure(self, agent: str, error: str) -> None:
@@ -286,6 +339,45 @@ class AuditLog:
             prev_hash = stored_hash
 
         return True, f"Chain intact — {len(rows)} event(s) verified."
+
+    @classmethod
+    def purge_old_runs(
+        cls,
+        retention_days: int | None = None,
+        db_path: Path | str | None = None,
+    ) -> int:
+        """Delete audit rows older than `retention_days` from the database.
+
+        Designed for a scheduled job or startup call.  Returns the number of
+        rows deleted.  A `retention_days` of 0 (or negative) is a no-op so
+        callers can pass `AUDIT_LOG_RETENTION_DAYS` directly without a guard.
+
+        The hash-chain is broken at the deletion boundary — callers should
+        document this as an intentional retention purge in their compliance
+        runbooks rather than treating it as a tamper signal.
+        """
+        days = retention_days if retention_days is not None else _RETENTION_DAYS
+        if days <= 0:
+            return 0
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        path = Path(db_path) if db_path else Path(
+            os.environ.get("AUDIT_DB_PATH", str(_AUDIT_DB_PATH))
+        )
+        if not path.exists():
+            return 0
+        try:
+            conn = sqlite3.connect(str(path))
+            cur = conn.execute(
+                "DELETE FROM audit_events WHERE timestamp < ?", (cutoff,)
+            )
+            deleted = cur.rowcount
+            conn.commit()
+            conn.close()
+            return deleted
+        except Exception:  # noqa: BLE001
+            return 0
 
     # Payload keys that carry potentially long LLM content. These get
     # rendered inside collapsible <details> blocks so the high-level

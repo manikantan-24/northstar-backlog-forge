@@ -21,7 +21,7 @@ set -euo pipefail
 
 SHUTDOWN_FLAG_PATH="${SHUTDOWN_FLAG_PATH:-/tmp/.shutdown_requested}"
 SHUTDOWN_GRACE_SECONDS="${SHUTDOWN_GRACE_SECONDS:-75}"
-PORT="${PORT:-8502}"
+PORT="${PORT:-8501}"
 
 _handle_term() {
     echo "[entrypoint] SIGTERM received — requesting graceful shutdown (grace=${SHUTDOWN_GRACE_SECONDS}s)…" >&2
@@ -49,8 +49,15 @@ trap _handle_term SIGTERM SIGINT
 # Remove any stale flag from a previous run (e.g. container restart).
 rm -f "$SHUTDOWN_FLAG_PATH"
 
+# Pre-warm the embedding model before Streamlit starts (idempotent — the
+# model is baked into the image layer by Dockerfile's RUN python warmup.py).
+# This no-op ensures the HF cache is intact even if the image was rebuilt.
+if [ -f "src/warmup.py" ]; then
+    python src/warmup.py 2>&1 | sed 's/^/[warmup] /' || true
+fi
+
 echo "[entrypoint] Starting Streamlit on port ${PORT}…" >&2
-streamlit run app.py \
+exec streamlit run app.py \
     --server.port="$PORT" \
     --server.address=0.0.0.0 \
     --server.headless=true \
