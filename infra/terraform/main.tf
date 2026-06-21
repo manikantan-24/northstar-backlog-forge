@@ -358,10 +358,6 @@ resource "azurerm_container_app" "app" {
         value = "0"
       }
       env {
-        name  = "USE_CHROMADB"
-        value = "1"
-      }
-      env {
         name  = "LOGS_DIR"
         value = "/app/logs"
       }

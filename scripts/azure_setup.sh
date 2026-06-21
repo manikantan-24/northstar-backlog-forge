@@ -159,7 +159,6 @@ az containerapp create \
   --memory 2.0Gi \
   --env-vars \
     "AUTH_DISABLED=0" \
-    "USE_CHROMADB=1" \
     "OTEL_ENABLED=1" \
     "OTEL_SERVICE_NAME=backlog-synthesizer" \
   --output none
