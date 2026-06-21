@@ -30,6 +30,31 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+# ---- Redis distributed locking configuration ---------------------------------
+_REDIS_URL = os.environ.get("REDIS_URL", "").strip()
+_redis_client = None
+_redis_available = False
+
+
+def _get_redis_client():
+    global _redis_client, _redis_available
+    if _redis_client is not None:
+        return _redis_client if _redis_available else None
+    if not _REDIS_URL:
+        _redis_available = False
+        return None
+    try:
+        import redis
+        client = redis.from_url(_REDIS_URL, socket_connect_timeout=2, socket_timeout=2)
+        client.ping()
+        _redis_client = client
+        _redis_available = True
+        return _redis_client
+    except Exception:
+        _redis_available = False
+        return None
+
+
 
 # ---- PII redaction patterns --------------------------------------------------
 # Applied to LLM prompts before they are written to the audit database.
@@ -157,6 +182,16 @@ class AuditLog:
     def _persist(self, event: AuditEvent, prev_hash: str, event_hash: str) -> None:
         if not self._db_ok or self._conn is None:
             return
+
+        r_client = _get_redis_client()
+        lock = None
+        if r_client is not None:
+            try:
+                lock = r_client.lock("lock:audit_db_write", timeout=10, blocking_timeout=5)
+                lock.acquire()
+            except Exception:
+                lock = None
+
         try:
             self._conn.execute(
                 """INSERT INTO audit_events
@@ -177,6 +212,12 @@ class AuditLog:
             self._conn.commit()
         except Exception:  # noqa: BLE001
             pass  # best-effort persistence — in-memory log is authoritative
+        finally:
+            if lock is not None:
+                try:
+                    lock.release()
+                except Exception:
+                    pass
 
     # ---------------------------------------------------------- recording
 
@@ -378,6 +419,92 @@ class AuditLog:
             return deleted
         except Exception:  # noqa: BLE001
             return 0
+
+    @classmethod
+    def purge_user_data(
+        cls,
+        user_oid: str,
+        db_path: Path | str | None = None,
+        runs_dir: Path | str | None = None,
+    ) -> int:
+        """Delete all audit events, run histories, and output files associated with a user OID.
+
+        Designed for GDPR right-to-erasure requests.  Returns the number of SQLite rows deleted.
+        """
+        import shutil
+        path = Path(db_path) if db_path else Path(
+            os.environ.get("AUDIT_DB_PATH", str(_AUDIT_DB_PATH))
+        )
+        r_dir = Path(runs_dir) if runs_dir else _PROJECT_ROOT / "logs" / "runs"
+
+        matching_run_ids = []
+        json_files_to_delete = []
+        output_dirs_to_delete = set()
+        user_dirs_to_clean = set()
+
+        if r_dir.exists():
+            for p in r_dir.rglob("*.json"):
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                    if (
+                        data.get("user_oid") == user_oid
+                        or data.get("oid") == user_oid
+                        or data.get("user_id") == user_oid
+                        or p.parent.name == user_oid
+                    ):
+                        run_id = data.get("run_id")
+                        if run_id:
+                            matching_run_ids.append(run_id)
+                        json_files_to_delete.append(p)
+                        user_dirs_to_clean.add(p.parent)
+
+                        outputs = data.get("outputs", {})
+                        for key in ("synthesis_json", "synthesis_md", "audit_md"):
+                            out_path = outputs.get(key)
+                            if out_path:
+                                out_p = Path(out_path)
+                                if out_p.exists():
+                                    output_dirs_to_delete.add(out_p.parent)
+                except Exception:
+                    pass
+
+        deleted_rows = 0
+        if matching_run_ids and path.exists():
+            try:
+                conn = sqlite3.connect(str(path))
+                placeholders = ",".join(["?"] * len(matching_run_ids))
+                cur = conn.execute(
+                    f"DELETE FROM audit_events WHERE run_id IN ({placeholders})",
+                    matching_run_ids,
+                )
+                deleted_rows = cur.rowcount
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
+
+        for out_dir in output_dirs_to_delete:
+            try:
+                if out_dir.exists():
+                    shutil.rmtree(out_dir)
+            except Exception:
+                pass
+
+        for json_file in json_files_to_delete:
+            try:
+                if json_file.exists():
+                    json_file.unlink()
+            except Exception:
+                pass
+
+        for user_dir in user_dirs_to_clean:
+            try:
+                if user_dir.exists() and not any(user_dir.iterdir()):
+                    user_dir.rmdir()
+            except Exception:
+                pass
+
+        return deleted_rows
 
     # Payload keys that carry potentially long LLM content. These get
     # rendered inside collapsible <details> blocks so the high-level

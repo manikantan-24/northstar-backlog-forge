@@ -3950,6 +3950,7 @@ if run_clicked or _main_canvas_run:
         "run_id": f"{stamp}_{uuid.uuid4().hex[:6]}",
         "timestamp": stamp,
         "user_id": _current_user,
+        "user_oid": st.session_state.get("entra_user", {}).get("oid", ""),
         "source_label": source_label,
         "elapsed_seconds": elapsed,
         "epic_count": len(epics),

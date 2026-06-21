@@ -80,6 +80,10 @@ read -rsp "ANTHROPIC_API_KEY (required): " ANTHROPIC_KEY; echo
 read -rsp "GOOGLE_API_KEY (optional, press Enter to skip): " GOOGLE_KEY; echo
 read -rsp "JIRA_API_TOKEN (optional, press Enter to skip): " JIRA_TOKEN; echo
 
+AUTH_KEY_VAL="${ANTHROPIC_KEY:-placeholder}"
+G_KEY_VAL="${GOOGLE_KEY:-placeholder}"
+J_KEY_VAL="${JIRA_TOKEN:-placeholder}"
+
 KV_ID=$(az keyvault show --name "$KEYVAULT_NAME" --query id -o tsv)
 CURRENT_USER=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
 
@@ -156,6 +160,10 @@ az containerapp create \
   --max-replicas 3 \
   --cpu 1.0 \
   --memory 2.0Gi \
+  --secrets \
+    "anthropic-api-key=$AUTH_KEY_VAL" \
+    "google-api-key=$G_KEY_VAL" \
+    "jira-api-token=$J_KEY_VAL" \
   --env-vars \
     "AUTH_DISABLED=0" \
     "OTEL_ENABLED=1" \
@@ -164,6 +172,9 @@ az containerapp create \
     "OUTPUTS_DIR=/app/backlog-data/outputs" \
     "SHUTDOWN_FLAG_PATH=/tmp/.shutdown_requested" \
     "SHUTDOWN_GRACE_SECONDS=75" \
+    "ANTHROPIC_API_KEY=secretref:anthropic-api-key" \
+    "GOOGLE_API_KEY=secretref:google-api-key" \
+    "JIRA_API_TOKEN=secretref:jira-api-token" \
   --output none
 
 ok "Container App created (placeholder image — GitHub Actions will deploy the real image)"
@@ -236,6 +247,10 @@ az containerapp create \
   --max-replicas 1 \
   --cpu 0.5 \
   --memory 1.0Gi \
+  --secrets \
+    "anthropic-api-key=$AUTH_KEY_VAL" \
+    "google-api-key=$G_KEY_VAL" \
+    "jira-api-token=$J_KEY_VAL" \
   --env-vars \
     "AUTH_DISABLED=1" \
     "OTEL_ENABLED=0" \
@@ -244,6 +259,9 @@ az containerapp create \
     "OUTPUTS_DIR=/app/backlog-data/staging/outputs" \
     "SHUTDOWN_FLAG_PATH=/tmp/.shutdown_requested" \
     "SHUTDOWN_GRACE_SECONDS=75" \
+    "ANTHROPIC_API_KEY=secretref:anthropic-api-key" \
+    "GOOGLE_API_KEY=secretref:google-api-key" \
+    "JIRA_API_TOKEN=secretref:jira-api-token" \
   --output none
 ok "Staging Container App created"
 

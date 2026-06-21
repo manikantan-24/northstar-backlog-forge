@@ -666,3 +666,121 @@ class TestMemoryStoreAtomicWrite:
         kv_file = tmp_path / "kv" / "k.json"
         stored = json.loads(kv_file.read_text())
         assert stored == "v2"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# audit_log purging (GDPR right-to-erasure and log retention)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestAuditLogPurge:
+    def test_purge_user_data_deletes_all_records_and_files(self, tmp_path, monkeypatch):
+        from memory.audit_log import AuditLog
+        import sqlite3
+        import json
+
+        # Set up a test DB path and run history directory
+        db_path = tmp_path / "audit.db"
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+
+        monkeypatch.setenv("AUDIT_DB_PATH", str(db_path))
+
+        # Create audit database and mock records
+        log = AuditLog(run_id="run_123")
+        log._db_path = db_path
+        log._init_db()
+        log.record("agent_a", "event_a", {"info": "test"})
+        log.record("agent_b", "event_b", {"info": "test2"})
+
+        # Verify DB is populated
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute("SELECT count(*) FROM audit_events").fetchone()[0]
+        assert rows == 2
+        conn.close()
+
+        # Set up outputs directories
+        outputs_dir = tmp_path / "outputs" / "user_abc" / "run_123"
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+        synthesis_json = outputs_dir / "synthesis.json"
+        synthesis_json.write_text("{}", encoding="utf-8")
+        synthesis_md = outputs_dir / "synthesis.md"
+        synthesis_md.write_text("synthesis md", encoding="utf-8")
+        audit_md = outputs_dir / "audit_trail.md"
+        audit_md.write_text("audit md", encoding="utf-8")
+
+        # Set up run history JSON files
+        user_runs_dir = runs_dir / "user_abc"
+        user_runs_dir.mkdir(parents=True, exist_ok=True)
+        run_summary_file = user_runs_dir / "run_123.json"
+        run_summary_file.write_text(json.dumps({
+            "run_id": "run_123",
+            "user_id": "user_abc",
+            "user_oid": "oid_abc",
+            "outputs": {
+                "synthesis_json": str(synthesis_json),
+                "synthesis_md": str(synthesis_md),
+                "audit_md": str(audit_md),
+            }
+        }), encoding="utf-8")
+
+        # Now perform GDPR erasure
+        deleted_count = AuditLog.purge_user_data(
+            user_oid="oid_abc",
+            db_path=db_path,
+            runs_dir=runs_dir
+        )
+
+        assert deleted_count == 2
+
+        # Verify DB is empty
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute("SELECT count(*) FROM audit_events").fetchone()[0]
+        assert rows == 0
+        conn.close()
+
+        # Verify files are deleted
+        assert not run_summary_file.exists()
+        assert not user_runs_dir.exists()  # should clean empty dir
+        assert not outputs_dir.exists()
+
+    def test_purge_old_runs_deletes_old_events(self, tmp_path, monkeypatch):
+        from memory.audit_log import AuditLog
+        import sqlite3
+        from datetime import datetime, timedelta, timezone
+
+        db_path = tmp_path / "audit.db"
+        monkeypatch.setenv("AUDIT_DB_PATH", str(db_path))
+
+        log = AuditLog(run_id="run_recent")
+        log._db_path = db_path
+        log._init_db()
+        # Record recent event
+        log.record("agent", "recent_event", {})
+
+        # Manually insert an old event in SQLite
+        conn = sqlite3.connect(str(db_path))
+        old_time = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        conn.execute(
+            """INSERT INTO audit_events
+               (run_id, timestamp, agent, event, payload_json,
+                reasoning, prev_hash, event_hash)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            ("run_old", old_time, "agent", "old_event", "{}", "", "", "")
+        )
+        conn.commit()
+
+        # Check we have 2 rows
+        assert conn.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 2
+        conn.close()
+
+        # Purge runs older than 5 days
+        deleted = AuditLog.purge_old_runs(retention_days=5, db_path=db_path)
+        assert deleted == 1
+
+        # Check DB only has 1 row left (recent one)
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute("SELECT run_id FROM audit_events").fetchall()
+        assert len(rows) == 1
+        assert rows[0][0] == "run_recent"
+        conn.close()
+

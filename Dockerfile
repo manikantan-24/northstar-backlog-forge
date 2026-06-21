@@ -44,6 +44,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    HF_HOME=/app/.cache \
     # Tell Python where the builder-stage packages landed.
     PYTHONPATH=/usr/local/lib/python3.11/site-packages
 
@@ -73,7 +74,7 @@ COPY config/ ./config/
 RUN python src/warmup.py
 
 # Pre-create runtime dirs so they exist with non-root ownership.
-RUN mkdir -p outputs logs
+RUN mkdir -p outputs logs .cache
 
 # Non-root user — Streamlit doesn't need root.
 RUN useradd --create-home --uid 1000 appuser \
