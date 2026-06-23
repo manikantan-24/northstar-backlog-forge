@@ -39,6 +39,11 @@ from typing import Any
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
+try:
+    from langgraph.checkpoint.redis import RedisSaver
+    HAS_REDIS_SAVER = True
+except ImportError:
+    HAS_REDIS_SAVER = False
 from langchain_core.runnables import RunnableConfig
 
 from logger_setup import get_logger
@@ -1069,11 +1074,15 @@ def build_pipeline(checkpointer=None):
     graph.add_edge("finalize",            END)
 
     if checkpointer is None:
-        try:
-            from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-            _serde = JsonPlusSerializer(pickle_fallback=True)
-            checkpointer = MemorySaver(serde=_serde)
-        except (ImportError, TypeError):
-            # Older LangGraph versions: MemorySaver() without custom serde.
-            checkpointer = MemorySaver()
+        redis_url = os.environ.get("REDIS_URL")
+        if redis_url and HAS_REDIS_SAVER:
+            checkpointer = RedisSaver(redis_url=redis_url)
+        else:
+            try:
+                from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+                _serde = JsonPlusSerializer(pickle_fallback=True)
+                checkpointer = MemorySaver(serde=_serde)
+            except (ImportError, TypeError):
+                # Older LangGraph versions: MemorySaver() without custom serde.
+                checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)

@@ -54,6 +54,8 @@ PyJWT[cryptography]>=2.8.0
 # budget_store.py lazy-imports this; falls back to file-based mode if absent.
 # Required when REDIS_URL is set (Azure Cache for Redis is provisioned by Terraform).
 redis>=5.0.0
+langgraph-checkpoint-redis>=0.4.1
+
 
 # Prometheus metrics — exposes /metrics on :9090.
 # metrics.py guards the import gracefully; without this package, the endpoint
