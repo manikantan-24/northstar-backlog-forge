@@ -24,15 +24,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /build
 
 COPY requirements.txt requirements-lock.txt ./
 
-# CPU-only PyTorch is installed first to save ~2 GB of container image space
+# CPU-only PyTorch and all requirements are installed into the prefix
 RUN pip install --upgrade pip \
- && pip install --index-url https://download.pytorch.org/whl/cpu torch \
- && pip install --prefix=/install -r requirements.txt
+ && pip install --prefix=/install \
+                --extra-index-url https://download.pytorch.org/whl/cpu \
+                torch -r requirements.txt
 
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
