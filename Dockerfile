@@ -59,6 +59,10 @@ COPY --from=builder /install /usr/local
 
 WORKDIR /app
 
+# Pre-download the sentence-transformers model so that this layer is cached
+# and not re-downloaded when code changes in CI/CD pipeline builds.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
 # Application code.
 COPY app.py ./
 COPY entrypoint.sh ./

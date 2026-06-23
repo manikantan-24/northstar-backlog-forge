@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 
 _RETRIEVAL_THRESHOLD = 20  # Below this, skip embeddings and return everything.
 _DEFAULT_CACHE_DIR = Path(".cache") / "memory"
-_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 class MemoryStore:
