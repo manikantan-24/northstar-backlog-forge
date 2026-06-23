@@ -52,6 +52,7 @@ from tools.gemini_tool import GeminiTool
 from tools.ollama_tool import OllamaTool
 from tools.jira_tool import JiraTool
 from tools.confluence_tool import ConfluenceTool
+from tools.github_tool import GithubTool
 
 try:
     from circuit_breaker import CLAUDE_CB as _CLAUDE_CB, GEMINI_CB as _GEMINI_CB
@@ -242,7 +243,7 @@ def _extract_memory_updates(mem: MemoryStore) -> dict:
 
 
 def _node_with_span(node_name: str, fn):
-    """Wrap a LangGraph node function with a per-node OTel span.
+    """Wrap a LangGraph node function with a per-node OTel span + legacy stage_span.
 
     The span is named ``pipeline.node.<node_name>`` and carries:
     - ``pipeline.node``     — the node name
@@ -254,10 +255,28 @@ def _node_with_span(node_name: str, fn):
     wrapper (pipeline_node_span yields a _NoopSpan immediately).
     """
     def _wrapped(state: PipelineState, config: RunnableConfig) -> dict:
-        from telemetry import pipeline_node_span
+        from telemetry import pipeline_node_span, stage_span
         run_id = state.get("run_id") or ""
+        resolved_models = state.get("resolved_models") or {}
+
+        # Map node name to stage metadata
+        stage_mapping = {
+            "parse":               ("parser",             resolved_models.get("parser", ""), len(state.get("transcript_text") or "")),
+            "extract_constraints": ("constraint_extractor", resolved_models.get("constraint", ""), len(state.get("constraint_text") or "")),
+            "write_stories":       ("story_writer",       resolved_models.get("story_writer", ""), 0),
+            "decompose_epics":     ("epic_decomposer",    resolved_models.get("epic_decomposer", ""), 0),
+            "detect_gaps":         ("gap_detector",       resolved_models.get("gap_detector", ""), 0),
+        }
+
         with pipeline_node_span(node_name, run_id=run_id) as span:
-            result = fn(state, config)
+            # If this node represents a legacy stage, wrap it in a stage_span context
+            if node_name in stage_mapping:
+                stage_name, model, input_chars = stage_mapping[node_name]
+                with stage_span(stage_name, model=model, input_chars=input_chars):
+                    result = fn(state, config)
+            else:
+                result = fn(state, config)
+
             if isinstance(result, dict):
                 for key, attr in (
                     ("topics",     "output.topics_count"),
@@ -293,6 +312,20 @@ def initialize_node(state: PipelineState, config: RunnableConfig) -> dict:
     audit = AuditLog()
 
     resolved_models = state.get("resolved_models") or dict(DEFAULT_STAGE_MODELS)
+    _auto_switched_parser = False
+    _auto_switched_from = ""
+    auto_switch = state.get("auto_switch", True)
+    vision = state.get("vision_attachments") or []
+    if auto_switch and vision and resolved_models.get("parser", "").lower().startswith("gemini"):
+        _auto_switched_from = resolved_models["parser"]
+        _auto_switched_parser = True
+        logger.info(
+            "Vision attachment present — switching parser %s → claude-sonnet-4-5 "
+            "(Gemini wrapper can't carry images).",
+            _auto_switched_from,
+        )
+        resolved_models = dict(resolved_models)
+        resolved_models["parser"] = "claude-sonnet-4-5"
     existing_tickets = list(state.get("existing_tickets") or [])
     constraint_text = state.get("constraint_text") or ""
 
@@ -375,6 +408,10 @@ def initialize_node(state: PipelineState, config: RunnableConfig) -> dict:
             "constraint_chars":       len(constraint_text),
             "existing_ticket_count":  len(existing_tickets),
             "vision_attachment_count": len(vision),
+            "redact_pii":             bool(state.get("redact_pii")),
+            "strict_redact":          bool(state.get("strict_redact")),
+            "auto_switch":            auto_switch,
+            "dry_run":                False,
             "persistent_memory":      bool(state.get("persistent_memory")),
             "live_jira":              bool(state.get("live_jira")),
             "live_confluence":        bool(live_page),
@@ -398,6 +435,20 @@ def initialize_node(state: PipelineState, config: RunnableConfig) -> dict:
                 "media_types": [getattr(v, "media_type", "unknown") for v in vision],
             },
             reasoning="Image attachments provided alongside the transcript.",
+        )
+    if _auto_switched_parser:
+        audit.record(
+            "orchestrator", "auto_switch_model",
+            payload={
+                "stage":    "parser",
+                "from":     _auto_switched_from,
+                "to":       "claude-sonnet-4-5",
+                "reason":   "vision_attachment_present",
+            },
+            reasoning=(
+                f"Parser model auto-switched from {_auto_switched_from} to claude-sonnet-4-5 "
+                "because image attachments were provided. Gemini wrapper cannot carry image payloads."
+            ),
         )
     audit.record(
         "orchestrator", "existing_tickets_seeded",
@@ -479,31 +530,96 @@ def initialize_node(state: PipelineState, config: RunnableConfig) -> dict:
             reasoning="Input sanitizer found no injection patterns in transcript or constraint text.",
         )
 
-    # ---- PII redaction (pre-LLM) — active when strict_redact=True ----
+    # ---- PII redaction (opt-in) ----
     _redaction_map = None
-    if state.get("strict_redact"):
+    if state.get("redact_pii"):
         from security import redact_pii, redact_backlog_pii
         transcript_clean, _rmap = redact_pii(transcript_clean)
         constraint_clean, _rmap = redact_pii(constraint_clean, rmap=_rmap)
         existing_tickets, _rmap = redact_backlog_pii(existing_tickets, rmap=_rmap)
         _redaction_map = _rmap
+        _pii_counts = _rmap.summary()
+        _pii_total  = sum(_pii_counts.values())
+        _pii_detail = ", ".join(f"{v} {k}" for k, v in _pii_counts.items() if v > 0)
         audit.record(
-            "orchestrator", "pii_redaction_applied",
-            payload={"kinds_found": _rmap.summary()},
+            "orchestrator", "pii_redacted",
+            payload={
+                "counts": _pii_counts,
+                "total_items_redacted": _pii_total,
+                "types_found": [k for k, v in _pii_counts.items() if v > 0],
+            },
             reasoning=(
-                "strict_redact=True: PII tokens replaced before any LLM stage. "
-                "Originals will be restored in finalize_node."
+                f"PII redaction complete. {_pii_total} item(s) replaced with stable tokens "
+                f"({_pii_detail}). "
+                "The same token map is shared across transcript, wiki, and backlog so identical "
+                "values (e.g. the same email in two inputs) map to the same placeholder. "
+                "The LLM never sees raw personal data. "
+                "The synthesis output is un-redacted before returning to the user; "
+                "this audit entry and all prompt excerpts retain the redacted form."
             ),
         )
 
+        if state.get("strict_redact"):
+            from redactor import assert_redacted, StrictRedactionViolation
+            try:
+                if transcript_clean:
+                    assert_redacted(transcript_clean)
+                if constraint_clean:
+                    assert_redacted(constraint_clean)
+                for t in existing_tickets:
+                    for field in ("title", "description", "summary", "body"):
+                        v = t.get(field)
+                        if isinstance(v, str) and v:
+                            assert_redacted(v)
+            except StrictRedactionViolation as e:
+                audit.record(
+                    "orchestrator", "strict_redact_violation",
+                    payload={
+                        "violation_count": len(e.findings),
+                        "kinds": sorted({f["kind"] for f in e.findings}),
+                        "first_context": e.findings[0]["context_excerpt"] if e.findings else "",
+                    },
+                    reasoning=(
+                        "Strict redaction mode is on. PII patterns were "
+                        "detected at the LLM trust boundary even after "
+                        "the redaction pass; aborting the run."
+                    ),
+                )
+                raise
+    elif state.get("strict_redact"):
+        from redactor import assert_redacted, StrictRedactionViolation
+        try:
+            if transcript_clean:
+                assert_redacted(transcript_clean)
+            if constraint_clean:
+                assert_redacted(constraint_clean)
+            for t in existing_tickets:
+                for field in ("title", "description", "summary", "body"):
+                    v = t.get(field)
+                    if isinstance(v, str) and v:
+                        assert_redacted(v)
+        except StrictRedactionViolation as e:
+            audit.record(
+                "orchestrator", "strict_redact_violation",
+                payload={
+                    "violation_count": len(e.findings),
+                    "kinds": sorted({f["kind"] for f in e.findings}),
+                    "first_context": e.findings[0]["context_excerpt"] if e.findings else "",
+                },
+                reasoning=(
+                    "Strict redaction mode is on without redact_pii=True; "
+                    "raw inputs contained PII patterns. Aborting."
+                ),
+            )
+            raise
+
     return {
         "_audit":            audit,
-        "_jira":             jira,
-        "_confluence":       confluence,
         "_redaction_map":    _redaction_map,
         "transcript_text":   transcript_clean,
         "constraint_text":   constraint_clean,
         "existing_tickets":  existing_tickets,
+        "resolved_models":   resolved_models,
         "stage_errors":      {},
         "security_findings": [f.to_dict() for f in injection_findings],
     }
@@ -559,7 +675,7 @@ def constraint_node(state: PipelineState, config: RunnableConfig) -> dict:
     from agents.constraint_agent import ConstraintAgent
 
     audit: AuditLog  = state["_audit"]
-    confluence: ConfluenceTool = state.get("_confluence")  # type: ignore[assignment]
+    confluence: ConfluenceTool = (config.get("configurable") or {}).get("_confluence") or ConfluenceTool()
     constraint_text  = state.get("constraint_text") or ""
 
     if not constraint_text.strip():
@@ -691,7 +807,9 @@ def gap_detector_node(state: PipelineState, config: RunnableConfig) -> dict:
     from agents.gap_detector_agent import GapDetectorAgent
 
     audit: AuditLog = state["_audit"]
-    jira: JiraTool  = state.get("_jira")  # type: ignore[assignment]
+    cfg = config.get("configurable") or {}
+    jira: JiraTool  = cfg.get("_jira") or JiraTool()
+    github: GithubTool = cfg.get("_github") or GithubTool()
     stories          = state.get("stories") or []
     existing_tickets = state.get("existing_tickets") or []
 
@@ -724,6 +842,7 @@ def gap_detector_node(state: PipelineState, config: RunnableConfig) -> dict:
     agent  = GapDetectorAgent(
         tool=tool,
         jira=jira,
+        github=github,
         memory=memory,
         audit=audit,
         use_embeddings_for_duplicates=state.get("use_embeddings_for_duplicates", True),

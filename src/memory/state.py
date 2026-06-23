@@ -37,7 +37,9 @@ class PipelineState(TypedDict, total=False):
     resolved_models: dict[str, str]   # stage_name -> model_id
     use_embeddings_for_duplicates: bool
     persistent_memory: bool
+    redact_pii: bool
     strict_redact: bool
+    auto_switch: bool
     live_confluence_page_id: str | None
     live_jira: bool
     run_metadata: dict

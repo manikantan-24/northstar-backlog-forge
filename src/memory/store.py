@@ -54,6 +54,7 @@ class MemoryStore:
         cache_dir: Path | None = None,
     ) -> None:
         self._kv: dict[str, Any] = {}
+        self._written_keys: set[str] = set()
         self._embedder = None  # Lazy-loaded sentence-transformer
         self._np = None
         self._ticket_vectors = None
@@ -78,6 +79,7 @@ class MemoryStore:
 
     def put(self, key: str, value: Any) -> None:
         self._kv[key] = value
+        self._written_keys.add(key)
         if self._persistent:
             self._persist_kv(key, value)
 
@@ -86,6 +88,7 @@ class MemoryStore:
         if key not in self._kv:
             self._kv[key] = []
         self._kv[key].append(value)
+        self._written_keys.add(key)
         if self._persistent:
             self._persist_kv(key, self._kv[key])
 
