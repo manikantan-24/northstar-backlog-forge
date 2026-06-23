@@ -120,7 +120,7 @@ flowchart TB
         ACR["Azure Container Registry\nbacklogsynth.azurecr.io"]:::deploy
         ACA["Azure Container Apps\nscale-to-zero · min 0 / max 3"]:::deploy
         KV["Azure Key Vault\n10 secrets · MSI access"]:::deploy
-        Redis["Azure Cache for Redis\nBasic C0 · atomic budget enforce"]:::deploy
+        Redis["Azure Cache for Redis\nBasic C0 · atomic budget enforce\n& LangGraph RedisSaver checkpointer"]:::deploy
         AF["Azure Files\nlogs/ 10 GB · outputs/ 50 GB"]:::deploy
         TF_AZ["Terraform infra/terraform/\nazurerm ~3.100\nState: Azure Blob Storage"]:::deploy
     end
@@ -155,6 +155,7 @@ sequenceDiagram
     U->>O: transcript + wiki + backlog (≤50k tokens)
     Note over O: PII redact — email→[EMAIL_1] etc.
     Note over O: Budget reserve (Redis Lua)
+    Note over O: State Checkpoint lookup / sync (RedisSaver)
     Note over O: Dedup check via run_id
 
     par Parallel fan-out
@@ -259,7 +260,7 @@ flowchart LR
 | Container Registry | Azure Container Registry — `backlogsynth.azurecr.io` |
 | Container Runtime | Azure Container Apps — scale-to-zero, min 0 / max 3 replicas |
 | Secret Storage | Azure Key Vault — 10 secrets, User-Assigned Managed Identity (MSI) |
-| Budget Enforcement | Azure Cache for Redis — Basic C0, atomic Lua reserve/settle |
+| Budget & State Checkpoints | Azure Cache for Redis — Basic C0, atomic Lua reserve/settle & RedisSaver checkpointer |
 | Persistent Storage | Azure Files — `logs/` 10 GB + `outputs/` 50 GB (SMB share) |
 | Logging | Log Analytics Workspace — 30-day retention |
 | IaC state backend | Azure Blob Storage (`stbacklogstate`) |

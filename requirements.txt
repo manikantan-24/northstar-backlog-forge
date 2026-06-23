@@ -18,6 +18,8 @@ chromadb>=0.4.22       # persistent vector store option (file-backed fallback al
 
 # Multi-agent infrastructure
 tenacity>=8.2.3        # retry logic for agent tool calls
+langgraph>=0.2.2
+
 
 # Web UI (optional). 1.32+ is required for st.dialog (modal helpers).
 # pandas is used for the cost-panel bar/line charts in the Streamlit UI.
