@@ -298,6 +298,7 @@ class Orchestrator:
                     logger.warning("progress_callback raised: %s", e)
 
         existing_tickets = existing_tickets or []
+        injection_findings: list = []
 
         # ---- Live source fetches (optional) ----
         # When the caller asks for a live Confluence page, pull it before
@@ -475,6 +476,50 @@ class Orchestrator:
                 "Used for duplicate detection alongside the Jira backlog."
             ),
         )
+
+        # ---- Prompt-injection scan (runs after live fetches so Confluence text is included) ----
+        from security import InputSanitizer  # lazy import — avoids top-level circular risk
+        transcript_clean, transcript_findings = InputSanitizer.scan(transcript_text, source="transcript")
+        constraint_clean, constraint_findings = InputSanitizer.scan(constraint_text, source="constraint document")
+        injection_findings = transcript_findings + constraint_findings
+
+        if injection_findings:
+            audit.record(
+                "orchestrator", "injection_scan_findings",
+                payload={
+                    "finding_count": len(injection_findings),
+                    "codes": [f.code for f in injection_findings],
+                },
+                reasoning=(
+                    f"{len(injection_findings)} prompt-injection pattern(s) detected and redacted "
+                    "from user inputs before reaching any LLM stage."
+                ),
+            )
+            logger.warning(
+                "Prompt injection detected in inputs (%d finding(s)): %s",
+                len(injection_findings),
+                [f.code for f in injection_findings],
+            )
+            try:
+                from alerts import post_security_alert
+                _run_id = (run_metadata or {}).get("run_id") or ""
+                _user   = (run_metadata or {}).get("user_id") or "anonymous"
+                post_security_alert(
+                    [f.to_dict() for f in injection_findings],
+                    run_id=_run_id,
+                    user=_user,
+                )
+            except Exception as _alert_exc:  # noqa: BLE001
+                logger.debug("Security alert dispatch error: %s", _alert_exc)
+        else:
+            audit.record(
+                "orchestrator", "injection_scan_clean",
+                payload={},
+                reasoning="Input sanitizer found no injection patterns in transcript or constraint text.",
+            )
+
+        transcript_text = transcript_clean
+        constraint_text = constraint_clean
 
         # ---- PII redaction (opt-in) ----
         # Applied at the orchestrator boundary, not inside agents, so a single
@@ -954,11 +999,63 @@ class Orchestrator:
                     f"{tally['error']} error / {tally['warn']} warn / {tally['info']} info."
                 ),
             )
-            result["audit_trail"] = audit.render_markdown()
-            result["audit_chain_fingerprint"] = audit.chain_fingerprint
         except Exception as e:  # noqa: BLE001 — guardrails must never break a run
             logger.warning("Guardrails crashed (suppressed): %s", e)
             result["guardrail_findings"] = []
+
+        # ---- Output safety scan (PII / toxicity / demographic bias) ----
+        try:
+            from security import OutputScanner
+            output_sec_findings = OutputScanner.scan_stories(result.get("epics") or [])
+            for f in output_sec_findings:
+                audit.record(
+                    "orchestrator", "output_security_finding",
+                    payload={
+                        "code":     f.code,
+                        "severity": f.severity,
+                        "story_id": f.story_id or "—",
+                        "message":  f.message,
+                    },
+                    reasoning=f"Output safety scan fired '{f.code}' at severity '{f.severity}'.",
+                )
+            if output_sec_findings:
+                audit.record(
+                    "orchestrator", "output_scan_findings",
+                    payload={"finding_count": len(output_sec_findings),
+                             "codes": [f.code for f in output_sec_findings]},
+                    reasoning=(
+                        f"Output safety scan complete — {len(output_sec_findings)} finding(s) "
+                        "in synthesised story text."
+                    ),
+                )
+            else:
+                audit.record(
+                    "orchestrator", "output_scan_clean",
+                    payload={},
+                    reasoning="Output safety scan found no PII, toxicity, or bias markers.",
+                )
+            result["guardrail_findings"].extend(f.to_dict() for f in output_sec_findings)
+            if output_sec_findings:
+                try:
+                    from alerts import post_security_alert
+                    _run_id = (run_metadata or {}).get("run_id") or ""
+                    _user   = (run_metadata or {}).get("user_id") or "anonymous"
+                    post_security_alert(
+                        [f.to_dict() for f in output_sec_findings],
+                        run_id=_run_id,
+                        user=_user,
+                    )
+                except Exception as _alert_exc:  # noqa: BLE001
+                    logger.debug("Security alert dispatch error: %s", _alert_exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Output safety scan crashed: %s", exc, exc_info=True)
+
+        # Merge input-injection findings
+        if injection_findings:
+            result["guardrail_findings"] = [f.to_dict() for f in injection_findings] + result["guardrail_findings"]
+
+        result["audit_trail"] = audit.render_markdown()
+        result["audit_chain_fingerprint"] = audit.chain_fingerprint
 
         # ---- pipeline_completed ----
         _epics_out   = result.get("epics") or []
