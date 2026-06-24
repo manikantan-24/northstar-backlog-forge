@@ -3656,7 +3656,7 @@ if run_clicked or _main_canvas_run:
     # the Gap Detector. Subsequent runs hit the cache and this is a no-op.
     if existing_tickets and not st.session_state.get("_embeddings_warmed"):
         try:
-            with st.spinner("Loading embedding model… (~80MB, one-time download)"):
+            with st.spinner("Loading embedding model..."):
                 from tools.embedding_tool import EmbeddingTool  # local import
                 EmbeddingTool().encode(["warmup"])
             st.session_state._embeddings_warmed = True

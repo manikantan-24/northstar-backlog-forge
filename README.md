@@ -429,7 +429,6 @@ backlog-synthesizer/
 │       └── terraform.yml            ← Azure infrastructure
 │
 ├── scripts/
-│   ├── azure_setup.sh
 │   ├── seed_jira.py
 │   ├── seed_confluence.py
 │   ├── seed_github_issues.py

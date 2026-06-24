@@ -2,7 +2,7 @@
 # =============================================================================
 # Backlog Synthesizer — Azure Monitor alert rules
 #
-# Run ONCE after azure_setup.sh to create alert rules in Azure Monitor.
+# Run ONCE after provisioning the Azure infrastructure to create alert rules in Azure Monitor.
 # Alerts fire into an Action Group (email + webhook) that you configure below.
 #
 # Prerequisites:

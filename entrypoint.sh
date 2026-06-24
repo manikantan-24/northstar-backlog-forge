@@ -14,7 +14,7 @@
 #      its own grace period if it still doesn't stop).
 #
 # Azure Container Apps default terminationGracePeriodSeconds is 30 s.
-# Set it to 90 s in azure_setup.sh so an in-flight LLM stage can finish.
+# Set it to 90 s in Container App settings so an in-flight LLM stage can finish.
 # =============================================================================
 
 set -euo pipefail
