@@ -3250,7 +3250,7 @@ def show_jira_dialog() -> None:
         for epic in _epics:
             epic_key = epic.get("jira_key")
             if epic_key:
-                st.checkbox(f"📦 Epic: {epic.get('title')} (Pushed as {epic_key})", value=True, key=f"select_epic_{epic['id']}", disabled=True)
+                st.checkbox(f"📦 Epic: {epic.get('title')} (Already pushed to Jira: {epic_key})", value=True, key=f"select_epic_{epic['id']}", disabled=True)
             else:
                 st.checkbox(f"📦 Epic: {epic.get('title')}", key=f"select_epic_{epic['id']}", on_change=toggle_epic_selections, args=(epic['id'], epic))
 
@@ -3258,7 +3258,7 @@ def show_jira_dialog() -> None:
                 story_key = story.get("jira_key")
                 indent = "    ↳ "
                 if story_key:
-                    st.checkbox(f"{indent}📝 Story: {story.get('title')} (Pushed as {story_key})", value=True, key=f"select_story_{story['id']}", disabled=True)
+                    st.checkbox(f"{indent}📝 Story: {story.get('title')} (Already pushed to Jira: {story_key})", value=True, key=f"select_story_{story['id']}", disabled=True)
                 else:
                     st.checkbox(f"{indent}📝 Story: {story.get('title')}", key=f"select_story_{story['id']}", on_change=toggle_story_selections, args=(story['id'], story))
 
@@ -3267,7 +3267,7 @@ def show_jira_dialog() -> None:
                         task_key = task.get("jira_key")
                         sub_indent = "        ↳ "
                         if task_key:
-                            st.checkbox(f"{sub_indent}✅ Task: {task.get('title')} ({task.get('type', 'task')}) (Pushed as {task_key})", value=True, key=f"select_task_{task['id']}", disabled=True)
+                            st.checkbox(f"{sub_indent}✅ Task: {task.get('title')} ({task.get('type', 'task')}) (Already pushed to Jira: {task_key})", value=True, key=f"select_task_{task['id']}", disabled=True)
                         else:
                             st.checkbox(f"{sub_indent}✅ Task: {task.get('title')} ({task.get('type', 'task')})", key=f"select_task_{task['id']}")
 
