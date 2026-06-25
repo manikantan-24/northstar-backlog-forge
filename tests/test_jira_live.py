@@ -540,3 +540,89 @@ def test_search_live_escapes_double_quote(monkeypatch):
     jt._search_live('say "hello"')
     assert captured, "no JQL was captured"
     assert '\\"' in captured[0], f"double quote not escaped in: {captured[0]}"
+
+
+def test_publish_synthesis_with_selected_ids(monkeypatch):
+    n = {"i": 0}
+    def responder(url, body, **kw):
+        n["i"] += 1
+        return _FakeResponse(201, {"key": f"NS-{100 + n['i']}"})
+    cap = _patch_post(monkeypatch, responder)
+
+    result = {"epics": [{
+        "id": "EP-01", "title": "POS Offline", "description": "keep selling",
+        "stories": [
+            {
+                "id": "ST-01", "title": "Offline cash sales", "description": "d",
+                "user_story": "As a cashier...", "acceptance_criteria": ["Given... then..."],
+                "priority": "High", "priority_rationale": "revenue", "tags": ["pos"],
+                "source_topic_id": "T-01", "potential_constraint_conflicts": ["C-02"],
+                "tasks": [{"id": "ST-01-TK-01", "title": "Embed SQLite", "type": "infra"}],
+            },
+            {
+                "id": "ST-02", "title": "Skip this story", "description": "d2",
+                "user_story": "As a cashier...", "acceptance_criteria": ["Given... then..."],
+                "priority": "Low", "priority_rationale": "revenue", "tags": ["pos"],
+                "source_topic_id": "T-01",
+                "tasks": [],
+            }
+        ],
+    }]}
+    # Only select the Epic and the first Story/Task
+    selected = {"EP-01", "ST-01", "ST-01-TK-01"}
+    out = _live_writer().publish_synthesis(result, create_subtasks=True, selected_ids=selected)
+
+    assert out["counts"] == {"epics": 1, "stories": 1, "subtasks": 1}
+    assert len(cap) == 3
+    types = [c["fields"]["issuetype"]["name"] for c in cap]
+    assert types == ["Epic", "Story", "Sub-task"]
+
+
+def test_publish_synthesis_skip_existing_jira_keys(monkeypatch):
+    n = {"i": 0}
+    def responder(url, body, **kw):
+        n["i"] += 1
+        return _FakeResponse(201, {"key": f"NS-{100 + n['i']}"})
+    cap = _patch_post(monkeypatch, responder)
+
+    result = {"epics": [{
+        "id": "EP-01", "title": "POS Offline", "description": "keep selling",
+        "jira_key": "NS-100", "jira_url": "https://demo.atlassian.net/browse/NS-100",
+        "stories": [
+            {
+                "id": "ST-01", "title": "Already created story", "description": "d",
+                "jira_key": "NS-101", "jira_url": "https://demo.atlassian.net/browse/NS-101",
+                "user_story": "As a cashier...", "acceptance_criteria": ["Given... then..."],
+                "priority": "High", "priority_rationale": "revenue", "tags": ["pos"],
+                "source_topic_id": "T-01", "potential_constraint_conflicts": ["C-02"],
+                "tasks": [
+                    {"id": "ST-01-TK-01", "title": "Already created task", "type": "infra", "jira_key": "NS-102"},
+                    {"id": "ST-01-TK-02", "title": "New task", "type": "infra"}
+                ],
+            },
+            {
+                "id": "ST-02", "title": "New story", "description": "d2",
+                "user_story": "As a cashier...", "acceptance_criteria": ["Given... then..."],
+                "priority": "Low", "priority_rationale": "revenue", "tags": ["pos"],
+                "source_topic_id": "T-01",
+                "tasks": [],
+            }
+        ],
+    }]}
+    
+    out = _live_writer().publish_synthesis(result, create_subtasks=True)
+
+    # Should only create 1 new story (ST-02) and 1 new task (ST-01-TK-02)
+    assert out["counts"] == {"epics": 0, "stories": 1, "subtasks": 1}
+    assert len(cap) == 2
+    types = [c["fields"]["issuetype"]["name"] for c in cap]
+    assert "Sub-task" in types
+    assert "Story" in types
+    
+    # Story (ST-02) should be parented to the existing Epic key "NS-100"
+    story_issue = next(c for c in cap if c["fields"]["issuetype"]["name"] == "Story")
+    assert story_issue["fields"]["parent"]["key"] == "NS-100"
+
+    # Sub-task (ST-01-TK-02) should be parented to the existing Story key "NS-101"
+    subtask_issue = next(c for c in cap if c["fields"]["issuetype"]["name"] == "Sub-task")
+    assert subtask_issue["fields"]["parent"]["key"] == "NS-101"

@@ -189,6 +189,7 @@ class JiraTool(Tool):
         label: str = "backlog-synth",
         max_issues: int = 300,
         progress=None,
+        selected_ids: set[str] | None = None,
     ) -> dict:
         """Create the synthesized backlog in live Jira as Epic → Story → Sub-task.
 
@@ -223,65 +224,87 @@ class JiraTool(Tool):
         for epic in result.get("epics") or []:
             if count >= max_issues:
                 break
-            epic_key = None
-            try:
-                e = self.create_issue(
-                    summary=epic.get("title") or "Untitled epic",
-                    description_adf=_text_adf(epic.get("description", "")),
-                    issue_type="Epic",
-                    labels=[label],
-                    project_key=project,
-                )
-                created.append({**e, "level": "epic"})
-                epic_key = e["key"]
-                count += 1
-                _emit(f"Epic {e['key']} — {e['summary'][:60]}")
-            except ToolError as ex:
-                errors.append(f"epic '{epic.get('title')}': {ex}")
+            epic_key = epic.get("jira_key")
+            epic_selected = (selected_ids is None) or (epic.get("id") in selected_ids)
+
+            if epic_selected and not epic_key:
+                try:
+                    e = self.create_issue(
+                        summary=epic.get("title") or "Untitled epic",
+                        description_adf=_text_adf(epic.get("description", "")),
+                        issue_type="Epic",
+                        labels=[label],
+                        project_key=project,
+                    )
+                    epic_key = e["key"]
+                    epic["jira_key"] = epic_key
+                    epic["jira_url"] = e.get("url")
+                    created.append({**e, "level": "epic"})
+                    count += 1
+                    _emit(f"Epic {e['key']} — {e['summary'][:60]}")
+                except ToolError as ex:
+                    errors.append(f"epic '{epic.get('title')}': {ex}")
+            elif epic_key:
+                _emit(f"Epic {epic_key} (already exists)")
 
             for story in epic.get("stories") or []:
                 if count >= max_issues:
                     break
-                story_key = None
-                try:
-                    s = self.create_issue(
-                        summary=story.get("title") or "Untitled story",
-                        description_adf=_story_adf(story),
-                        issue_type="Story",
-                        labels=[label, *(story.get("tags") or [])],
-                        parent_key=epic_key,
-                        project_key=project,
-                    )
-                    created.append({**s, "level": "story"})
-                    story_key = s["key"]
-                    count += 1
-                    _emit(f"  Story {s['key']} — {s['summary'][:60]}")
-                except ToolError as ex:
-                    errors.append(f"story '{story.get('title')}': {ex}")
-                    continue
+                story_key = story.get("jira_key")
+                story_selected = (selected_ids is None) or (story.get("id") in selected_ids)
+
+                if story_selected and not story_key:
+                    try:
+                        s = self.create_issue(
+                            summary=story.get("title") or "Untitled story",
+                            description_adf=_story_adf(story),
+                            issue_type="Story",
+                            labels=[label, *(story.get("tags") or [])],
+                            parent_key=epic_key,
+                            project_key=project,
+                        )
+                        story_key = s["key"]
+                        story["jira_key"] = story_key
+                        story["jira_url"] = s.get("url")
+                        created.append({**s, "level": "story"})
+                        count += 1
+                        _emit(f"  Story {s['key']} — {s['summary'][:60]}")
+                    except ToolError as ex:
+                        errors.append(f"story '{story.get('title')}': {ex}")
+                        continue
+                elif story_key:
+                    _emit(f"  Story {story_key} (already exists)")
 
                 if create_subtasks and story_key:
                     made = 0
                     for task in story.get("tasks") or []:
                         if count >= max_issues:
                             break
-                        try:
-                            st = self.create_issue(
-                                summary=task.get("title") or "Task",
-                                description_adf=_text_adf(f"Type: {task.get('type', 'task')}"),
-                                issue_type="Sub-task",
-                                parent_key=story_key,
-                                labels=[label],
-                                project_key=project,
-                            )
-                            created.append({**st, "level": "subtask"})
-                            made += 1
-                            count += 1
-                        except ToolError:
-                            # Sub-tasks are config-sensitive; stop trying for this
-                            # story. The tasks are still in the story description.
-                            break
-                    if made == 0 and (story.get("tasks")):
+                        task_key = task.get("jira_key")
+                        task_selected = (selected_ids is None) or (task.get("id") in selected_ids)
+
+                        if task_selected and not task_key:
+                            try:
+                                st = self.create_issue(
+                                    summary=task.get("title") or "Task",
+                                    description_adf=_text_adf(f"Type: {task.get('type', 'task')}"),
+                                    issue_type="Sub-task",
+                                    parent_key=story_key,
+                                    labels=[label],
+                                    project_key=project,
+                                )
+                                task["jira_key"] = st["key"]
+                                task["jira_url"] = st.get("url")
+                                created.append({**st, "level": "subtask"})
+                                made += 1
+                                count += 1
+                            except ToolError:
+                                # Sub-tasks are config-sensitive; stop trying for this
+                                # story. The tasks are still in the story description.
+                                break
+                        elif task_key:
+                            pass
+                    if made == 0 and (story.get("tasks")) and not story_key:
                         errors.append(
                             f"sub-tasks for {story_key}: project disallows sub-task "
                             f"creation — tasks remain listed in the story description."

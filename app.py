@@ -3145,6 +3145,18 @@ def show_jira_dialog() -> None:
     if not _can_push_jira():
         st.error("Your account does not have permission to push to Jira.")
         return
+
+    # Reset selections and created cache if result changes
+    current_res_id = id(res)
+    if st.session_state.get("last_jira_res_id") != current_res_id:
+        st.session_state["last_jira_res_id"] = current_res_id
+        st.session_state["jira_selections_initialized"] = False
+        st.session_state["jira_all_created"] = []
+        # Clear specific checkbox session state keys
+        for key in list(st.session_state.keys()):
+            if key.startswith("select_epic_") or key.startswith("select_story_") or key.startswith("select_task_") or key == "jira_select_all":
+                st.session_state.pop(key, None)
+
     _ready = all(os.environ.get(k) for k in
                  ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "JIRA_PROJECT_KEY"))
     if not _ready:
@@ -3152,9 +3164,6 @@ def show_jira_dialog() -> None:
         return
     _proj = os.environ.get("JIRA_PROJECT_KEY")
 
-    # ---- Human-in-the-loop approval gate ----
-    # Show a full review of what will be created BEFORE the button is active.
-    # Contributors always see this gate; admins also see it (good hygiene).
     _epics = res.get("epics") or []
     _n_epics = len(_epics)
     _n_stories = sum(len(e.get("stories") or []) for e in _epics)
@@ -3163,6 +3172,45 @@ def show_jira_dialog() -> None:
     _n_gaps = len(res.get("gaps") or [])
     _guardrail_errors = sum(1 for f in (res.get("guardrail_findings") or []) if f.get("severity") == "error")
 
+    # Initialize checkbox states
+    if not st.session_state.get("jira_selections_initialized"):
+        for epic in _epics:
+            st.session_state[f"select_epic_{epic['id']}"] = True
+            for story in epic.get("stories") or []:
+                st.session_state[f"select_story_{story['id']}"] = True
+                for task in story.get("tasks") or []:
+                    st.session_state[f"select_task_{task['id']}"] = True
+        st.session_state["jira_selections_initialized"] = True
+
+    # Callbacks for tree toggling
+    def toggle_all_selections():
+        val = st.session_state.get("jira_select_all", True)
+        for epic in _epics:
+            if not epic.get("jira_key"):
+                st.session_state[f"select_epic_{epic['id']}"] = val
+            for story in epic.get("stories") or []:
+                if not story.get("jira_key"):
+                    st.session_state[f"select_story_{story['id']}"] = val
+                for task in story.get("tasks") or []:
+                    if not task.get("jira_key"):
+                        st.session_state[f"select_task_{task['id']}"] = val
+
+    def toggle_epic_selections(epic_id, epic_ref):
+        val = st.session_state.get(f"select_epic_{epic_id}", True)
+        for story in epic_ref.get("stories") or []:
+            if not story.get("jira_key"):
+                st.session_state[f"select_story_{story['id']}"] = val
+            for task in story.get("tasks") or []:
+                if not task.get("jira_key"):
+                    st.session_state[f"select_task_{task['id']}"] = val
+
+    def toggle_story_selections(story_id, story_ref):
+        val = st.session_state.get(f"select_story_{story_id}", True)
+        for task in story_ref.get("tasks") or []:
+            if not task.get("jira_key"):
+                st.session_state[f"select_task_{task['id']}"] = val
+
+    # ---- Human-in-the-loop approval gate ----
     st.markdown(
         f'<div style="padding:0.8rem 1rem;background:var(--bg-elev-1);border:1px solid var(--border);'
         f'border-left:3px solid var(--accent);border-radius:8px;margin-bottom:0.8rem;">'
@@ -3188,6 +3236,62 @@ def show_jira_dialog() -> None:
         )
 
     _subs = st.checkbox("Also create sub-tasks", value=True, key="jira_dlg_subtasks")
+
+    # ---- Backlog Item Selector ----
+    st.markdown(
+        '<div style="font-size:0.62rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+        'color:var(--text-muted);margin:0.7rem 0 0.3rem;">Backlog Selection</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.checkbox("Select All", value=True, key="jira_select_all", on_change=toggle_all_selections)
+
+    with st.container(height=280):
+        for epic in _epics:
+            epic_key = epic.get("jira_key")
+            if epic_key:
+                st.checkbox(f"📦 Epic: {epic.get('title')} (Pushed as {epic_key})", value=True, key=f"select_epic_{epic['id']}", disabled=True)
+            else:
+                st.checkbox(f"📦 Epic: {epic.get('title')}", key=f"select_epic_{epic['id']}", on_change=toggle_epic_selections, args=(epic['id'], epic))
+
+            for story in epic.get("stories") or []:
+                story_key = story.get("jira_key")
+                indent = "    ↳ "
+                if story_key:
+                    st.checkbox(f"{indent}📝 Story: {story.get('title')} (Pushed as {story_key})", value=True, key=f"select_story_{story['id']}", disabled=True)
+                else:
+                    st.checkbox(f"{indent}📝 Story: {story.get('title')}", key=f"select_story_{story['id']}", on_change=toggle_story_selections, args=(story['id'], story))
+
+                if _subs:
+                    for task in story.get("tasks") or []:
+                        task_key = task.get("jira_key")
+                        sub_indent = "        ↳ "
+                        if task_key:
+                            st.checkbox(f"{sub_indent}✅ Task: {task.get('title')} ({task.get('type', 'task')}) (Pushed as {task_key})", value=True, key=f"select_task_{task['id']}", disabled=True)
+                        else:
+                            st.checkbox(f"{sub_indent}✅ Task: {task.get('title')} ({task.get('type', 'task')})", key=f"select_task_{task['id']}")
+
+    # Calculate selected counts and compile selected_ids
+    selected_ids = set()
+    n_selected_epics = 0
+    n_selected_stories = 0
+    n_selected_tasks = 0
+
+    for epic in _epics:
+        if not epic.get("jira_key"):
+            if st.session_state.get(f"select_epic_{epic['id']}", True):
+                selected_ids.add(epic["id"])
+                n_selected_epics += 1
+        for story in epic.get("stories") or []:
+            if not story.get("jira_key"):
+                if st.session_state.get(f"select_story_{story['id']}", True):
+                    selected_ids.add(story["id"])
+                    n_selected_stories += 1
+            for task in story.get("tasks") or []:
+                if not task.get("jira_key") and _subs:
+                    if st.session_state.get(f"select_task_{task['id']}", True):
+                        selected_ids.add(task["id"])
+                        n_selected_tasks += 1
 
     # ---- Squad / team assignment ----
     st.markdown(
@@ -3217,36 +3321,41 @@ def show_jira_dialog() -> None:
     st.markdown(
         f'<div style="padding:0.5rem 0.8rem;background:rgba(251,113,133,.08);'
         f'border:1px solid rgba(251,113,133,.3);border-radius:6px;margin:0.5rem 0;font-size:0.82rem;">'
-        f'⚠ This will create <strong>{_n_epics} epic(s)</strong>, '
-        f'<strong>{_n_stories} story(ies)</strong>, and up to '
-        f'<strong>{_n_tasks} sub-task(s)</strong> as <em>real issues</em> in '
+        f'⚠ This will create <strong>{n_selected_epics} epic(s)</strong>, '
+        f'<strong>{n_selected_stories} story(ies)</strong>, and '
+        f'<strong>{n_selected_tasks} sub-task(s)</strong> as <em>real issues</em> in '
         f'<strong>{_esc(_proj)}</strong>. This action cannot be automatically undone.</div>',
         unsafe_allow_html=True,
     )
 
     # Mandatory confirmation for contributors; admins can also confirm (same gate).
     _confirmed = st.checkbox(
-        f"I confirm: create {_n_epics} epic(s), {_n_stories} story(ies), "
-        f"up to {_n_tasks} sub-task(s) in **{_proj}**",
+        f"I confirm: create {n_selected_epics} epic(s), {n_selected_stories} story(ies), "
+        f"and {n_selected_tasks} sub-task(s) in **{_proj}**",
         value=False,
         key="jira_dlg_confirm",
     )
+
+    btn_disabled = not _confirmed or (n_selected_epics + n_selected_stories + n_selected_tasks == 0)
 
     if st.button(
         f"⤴  Create in Jira ({_proj})",
         type="primary",
         use_container_width=True,
         key="jira_dlg_go",
-        disabled=not _confirmed,
+        disabled=btn_disabled,
     ):
         with st.spinner(f"Creating issues in {_proj}…"):
             try:
                 from tools.jira_tool import JiraTool
                 _pub_label = "-".join(filter(None, ["backlog-synth", _squad_label.lower().replace(" ", "-")])) if _squad_label else "backlog-synth"
                 _pub_result = JiraTool(mode="live").publish_synthesis(
-                    res, create_subtasks=_subs, label=_pub_label)
+                    res, create_subtasks=_subs, label=_pub_label, selected_ids=selected_ids)
                 st.session_state["jira_publish_result"] = _pub_result
                 if not _pub_result.get("error"):
+                    if "jira_all_created" not in st.session_state:
+                        st.session_state["jira_all_created"] = []
+                    st.session_state["jira_all_created"].extend(_pub_result.get("created", []))
                     try:
                         from alerts import post_jira_push_notification
                         _c = _pub_result.get("counts", {})
@@ -3264,6 +3373,8 @@ def show_jira_dialog() -> None:
 
     if not _confirmed:
         st.caption("Tick the confirmation checkbox above to enable the Create button.")
+    elif n_selected_epics + n_selected_stories + n_selected_tasks == 0:
+        st.caption("Select at least one new backlog item above to enable the Create button.")
 
     _pub = st.session_state.get("jira_publish_result")
     if _pub:
@@ -3271,52 +3382,56 @@ def show_jira_dialog() -> None:
             st.error(f"Jira publish failed: {_pub['error']}")
         else:
             _c = _pub["counts"]
-            st.success(f"Created {_c['epics']} epic(s), {_c['stories']} story(ies), "
-                       f"{_c['subtasks']} sub-task(s) in {_pub['project']}.")
-            for _it in _pub["created"]:
-                if _it["level"] in ("epic", "story"):
-                    _pad = "" if _it["level"] == "epic" else "&nbsp;&nbsp;&nbsp;&nbsp;↳ "
-                    st.markdown(f'{_pad}<a href="{_it["url"]}" target="_blank">{_it["key"]}</a> — {_it["summary"]}',
-                                unsafe_allow_html=True)
+            st.success(f"Successfully created {_c['epics']} epic(s), {_c['stories']} story(ies), "
+                       f"and {_c['subtasks']} sub-task(s) in {_pub['project']} during this push.")
 
-            # ── Two-way sync: read back current Jira status ───────────────────
-            st.divider()
-            if st.button("🔄  Sync status from Jira", key="jira_sync_btn",
-                         use_container_width=True,
-                         help="Read back current status, assignee and priority from live Jira"):
-                with st.spinner("Fetching current status from Jira…"):
-                    try:
-                        from tools.jira_tool import JiraTool as _JT2
-                        _sync_statuses = _JT2(mode="live").sync_published_stories(_pub)
-                        st.session_state["jira_sync_statuses"] = _sync_statuses
-                    except Exception as _se:
-                        st.error(f"Sync failed: {_se}")
+    _all_created = st.session_state.get("jira_all_created") or []
+    if _all_created:
+        st.markdown("**Created Jira Issues:**")
+        for _it in _all_created:
+            if _it["level"] in ("epic", "story"):
+                _pad = "" if _it["level"] == "epic" else "&nbsp;&nbsp;&nbsp;&nbsp;↳ "
+                st.markdown(f'{_pad}<a href="{_it["url"]}" target="_blank">{_it["key"]}</a> — {_it["summary"]}',
+                            unsafe_allow_html=True)
 
-            _sync = st.session_state.get("jira_sync_statuses")
-            if _sync:
-                st.markdown("**Current Jira status:**")
-                _status_colors = {
-                    "To Do": "#64748b", "In Progress": "#f59e0b",
-                    "Done": "#22c55e", "Closed": "#22c55e",
-                    "In Review": "#8b5cf6", "Blocked": "#ef4444",
-                }
-                for _s in _sync:
-                    _sc = _status_colors.get(_s["status"], "#94a3b8")
-                    _assignee = _s["assignee"] or "Unassigned"
-                    st.markdown(
-                        f'<div style="display:flex;align-items:center;justify-content:space-between;'
-                        f'padding:6px 10px;background:var(--bg-elev-1);border-radius:6px;'
-                        f'margin-bottom:4px;font-size:0.8rem;">'
-                        f'<span><a href="{_s["url"]}" target="_blank" style="color:var(--accent);'
-                        f'text-decoration:none;font-weight:600;">{_esc(_s["key"])}</a>'
-                        f' &nbsp;<span style="color:var(--text-muted);">{_esc(_s["summary"][:50])}</span></span>'
-                        f'<span style="display:flex;gap:8px;align-items:center;">'
-                        f'<span style="font-size:0.68rem;color:{_sc};font-weight:700;'
-                        f'background:{_sc}22;padding:2px 8px;border-radius:10px;">{_esc(_s["status"])}</span>'
-                        f'<span style="color:var(--text-faint);font-size:0.72rem;">{_esc(_assignee)}</span>'
-                        f'</span></div>',
-                        unsafe_allow_html=True,
-                    )
+        # ── Two-way sync: read back current Jira status ───────────────────
+        st.divider()
+        if st.button("🔄  Sync status from Jira", key="jira_sync_btn",
+                     use_container_width=True,
+                     help="Read back current status, assignee and priority from live Jira"):
+            with st.spinner("Fetching current status from Jira…"):
+                try:
+                    from tools.jira_tool import JiraTool as _JT2
+                    _sync_statuses = _JT2(mode="live").sync_published_stories(_pub)
+                    st.session_state["jira_sync_statuses"] = _sync_statuses
+                except Exception as _se:
+                    st.error(f"Sync failed: {_se}")
+
+        _sync = st.session_state.get("jira_sync_statuses")
+        if _sync:
+            st.markdown("**Current Jira status:**")
+            _status_colors = {
+                "To Do": "#64748b", "In Progress": "#f59e0b",
+                "Done": "#22c55e", "Closed": "#22c55e",
+                "In Review": "#8b5cf6", "Blocked": "#ef4444",
+            }
+            for _s in _sync:
+                _sc = _status_colors.get(_s["status"], "#94a3b8")
+                _assignee = _s["assignee"] or "Unassigned"
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                    f'padding:6px 10px;background:var(--bg-elev-1);border-radius:6px;'
+                    f'margin-bottom:4px;font-size:0.8rem;">'
+                    f'<span><a href="{_s["url"]}" target="_blank" style="color:var(--accent);'
+                    f'text-decoration:none;font-weight:600;">{_esc(_s["key"])}</a>'
+                    f' &nbsp;<span style="color:var(--text-muted);">{_esc(_s["summary"][:50])}</span></span>'
+                    f'<span style="display:flex;gap:8px;align-items:center;">'
+                    f'<span style="font-size:0.68rem;color:{_sc};font-weight:700;'
+                    f'background:{_sc}22;padding:2px 8px;border-radius:10px;">{_esc(_s["status"])}</span>'
+                    f'<span style="color:var(--text-faint);font-size:0.72rem;">{_esc(_assignee)}</span>'
+                    f'</span></div>',
+                    unsafe_allow_html=True,
+                )
 
 
 if st.session_state.pop("_trigger_jira", False):
